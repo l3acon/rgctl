@@ -34,7 +34,7 @@ memmap2 = "0.9"
 rayon = { workspace = true }
 
 [features]
-default = ["semantic-onnx"]
+default = []
 semantic-onnx = ["dep:ort", "dep:ndarray", "dep:sentencepiece-rs"]
 
 [dependencies.ort]
