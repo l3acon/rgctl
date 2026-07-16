@@ -45,7 +45,7 @@ rbuilder-error = { path = "crates/rbuilder-error", version = "0.3.0" }
 rbuilder-graph = { path = "crates/rbuilder-graph", version = "0.3.0" }
 rbuilder-extraction = { path = "crates/rbuilder-extraction", version = "0.3.0" }
 rbuilder-pipeline = { path = "crates/rbuilder-pipeline", version = "0.3.0" }
-rbuilder-analysis = { path = "crates/rbuilder-analysis", version = "0.3.0" }
+rbuilder-analysis = { path = "crates/rbuilder-analysis", version = "0.3.0", default-features = false }
 rbuilder-gql = { path = "crates/rbuilder-gql", version = "0.3.0" }
 rbuilder-export = { path = "crates/rbuilder-export", version = "0.3.0" }
 rbuilder-dashboard = { path = "crates/rbuilder-dashboard", version = "0.3.0" }
@@ -229,6 +229,10 @@ path = "tests/dashboard_bundle.rs"
 [[test]]
 name = "dashboard_gbuilder"
 path = "tests/dashboard_gbuilder.rs"
+
+[[test]]
+name = "graph_correctness"
+path = "tests/graph_correctness.rs"
 
 [[test]]
 name = "dashboard_ecommerce_go"

@@ -10,29 +10,51 @@ use std::time::{Duration, Instant};
 /// Default golden repo for dashboard phase gates (override with env).
 pub const DEFAULT_GOLDEN_REPO: &str = "/Users/sshaaf/git/java/gbuilder";
 
+fn in_tree_ecommerce(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("rbuilder-tests")
+        .join(name)
+}
+
 /// Default Go ecommerce test repo (override with env).
-pub const DEFAULT_GO_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-go";
+pub fn default_go_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-go")
+}
 
 /// Default C# ecommerce test repo (override with env).
-pub const DEFAULT_CSHARP_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-csharp";
+pub fn default_csharp_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-csharp")
+}
 
 /// Default C ecommerce test repo (override with env).
-pub const DEFAULT_C_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-c";
+pub fn default_c_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-c")
+}
 
 /// Default C++ ecommerce test repo (override with env).
-pub const DEFAULT_CPP_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-cpp";
+pub fn default_cpp_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-cpp")
+}
 
 /// Default Python ecommerce test repo (override with env).
-pub const DEFAULT_PYTHON_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-python";
+pub fn default_python_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-python")
+}
 
 /// Default Rust ecommerce test repo (override with env).
-pub const DEFAULT_RUST_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-rust";
+pub fn default_rust_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-rust")
+}
 
 /// Default JavaScript ecommerce test repo (override with env).
-pub const DEFAULT_JAVASCRIPT_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-javascript";
+pub fn default_javascript_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-javascript")
+}
 
 /// Default TypeScript ecommerce test repo (override with env).
-pub const DEFAULT_TYPESCRIPT_REPO: &str = "/Users/sshaaf/git/rust/rbuilder-tests/ecommerce-typescript";
+pub fn default_typescript_repo() -> PathBuf {
+    in_tree_ecommerce("ecommerce-typescript")
+}
 
 pub fn golden_repo_path() -> PathBuf {
     std::env::var("RBUILDER_DASHBOARD_GOLDEN_REPO")
@@ -43,49 +65,49 @@ pub fn golden_repo_path() -> PathBuf {
 pub fn ecommerce_go_repo_path() -> PathBuf {
     std::env::var("RBUILDER_GO_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_GO_REPO))
+        .unwrap_or_else(|_| default_go_repo())
 }
 
 pub fn ecommerce_csharp_repo_path() -> PathBuf {
     std::env::var("RBUILDER_CSHARP_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_CSHARP_REPO))
+        .unwrap_or_else(|_| default_csharp_repo())
 }
 
 pub fn ecommerce_c_repo_path() -> PathBuf {
     std::env::var("RBUILDER_C_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_C_REPO))
+        .unwrap_or_else(|_| default_c_repo())
 }
 
 pub fn ecommerce_cpp_repo_path() -> PathBuf {
     std::env::var("RBUILDER_CPP_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_CPP_REPO))
+        .unwrap_or_else(|_| default_cpp_repo())
 }
 
 pub fn ecommerce_python_repo_path() -> PathBuf {
     std::env::var("RBUILDER_PYTHON_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_PYTHON_REPO))
+        .unwrap_or_else(|_| default_python_repo())
 }
 
 pub fn ecommerce_rust_repo_path() -> PathBuf {
     std::env::var("RBUILDER_RUST_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_RUST_REPO))
+        .unwrap_or_else(|_| default_rust_repo())
 }
 
 pub fn ecommerce_javascript_repo_path() -> PathBuf {
     std::env::var("RBUILDER_JAVASCRIPT_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_JAVASCRIPT_REPO))
+        .unwrap_or_else(|_| default_javascript_repo())
 }
 
 pub fn ecommerce_typescript_repo_path() -> PathBuf {
     std::env::var("RBUILDER_TYPESCRIPT_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_TYPESCRIPT_REPO))
+        .unwrap_or_else(|_| default_typescript_repo())
 }
 
 pub fn rbuilder_bin() -> PathBuf {
