@@ -49,7 +49,7 @@ Run everything:
 cargo test --test cli_output --test subprocess_golden_path --test all_commands_sanity
 ```
 
-**CI:** On every PR to `main`/`master`, [.github/workflows/blast-radius-perf.yml](../.github/workflows/blast-radius-perf.yml) runs release `blast_radius_perf` plus all three CLI I/O test targets.
+**CI:** Maintainers order [.github/workflows/ci.yml](../.github/workflows/ci.yml) via `workflow_dispatch` or by adding the `ci` label on a PR. That job runs format/clippy, workspace tests, named QE steps (`map_collision_qe`, `graph_correctness`, `semantic_search_qe`, `cross_feature_qe`), and the three CLI I/O targets plus blast-radius perf. There is no automatic run on every PR open.
 
 Individual targets:
 

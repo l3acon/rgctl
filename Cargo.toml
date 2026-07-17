@@ -235,6 +235,18 @@ name = "graph_correctness"
 path = "tests/graph_correctness.rs"
 
 [[test]]
+name = "map_collision_qe"
+path = "tests/map_collision_qe.rs"
+
+[[test]]
+name = "semantic_search_qe"
+path = "tests/semantic_search_qe.rs"
+
+[[test]]
+name = "cross_feature_qe"
+path = "tests/cross_feature_qe.rs"
+
+[[test]]
 name = "dashboard_ecommerce_go"
 path = "tests/dashboard_ecommerce_go.rs"
 

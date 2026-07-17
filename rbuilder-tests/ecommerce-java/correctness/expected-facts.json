@@ -152,13 +152,59 @@
         "exact_direct_callers": ["checkout"],
         "min_score": 0.1
       }
+    },
+    "correctnessShared": {
+      "match": { "name": "correctnessShared", "class": "CorrectnessHarness" },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "correctnessShared",
+        "canonical_fqn": "CorrectnessHarness::correctnessShared",
+        "class_context": "CorrectnessHarness",
+        "file_suffix": "CorrectnessHarness.java",
+        "language": "java"
+      },
+      "exact_callees": [],
+      "exact_callers": ["correctnessLeft", "correctnessRight"],
+      "blast": {
+        "exact_direct_callers": ["correctnessLeft", "correctnessRight"],
+        "exact_impact_zone": [
+          "correctnessLeft",
+          "correctnessRight",
+          "correctnessDiamond"
+        ],
+        "min_score": 0.1
+      }
+    },
+    "correctnessDiamond": {
+      "match": { "name": "correctnessDiamond", "class": "CorrectnessHarness" },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "correctnessDiamond",
+        "canonical_fqn": "CorrectnessHarness::correctnessDiamond",
+        "class_context": "CorrectnessHarness",
+        "file_suffix": "CorrectnessHarness.java",
+        "language": "java"
+      },
+      "exact_callees": ["correctnessLeft", "correctnessRight"],
+      "exact_callers": [],
+      "blast": {
+        "exact_direct_callers": [],
+        "exact_impact_zone": []
+      }
     }
   },
   "invariants": {
     "B1_blast_vs_calls": {
       "enabled": true,
       "severity": "required",
-      "symbols": ["correctnessLeaf", "correctnessMid", "cartServiceClearCart"]
+      "symbols": [
+        "correctnessLeaf",
+        "correctnessMid",
+        "cartServiceClearCart",
+        "correctnessShared"
+      ]
     },
     "B2_gql_calls_nonzero": {
       "enabled": true,

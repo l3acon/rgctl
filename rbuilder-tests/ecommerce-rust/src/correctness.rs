@@ -22,3 +22,21 @@ pub fn correctness_root(flag: bool) -> i32 {
         value
     }
 }
+
+/// Shared sink for diamond topology QE.
+pub fn correctness_shared() -> i32 {
+    1
+}
+
+pub fn correctness_left() -> i32 {
+    correctness_shared()
+}
+
+pub fn correctness_right() -> i32 {
+    correctness_shared()
+}
+
+/// Diamond root — dual callers into [`correctness_shared`].
+pub fn correctness_diamond() -> i32 {
+    correctness_left() + correctness_right()
+}

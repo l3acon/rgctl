@@ -17,3 +17,21 @@ def correctness_root(flag: bool) -> int:
     if flag:
         return value * 2
     return value
+
+
+def correctness_shared() -> int:
+    """Shared sink for diamond topology QE."""
+    return 1
+
+
+def correctness_left() -> int:
+    return correctness_shared()
+
+
+def correctness_right() -> int:
+    return correctness_shared()
+
+
+def correctness_diamond() -> int:
+    """Diamond root — dual callers into correctness_shared."""
+    return correctness_left() + correctness_right()

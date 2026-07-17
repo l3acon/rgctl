@@ -33,4 +33,22 @@ public final class CorrectnessHarness {
         }
         return value;
     }
+
+    /** Shared sink for diamond topology QE. */
+    public static int correctnessShared() {
+        return 1;
+    }
+
+    public static int correctnessLeft() {
+        return correctnessShared();
+    }
+
+    public static int correctnessRight() {
+        return correctnessShared();
+    }
+
+    /** Diamond root — dual callers into {@link #correctnessShared()}. */
+    public static int correctnessDiamond() {
+        return correctnessLeft() + correctnessRight();
+    }
 }
