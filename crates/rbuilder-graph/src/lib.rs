@@ -23,6 +23,8 @@ pub mod query;
 pub mod schema;
 /// Append-only extract spill + external-sort compile to columnar.
 pub mod segmented_spill;
+/// Streaming compaction of columnar snapshots with a delta segment.
+pub mod graph_compactor;
 /// Prepared and memory-mapped snapshot I/O.
 pub mod snapshot;
 pub mod structural_sketch;
@@ -35,6 +37,9 @@ pub use columnar_snapshot::{
 };
 pub use csr::{edge_type_from_u8, edge_type_to_u8, CodeGraphCsr};
 pub use export::{export_json, import_json, GraphSnapshot};
+pub use graph_compactor::{
+    compact_repo_snapshot, compact_snapshot_file, CompactStats, DeltaSegment, GraphCompactor,
+};
 pub use migration::{migrate_snapshot, migrate_v1_to_v2};
 pub use schema::{AccessType, CallType, GraphParameter, GRAPH_SCHEMA_VERSION};
 pub use segmented_spill::{

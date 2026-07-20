@@ -9,6 +9,12 @@ use rbuilder_extraction::discovery::{DiscoveryConfig, FileDiscoverer};
 use rbuilder_extraction::{Extractor, GraphBuilder};
 use rbuilder_graph::code_graph::CodeGraph;
 use rbuilder_graph::schema::EdgeType;
+use rbuilder_graph::{
+    compact_repo_snapshot, write_columnar_from_backend, DeltaSegment, MmappedGraphSnapshot,
+};
+use rbuilder_analysis::{
+    BlastEngineSnapshot, CfgPdgArchive, MacroCallIndex, MacroCallLookupDb, SemanticIndex,
+};
 use rbuilder_pipeline::parallel::par_map;
 use rbuilder_pipeline::stream::{stream_into_graph, DEFAULT_STREAM_CHANNEL_CAPACITY};
 use rbuilder_pipeline::{PipelineConfig, ProcessingPipeline};
@@ -157,11 +163,13 @@ impl IncrementalUpdater {
             },
         );
 
-        let (new_graph, stats) = pipeline.process_repository(repo_root)?;
+        let snapshot_path = MmappedGraphSnapshot::default_path(repo_root);
+        std::fs::create_dir_all(repo_root.join(".rbuilder"))?;
         let nodes_removed = graph.node_count();
         let edges_removed = graph.edge_count();
 
-        *graph = new_graph;
+        let (stats, _digest) = pipeline.process_repository_to_snapshot(repo_root, &snapshot_path)?;
+        *graph = CodeGraph::open_snapshot(&snapshot_path)?;
 
         let mut tracker = FileTracker::new(repo_root);
         let discoverer =
@@ -169,7 +177,8 @@ impl IncrementalUpdater {
         let files = discoverer.discover(repo_root)?;
         tracker.index_files(&files, graph)?;
         tracker.save()?;
-        graph.save_to_repo(repo_root)?;
+        // Keep legacy JSON export for callers that still read it.
+        let _ = graph.save_to_repo(repo_root);
 
         Ok(UpdateResult {
             files_changed: stats.files_processed,
@@ -221,6 +230,136 @@ impl IncrementalUpdater {
     }
 
     fn apply_changes(
+        &self,
+        graph: &mut CodeGraph,
+        repo_root: &Path,
+        all_files: &[PathBuf],
+        changes: ChangeSet,
+        start: Instant,
+    ) -> Result<UpdateResult> {
+        let snapshot_path = MmappedGraphSnapshot::default_path(repo_root);
+        if snapshot_path.is_file() {
+            return self.apply_changes_via_compact(
+                graph,
+                repo_root,
+                all_files,
+                changes,
+                start,
+                &snapshot_path,
+            );
+        }
+        self.apply_changes_in_memory(graph, repo_root, all_files, changes, start)
+    }
+
+    /// Low-memory path: extract delta only, stream-compact into a new columnar snapshot.
+    fn apply_changes_via_compact(
+        &self,
+        graph: &mut CodeGraph,
+        repo_root: &Path,
+        all_files: &[PathBuf],
+        changes: ChangeSet,
+        start: Instant,
+        snapshot_path: &Path,
+    ) -> Result<UpdateResult> {
+        let mut result = UpdateResult {
+            files_added: changes.added.len(),
+            files_changed: changes.changed.len(),
+            files_deleted: changes.deleted.len(),
+            ..Default::default()
+        };
+
+        let progress = if self.config.show_progress && !changes.is_empty() {
+            let pb = ProgressBar::new(changes.len() as u64);
+            pb.set_style(
+                ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg}").unwrap(),
+            );
+            pb.set_message("compacting");
+            Some(pb)
+        } else {
+            None
+        };
+
+        let nodes_before = graph.node_count();
+        let edges_before = graph.edge_count();
+
+        let mut paths_to_update: Vec<PathBuf> = changes
+            .added
+            .iter()
+            .chain(changes.changed.iter())
+            .map(|rel| resolve_path(repo_root, rel))
+            .collect();
+        paths_to_update.sort();
+        paths_to_update.dedup();
+
+        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let mut builder = GraphBuilder::new();
+        let (_files_processed, tails) = stream_into_graph(
+            self.config.thread_count,
+            &extractor,
+            Arc::clone(&self.registry),
+            &paths_to_update,
+            DEFAULT_STREAM_CHANNEL_CAPACITY,
+            &mut builder,
+            || {},
+        )?;
+        builder.build_resolution_indexes();
+        extractor.populate_pass2(&tails, &mut builder)?;
+        let (new_nodes, new_edges) = builder.into_graph();
+        result.nodes_added = new_nodes.len();
+        result.edges_added = new_edges.len();
+
+        let mut delta = DeltaSegment::new();
+        for rel in changes
+            .added
+            .iter()
+            .chain(changes.changed.iter())
+            .chain(changes.deleted.iter())
+        {
+            delta.invalidate_file(rel);
+        }
+        delta.new_nodes = new_nodes;
+        delta.new_edges = new_edges;
+
+        if let Some(pb) = &progress {
+            pb.set_message("streaming compact");
+        }
+        let stats = compact_repo_snapshot(repo_root, delta)?;
+        let _ = stats.content_digest;
+
+        *graph = CodeGraph::open_snapshot(snapshot_path)?;
+
+        // Cross-file edges from changed files into the rest of the graph.
+        let relation_edges = self.rebuild_relations(graph, repo_root, &paths_to_update)?;
+        result.edges_added += relation_edges;
+        if relation_edges > 0 {
+            // Keep columnar digest rules (topology-only edges), not PreparedGraphSnapshot hash.
+            let _ = write_columnar_from_backend(graph.backend(), snapshot_path)?;
+            *graph = CodeGraph::open_snapshot(snapshot_path)?;
+        }
+
+        // Sidecars key off graph_digest — drop them so next discover/blast rebuilds cleanly.
+        invalidate_digest_sidecars(repo_root);
+
+        result.nodes_removed = nodes_before
+            .saturating_sub(graph.node_count().saturating_sub(result.nodes_added));
+        result.edges_removed = edges_before
+            .saturating_sub(graph.edge_count().saturating_sub(result.edges_added));
+
+        if let Some(pb) = progress {
+            pb.finish_with_message("done");
+        }
+
+        let mut tracker = FileTracker::new(repo_root);
+        tracker.index_files(all_files, graph)?;
+        tracker.save()?;
+        let _ = graph.save_to_repo(repo_root);
+
+        result.duration = start.elapsed();
+        Ok(result)
+    }
+
+    /// Legacy path when no columnar snapshot exists yet (in-memory backend edits).
+    fn apply_changes_in_memory(
         &self,
         graph: &mut CodeGraph,
         repo_root: &Path,
@@ -313,6 +452,8 @@ impl IncrementalUpdater {
         tracker.index_files(all_files, graph)?;
         tracker.save()?;
         graph.save_to_repo(repo_root)?;
+        // Persist columnar snapshot so subsequent updates can use the compact path.
+        let _ = graph.save_snapshot(repo_root);
 
         result.duration = start.elapsed();
         Ok(result)
@@ -387,6 +528,21 @@ fn resolve_symbol(index: &HashMap<String, Uuid>, name: &str, file: &str) -> Opti
         .map(|(_, id)| *id)
 }
 
+/// Delete `.rbuilder` artifacts that embed `graph_digest` so they cannot outlive a compact.
+fn invalidate_digest_sidecars(repo_root: &Path) {
+    let targets = [
+        BlastEngineSnapshot::default_path(repo_root),
+        MacroCallIndex::default_path(repo_root),
+        MacroCallLookupDb::default_path(repo_root),
+        repo_root.join(".rbuilder").join("analysis_results.bin"),
+        SemanticIndex::default_path(repo_root),
+        CfgPdgArchive::default_path(repo_root),
+    ];
+    for path in targets {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 fn relation_type_to_edge(relation_type: rbuilder_plugin_api::RelationType) -> EdgeType {
     use rbuilder_plugin_api::RelationType;
     match relation_type {
@@ -444,6 +600,7 @@ mod tests {
         tracker.index_files(&files, &graph).unwrap();
         tracker.save().unwrap();
         graph.save_to_repo(root).unwrap();
+        graph.save_snapshot(root).unwrap();
 
         fs::write(&main, "fn main() { helper(); }\nfn helper() {}\n").unwrap();
 
@@ -480,5 +637,40 @@ mod tests {
 
         let functions = graph.find_by_type(NodeType::Function).unwrap();
         assert!(functions.iter().any(|n| n.name == "beta"));
+    }
+
+    #[test]
+    fn compact_update_invalidates_digest_sidecars() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let main = root.join("src/main.rs");
+        fs::create_dir_all(main.parent().unwrap()).unwrap();
+        fs::write(&main, "fn main() {}\n").unwrap();
+
+        let registry = Arc::new(rbuilder_languages::default_registry());
+        let pipeline = ProcessingPipeline::new(Arc::clone(&registry));
+        let (mut graph, _) = pipeline.process_repository(root).unwrap();
+
+        let mut tracker = FileTracker::new(root);
+        tracker.index_files(&[main.clone()], &graph).unwrap();
+        tracker.save().unwrap();
+        graph.save_to_repo(root).unwrap();
+        graph.save_snapshot(root).unwrap();
+
+        let blast = BlastEngineSnapshot::default_path(root);
+        let macro_idx = MacroCallIndex::default_path(root);
+        let analysis = root.join(".rbuilder").join("analysis_results.bin");
+        fs::create_dir_all(blast.parent().unwrap()).unwrap();
+        fs::write(&blast, b"stale").unwrap();
+        fs::write(&macro_idx, b"stale").unwrap();
+        fs::write(&analysis, b"stale").unwrap();
+
+        fs::write(&main, "fn main() { helper(); }\nfn helper() {}\n").unwrap();
+        let updater = IncrementalUpdater::new(registry);
+        updater.update(&mut graph, root).unwrap();
+
+        assert!(!blast.exists(), "blast sidecar should be removed after compact");
+        assert!(!macro_idx.exists(), "macro index should be removed after compact");
+        assert!(!analysis.exists(), "analysis_results should be removed after compact");
     }
 }

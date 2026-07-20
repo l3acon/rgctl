@@ -229,15 +229,44 @@ impl ColumnarGraphMmap {
     /// Read typed edge topology directly from mmap columns.
     pub fn edge_topology_typed(&self) -> Result<Vec<(Uuid, Uuid, EdgeType)>> {
         let mut out = Vec::with_capacity(self.edge_count);
-        for idx in 0..self.edge_count {
-            let row = read_edge_row(self.mmap.as_ref(), self.offset_edges as usize, idx)?;
-            out.push((
-                Uuid::from_bytes(row.from),
-                Uuid::from_bytes(row.to),
-                edge_type_from_u8(row.edge_type)?,
-            ));
-        }
+        self.for_each_edge(|from, to, edge_type| {
+            out.push((from, to, edge_type));
+            Ok(())
+        })?;
         Ok(out)
+    }
+
+    /// Stream edge rows without allocating a full topology `Vec`.
+    pub fn for_each_edge(
+        &self,
+        mut f: impl FnMut(Uuid, Uuid, EdgeType) -> Result<()>,
+    ) -> Result<()> {
+        for idx in 0..self.edge_count {
+            let (from, to, edge_type) = self.edge_at(idx)?;
+            f(from, to, edge_type)?;
+        }
+        Ok(())
+    }
+
+    /// Read one edge row by column index.
+    pub fn edge_at(&self, idx: usize) -> Result<(Uuid, Uuid, EdgeType)> {
+        if idx >= self.edge_count {
+            return Err(Error::SerdeError(format!(
+                "edge index {idx} out of range (count={})",
+                self.edge_count
+            )));
+        }
+        let row = read_edge_row(self.mmap.as_ref(), self.offset_edges as usize, idx)?;
+        Ok((
+            Uuid::from_bytes(row.from),
+            Uuid::from_bytes(row.to),
+            edge_type_from_u8(row.edge_type)?,
+        ))
+    }
+
+    /// Materialize a single node by column index.
+    pub fn materialize_node_at(&self, idx: usize) -> Result<Node> {
+        self.materialize_node(idx)
     }
 
     /// Materialize a single node by id (reads cold extension blob).
@@ -705,6 +734,10 @@ fn bincode_err(e: bincode::Error) -> Error {
     Error::SerdeError(format!("columnar snapshot: {e}"))
 }
 
+fn edge_digest_bytes(edge: &Edge) -> Result<Vec<u8>> {
+    bincode::serialize(&edge.for_columnar_digest()).map_err(bincode_err)
+}
+
 fn append_node_columnar(
     node: &Node,
     hasher: &mut blake3::Hasher,
@@ -881,7 +914,7 @@ pub fn write_columnar_from_nodes_edges(
 
     let mut edge_rows = Vec::with_capacity(edges.len());
     for edge in &edges {
-        let bytes = bincode::serialize(edge).map_err(bincode_err)?;
+        let bytes = edge_digest_bytes(edge)?;
         hasher.update(&bytes);
         edge_rows.push(EdgeRow {
             from: *edge.from.as_bytes(),
@@ -945,9 +978,9 @@ pub fn write_columnar_from_backend(backend: &MemoryBackend, path: &Path) -> Resu
         if edge_err.is_some() {
             return;
         }
-        match bincode::serialize(edge) {
+        match edge_digest_bytes(edge) {
             Ok(bytes) => edge_meta.push((edge.from, edge.to, edge.edge_type, bytes)),
-            Err(e) => edge_err = Some(bincode_err(e)),
+            Err(e) => edge_err = Some(e),
         }
     })?;
     if let Some(err) = edge_err {
@@ -1102,7 +1135,77 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "manual: timing comparison for columnar open vs full hydrate"]
+    fn edge_properties_do_not_affect_columnar_digest() {
+        let a = Node::new(NodeType::Function, "a".into());
+        let b = Node::new(NodeType::Function, "b".into());
+        let a_id = a.id;
+        let b_id = b.id;
+        let plain = Edge::new(a_id, b_id, EdgeType::Calls);
+        let rich = Edge::new(a_id, b_id, EdgeType::Calls)
+            .with_property("call_site_line".into(), "42".into());
+
+        let tmp = TempDir::new().unwrap();
+        let d_plain =
+            write_columnar_from_nodes_edges(vec![a.clone(), b.clone()], vec![plain], &tmp.path().join("p.bin"))
+                .unwrap();
+        let d_rich =
+            write_columnar_from_nodes_edges(vec![a, b], vec![rich], &tmp.path().join("r.bin"))
+                .unwrap();
+        assert_eq!(d_plain, d_rich);
+    }
+
+    #[test]
+    fn rematerialize_round_trip_matches_header_digest() {
+        let a = Node::new(NodeType::Function, "a".into())
+            .with_file_path("a.rs".into())
+            .with_qualified_name("mod::a".into());
+        let b = Node::new(NodeType::Function, "b".into()).with_file_path("b.rs".into());
+        let a_id = a.id;
+        let b_id = b.id;
+        let e1 = Edge::new(a_id, b_id, EdgeType::Calls)
+            .with_property("call_site_line".into(), "10".into());
+        let e2 = Edge::new(b_id, a_id, EdgeType::Calls);
+
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("g.bin");
+        let written = write_columnar_from_nodes_edges(vec![a, b], vec![e1, e2], &path).unwrap();
+
+        let file = std::fs::File::open(&path).unwrap();
+        // SAFETY: test file is read-only; mapping covers the written snapshot bytes only.
+        let mmap = Arc::new(unsafe { Mmap::map(&file).unwrap() });
+        let col = ColumnarGraphMmap::open(mmap).unwrap();
+
+        let mut nodes: Vec<Node> = (0..col.node_count())
+            .map(|i| col.materialize_node_at(i).unwrap())
+            .collect();
+        nodes.sort_by_key(|n| n.id);
+
+        let mut hasher = blake3::Hasher::new();
+        for node in &nodes {
+            hasher.update(&bincode::serialize(node).unwrap());
+        }
+
+        let mut edges: Vec<Edge> = Vec::new();
+        col.for_each_edge(|from, to, edge_type| {
+            edges.push(Edge::new(from, to, edge_type));
+            Ok(())
+        })
+        .unwrap();
+        edges.sort_by(|a, b| {
+            (a.from, a.to, edge_type_to_u8(a.edge_type))
+                .cmp(&(b.from, b.to, edge_type_to_u8(b.edge_type)))
+        });
+        for edge in &edges {
+            hasher.update(&bincode::serialize(&edge.for_columnar_digest()).unwrap());
+        }
+
+        let recomputed = hasher.finalize().to_hex().to_string();
+        assert_eq!(recomputed, written);
+        assert_eq!(recomputed, col.content_digest());
+    }
+
+    #[test]
+    #[ignore = "manual: timing comparison for columnar open vs hydrate"]
     fn columnar_open_vs_hydrate_timing() {
         let mut backend = crate::backend::MemoryBackend::new();
         for i in 0..1000 {

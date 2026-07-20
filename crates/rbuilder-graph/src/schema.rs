@@ -419,6 +419,16 @@ impl Edge {
     pub fn get_property(&self, key: &str) -> Option<&str> {
         self.properties.get(key).map(String::as_str)
     }
+
+    /// Topology-only edge used for columnar content digests.
+    ///
+    /// Columnar v2 edge rows store only `(from, to, edge_type)`. Properties,
+    /// `call_type`, `access_type`, and non-default weights are not persisted, so
+    /// digest hashing must ignore them — otherwise compact/rematerialize cycles
+    /// thrash the header digest without a real topology change.
+    pub fn for_columnar_digest(&self) -> Self {
+        Self::new(self.from, self.to, self.edge_type)
+    }
 }
 
 #[cfg(test)]

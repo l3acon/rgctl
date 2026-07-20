@@ -219,7 +219,8 @@ High RSS is **duplicate graph residency** (backend + prepared clone + petgraph v
 | Release backend edge storage after CSR build | **done** (`MemoryBackend::release_edge_storage`) |
 | ColdMetadataDb (mmap) opened after early snapshot; **drop `CodeGraph` before community/centrality/blast** | **done** (hydrate only for `--with-dashboard` / migration / JSON) |
 | **Lever 1: discover ingest skips `MemoryBackend`** — `write_columnar_from_nodes_edges` | **done** |
-| **Lever 1.5: segmented disk spill** — `SegmentedSpill` + external sort + `write_columnar_from_spill`; `GraphBuilder::with_spill` | **done** (resolution HashMaps still in RAM; delta-merge incremental deferred) |
+| **Lever 1.5: segmented disk spill** — `SegmentedSpill` + external sort + `write_columnar_from_spill`; `GraphBuilder::with_spill` | **done** (resolution HashMaps still in RAM) |
+| **Delta-merge / GraphCompactor** — stream-filter base mmap + delta extract; indexes rebuilt in Pass 1/compile; atomic rename | **done** (`graph_compactor`; wired into `IncrementalUpdater`) |
 | HyperBall harmonic | **opt-in** via `--with-harmonic` (keep) |
 
 Do **not** invest in merging community+centrality+blast into one algorithm pass for RSS — invest in representation / lifetimes.

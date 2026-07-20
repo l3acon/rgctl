@@ -92,14 +92,18 @@ impl SegmentedSpill {
     }
 
     /// Append an edge as length-prefixed bincode with sort key prefix.
+    ///
+    /// Serializes [`Edge::for_columnar_digest`] so digest bytes match topology-only
+    /// columnar rows after rematerialize/compact.
     pub fn append_edge(&mut self, edge: &Edge) -> Result<()> {
-        let blob = bincode::serialize(edge).map_err(|e| {
+        let canonical = edge.for_columnar_digest();
+        let blob = bincode::serialize(&canonical).map_err(|e| {
             Error::SerdeError(format!("segmented spill edge serialize: {e}"))
         })?;
         let mut key = [0u8; EDGE_KEY_LEN];
-        key[..16].copy_from_slice(edge.from.as_bytes());
-        key[16..32].copy_from_slice(edge.to.as_bytes());
-        key[32] = edge_type_to_u8(edge.edge_type);
+        key[..16].copy_from_slice(canonical.from.as_bytes());
+        key[16..32].copy_from_slice(canonical.to.as_bytes());
+        key[32] = edge_type_to_u8(canonical.edge_type);
         self.edges.write_all(&key)?;
         self.edges.write_all(&(blob.len() as u64).to_le_bytes())?;
         self.edges.write_all(&blob)?;
