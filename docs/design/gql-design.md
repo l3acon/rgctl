@@ -113,6 +113,18 @@ curl -sS -X POST http://127.0.0.1:8080/api/query \
 
 See [http-api.md](../http-api.md).
 
+### Virtual communities (analysis overlay)
+
+Communities are **not** stored in `graph.snapshot.bin`. After discover, `gql` / `/api/query` join `.rbuilder/analysis_results.bin`:
+
+| Pattern | Meaning |
+|---------|---------|
+| `MATCH (c:Community) RETURN c` | List named communities (macro: `all_communities`) |
+| `WHERE f.community_id = '12'` | Filter functions by assignment |
+| `c.label` / `member_count` | Properties on virtual community nodes |
+
+Labels are heuristic; see [community-query-and-naming-plan.md](community-query-and-naming-plan.md).
+
 ---
 
 ## 7. Testing

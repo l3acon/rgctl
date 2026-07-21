@@ -4,7 +4,7 @@ use crate::communities::{summarize_communities, CommunitiesPayload, COMMUNITIES_
 use rbuilder_analysis::community::CommunityDetector;
 use rbuilder_analysis::graph_utils::PetGraphView;
 use rbuilder_analysis::AnalysisResults;
-use rbuilder_graph::backend::MemoryBackend;
+use rbuilder_graph::backend::{GraphBackend, MemoryBackend};
 use rbuilder_graph::schema::{EdgeType, NodeType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -260,7 +260,30 @@ pub fn write_metagraph(
         edges,
     };
 
-    let communities = summarize_communities(modularity, &payload.nodes);
+    let label_map = {
+        let mut map = analysis
+            .and_then(|a| a.community.as_ref())
+            .map(|c| c.labels.clone())
+            .unwrap_or_default();
+        if map.is_empty() {
+            if let Some(a) = analysis {
+                let ctx = rbuilder_analysis::CommunityQueryContext::from_analysis(a, |uuid| {
+                    backend
+                        .get_node(uuid)
+                        .ok()
+                        .flatten()
+                        .map(|n| (n.name.clone(), n.file_path.clone()))
+                });
+                map = ctx
+                    .communities
+                    .into_iter()
+                    .map(|c| (c.id, c.label))
+                    .collect();
+            }
+        }
+        map
+    };
+    let communities = summarize_communities(modularity, &payload.nodes, &label_map);
 
     let metagraph_json = {
         let start = std::time::Instant::now();

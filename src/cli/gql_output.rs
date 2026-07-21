@@ -1,5 +1,6 @@
 //! Structured GQL CLI JSON response.
 
+use rbuilder_analysis::is_virtual_community;
 use rbuilder_gql::QueryResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -14,11 +15,20 @@ pub struct GqlRowBinding {
     pub binding: String,
     /// Matched node name.
     pub node: String,
-    /// Node type label.
+    /// Node type label (`Community` for virtual overlay nodes).
     #[serde(rename = "type")]
     pub node_type: String,
     /// Source file path when present.
     pub file: Option<String>,
+    /// Community id when available (virtual property or community node).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub community_id: Option<usize>,
+    /// Community label when binding a `:Community` node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Member count when binding a `:Community` node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_count: Option<usize>,
 }
 
 /// Top-level GQL JSON payload.
@@ -43,11 +53,33 @@ pub fn gql_response_from_result(result: &QueryResult, explain: bool) -> GqlJsonR
         .iter()
         .map(|row| {
             row.iter()
-                .map(|(name, node)| GqlRowBinding {
-                    binding: name.clone(),
-                    node: node.name.clone(),
-                    node_type: format!("{:?}", node.node_type),
-                    file: node.file_path.clone(),
+                .map(|(name, node)| {
+                    let virtual_community = is_virtual_community(node);
+                    GqlRowBinding {
+                        binding: name.clone(),
+                        node: node.name.clone(),
+                        node_type: if virtual_community {
+                            "Community".into()
+                        } else {
+                            format!("{:?}", node.node_type)
+                        },
+                        file: node.file_path.clone(),
+                        community_id: node
+                            .get_property("community_id")
+                            .and_then(|s| s.parse().ok()),
+                        label: if virtual_community {
+                            Some(
+                                node.get_property("label")
+                                    .unwrap_or(node.name.as_str())
+                                    .to_string(),
+                            )
+                        } else {
+                            None
+                        },
+                        member_count: node
+                            .get_property("member_count")
+                            .and_then(|s| s.parse().ok()),
+                    }
                 })
                 .collect()
         })
@@ -70,6 +102,9 @@ pub fn fixture_gql_response() -> GqlJsonResponse {
             node: "main".into(),
             node_type: "Function".into(),
             file: Some("src/main.rs".into()),
+            community_id: None,
+            label: None,
+            member_count: None,
         }]],
         count: 1,
         explain: false,

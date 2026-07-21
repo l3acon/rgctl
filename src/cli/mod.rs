@@ -5,6 +5,7 @@ mod blast_radius;
 pub mod blast_radius_output;
 mod check;
 pub mod check_output;
+mod communities;
 mod context;
 mod discover;
 mod discover_cfg;
@@ -222,6 +223,12 @@ pub enum Commands {
         action: SemanticCommands,
     },
 
+    /// List or refresh named communities (analysis overlay)
+    Communities {
+        #[command(subcommand)]
+        action: CommunitiesCommands,
+    },
+
     /// CI policy gateway
     Check {
         #[arg(long)]
@@ -365,6 +372,22 @@ pub enum SemanticCommands {
         /// Require all query keywords to match entry metadata (AND filter)
         #[arg(long)]
         keyword_and: bool,
+
+        /// Search functions (default) or pooled communities
+        #[arg(long, value_enum, default_value = "function")]
+        scope: semantic::CliSemanticScope,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CommunitiesCommands {
+    /// List communities with heuristic labels
+    List,
+    /// Refresh heuristic labels and write them into analysis_results.bin
+    Label {
+        /// Persist updated labels (default: true)
+        #[arg(long, default_value_t = true)]
+        write: bool,
     },
 }
 
@@ -522,6 +545,7 @@ impl Cli {
                     no_fusion,
                     candidate_pool,
                     keyword_and,
+                    scope,
                 } => semantic::run_query(
                     &ctx,
                     semantic::SemanticQueryArgs {
@@ -534,8 +558,15 @@ impl Cli {
                         fusion: !no_fusion,
                         candidate_pool,
                         keyword_and,
+                        scope,
                     },
                 ),
+            },
+            Commands::Communities { action } => match action {
+                CommunitiesCommands::List => communities::run_list(&ctx),
+                CommunitiesCommands::Label { write } => {
+                    communities::run_label(&ctx, communities::CommunitiesLabelArgs { write })
+                }
             },
             Commands::Check { policy_file } => check::run(&ctx, check::CheckArgs { policy_file }),
             Commands::Export {

@@ -61,9 +61,10 @@ Screenshot placeholders (capture with `dashboard/scripts/capture-migration-scree
 ### Graph
 
 - **Package metagraph** — zoomable WebGL view of communities / packages.
+- **Community names** — heuristic labels (package path, dominant tokens, infrastructure hubs), not anonymous `Community N` when inference succeeds. Refresh with `rbuilder communities label --write`.
 - **Drill-down** — click a package node to expand member functions (WASM `expand`).
 - **Filters** — search box, community filter, function/class type mask.
-- **CLI:** `gql`, `export`, `metrics --communities`
+- **CLI:** `gql --macro-name all_communities`, `communities list`, `export`, `metrics --communities`
 
 ### Functions
 

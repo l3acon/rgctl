@@ -14,6 +14,7 @@ Engineering designs for rBuilder capabilities listed in [README § Where most to
 | PDG | [pdg-design.md](pdg-design.md) | Dataflow |
 | Dominance | [dominance-design.md](dominance-design.md) | Dataflow → Dominator Tree |
 | GQL | [gql-design.md](gql-design.md) | Graph Visualization (+ Query Guide) |
+| Community query & naming | [community-query-and-naming-plan.md](community-query-and-naming-plan.md) | Graph Visualization (legend) + GQL |
 | Graph metrics | [graph-metrics-design.md](graph-metrics-design.md) | Functions |
 | Migration planner | [migration-planner-design.md](migration-planner-design.md) | Migration |
 | CI policy checks | [ci-policy-checks-design.md](ci-policy-checks-design.md) | CLI-first (blast scores in dashboard) |

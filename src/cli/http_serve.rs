@@ -13,9 +13,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use rbuilder_analysis::SemanticIndex;
+use rbuilder_analysis::{CommunityQueryContext, SemanticIndex};
 use rbuilder_dashboard::default_dashboard_path;
-use rbuilder_gql::{execute, execute_explain, execute_macro, QueryMacroRegistry};
+use rbuilder_gql::{
+    execute_explain_with_community, execute_macro_with_community, execute_with_community,
+    QueryMacroRegistry,
+};
 use rbuilder_graph::CodeGraph;
 use serde::Deserialize;
 use serde_json::Value;
@@ -39,6 +42,7 @@ struct AppState {
     graph: RwLock<CodeGraph>,
     registry: QueryMacroRegistry,
     semantic: Option<Arc<SemanticIndex>>,
+    community: Option<CommunityQueryContext>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +69,9 @@ struct SemanticQueryRequest {
     expand: Option<String>,
     #[serde(default = "default_expand_depth")]
     expand_depth: usize,
+    /// `function` (default) or `community`
+    #[serde(default)]
+    scope: Option<String>,
 }
 
 fn default_semantic_limit() -> usize {
@@ -110,12 +117,14 @@ pub fn serve(ctx: &CliContext, args: HttpServeArgs) -> Result<()> {
         let graph = ctx
             .load_graph()
             .context("load graph for query API (run `rbuilder discover` first)")?;
+        let community = super::gql::load_community_context(ctx, graph.backend());
         let semantic = load_semantic_index(&ctx.repo);
         Some(Arc::new(AppState {
             repo: ctx.repo.clone(),
             graph: RwLock::new(graph),
             registry: QueryMacroRegistry::with_defaults(),
             semantic: semantic.map(Arc::new),
+            community,
         }))
     };
 
@@ -223,12 +232,12 @@ async fn api_query(
     let backend = graph.backend();
 
     let result = if let Some(name) = body.r#macro {
-        execute_macro(backend, &state.registry, &name)
+        execute_macro_with_community(backend, &state.registry, &name, state.community.as_ref())
     } else if let Some(query) = body.query.as_deref() {
         if body.explain {
-            execute_explain(backend, query)
+            execute_explain_with_community(backend, query, state.community.as_ref())
         } else {
-            execute(backend, query)
+            execute_with_community(backend, query, state.community.as_ref())
         }
     } else {
         return Err((
@@ -273,6 +282,18 @@ async fn api_semantic_query(
         )
     })?;
 
+    let scope = match body.scope.as_deref().unwrap_or("function").to_ascii_lowercase().as_str()
+    {
+        "function" | "functions" => super::semantic::CliSemanticScope::Function,
+        "community" | "communities" => super::semantic::CliSemanticScope::Community,
+        other => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("unknown scope `{other}` (use function or community)"),
+            ));
+        }
+    };
+
     let args = SemanticQueryArgs {
         query: query.to_string(),
         limit: body.limit.clamp(1, 100),
@@ -283,6 +304,7 @@ async fn api_semantic_query(
         fusion: body.fusion,
         candidate_pool: body.candidate_pool.max(body.limit),
         keyword_and: body.keyword_and,
+        scope,
     };
 
     let response = execute_semantic_query(&state.repo, &graph, index, &args)

@@ -57,7 +57,17 @@ Type `rbuilder gql "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = 'cl
 Enter
 Sleep 3s
 
-# 4. blast-radius
+# 4. named communities (analysis overlay)
+Ctrl+L
+Sleep 300ms
+Type "rbuilder -f json gql --macro-name all_communities unused | jq '.rows[:3][][] | {id: .community_id, label, n: .member_count}'"
+Enter
+Sleep 3s
+Type "rbuilder communities list | head -10"
+Enter
+Sleep 3s
+
+# 5. blast-radius
 Ctrl+L
 Sleep 300ms
 Type "rbuilder blast-radius 'CartService::clearCart'"
@@ -68,26 +78,26 @@ Type "rbuilder -f json blast-radius 'CartService::clearCart' | jq '{score: .metr
 Enter
 Sleep 3s
 
-# 5. metrics
+# 6. metrics
 Ctrl+L
 Sleep 300ms
 Type "rbuilder -f json metrics --pagerank | jq '.pagerank.top[:3]'"
 Enter
 Sleep 3s
 
-# 6. inspect
+# 7. inspect
 Ctrl+L
 Sleep 300ms
 Type "rbuilder -f json inspect checkout cfg | jq '{layer, blocks: (.nodes|length), edges: (.edges|length)}'"
 Enter
 Sleep 3s
 
-# 7. slice
+# 8. slice
 Type "rbuilder slice src/main/java/com/example/ecommerce/service/CartService.java --line 53 --variable item --function addItem"
 Enter
 Sleep 3s
 
-# 8. semantic
+# 9. semantic
 Ctrl+L
 Sleep 300ms
 Type "rbuilder semantic index --embedder vocab --dimensions 256"
@@ -98,7 +108,11 @@ Type "rbuilder -f json semantic query 'shopping cart checkout' --limit 5 | jq '.
 Enter
 Sleep 3s
 
-# 9. export
+Type "rbuilder -f json semantic query 'shopping cart' --scope community --limit 3 | jq '.hits | map({name, ranking, score})'"
+Enter
+Sleep 3s
+
+# 10. export
 Ctrl+L
 Sleep 300ms
 Type "rbuilder export --export-format mermaid --export-output /tmp/clearCart.mmd --query 'name:clearCart'"
@@ -108,7 +122,7 @@ Type "head -20 /tmp/clearCart.mmd"
 Enter
 Sleep 2.5s
 
-# 10. check
+# 11. check
 Type "rbuilder -f json check --policy-file ../../rbuilder-tests/rbuilder-policy.json | jq '{schema_version, violations: (.violations|length)}'"
 Enter
 Sleep 3s

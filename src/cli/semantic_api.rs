@@ -1,13 +1,18 @@
 //! Shared semantic search execution for CLI and HTTP API.
 
-use super::semantic::{expand_gql_neighbors, EngineBlastProvider, SemanticQueryArgs};
-use super::semantic_output::{build_query_response, hit_from_semantic, SemanticQueryJsonResponse};
+use super::semantic::{
+    expand_gql_neighbors, EngineBlastProvider, CliSemanticScope, SemanticQueryArgs,
+};
+use super::semantic_output::{
+    build_query_response, hit_from_semantic, SemanticHitJson, SemanticQueryJsonResponse,
+};
 use crate::analysis::{
-    expand_semantic_hits, query_index_with_fusion, AnalysisResults, BlastSummaryProvider,
-    OnnxReloadOptions, SemanticExpandConfig, SemanticExpandMode, SemanticFusionConfig,
-    SemanticIndex,
+    expand_semantic_hits, query_communities, query_index_with_fusion, AnalysisResults,
+    BlastSummaryProvider, CommunityQueryContext, OnnxReloadOptions, SemanticExpandConfig,
+    SemanticExpandMode, SemanticFusionConfig, SemanticIndex,
 };
 use anyhow::{Context, Result};
+use rbuilder_graph::backend::GraphBackend;
 use rbuilder_graph::CodeGraph;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -95,6 +100,55 @@ pub fn execute_semantic_query(
         keyword_and: args.keyword_and,
         ..SemanticFusionConfig::default()
     };
+
+    if args.scope == CliSemanticScope::Community {
+        let analysis = analysis.ok_or_else(|| {
+            anyhow::anyhow!(
+                "community semantic search requires analysis_results.bin (run `rbuilder discover`)"
+            )
+        })?;
+        let backend = graph.backend();
+        let ctx = CommunityQueryContext::from_analysis(&analysis, |uuid| {
+            backend
+                .get_node(uuid)
+                .ok()
+                .flatten()
+                .map(|n| (n.name.clone(), n.file_path.clone()))
+        });
+        let labels: std::collections::HashMap<_, _> = ctx
+            .communities
+            .iter()
+            .map(|c| (c.id, c.label.clone()))
+            .collect();
+        let community_hits = query_communities(
+            index,
+            &analysis,
+            &labels,
+            &args.query,
+            args.limit,
+            &reload,
+        )?;
+        let hits: Vec<SemanticHitJson> = community_hits
+            .into_iter()
+            .map(|h| SemanticHitJson {
+                node_id: h.community_id.to_string(),
+                name: h.label.clone(),
+                qualified_name: Some(format!("community:{}", h.community_id)),
+                file_path: Some(format!("{} members", h.member_count)),
+                distance: h.distance,
+                score: h.score,
+                fused_score: None,
+                ranking: Some("community".into()),
+            })
+            .collect();
+        return Ok(build_query_response(
+            &args.query,
+            &index.model_id,
+            index.dimensions,
+            hits,
+            None,
+        ));
+    }
 
     let hits = query_index_with_fusion(
         index,

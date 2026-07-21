@@ -136,19 +136,19 @@ Default discover is tuned for speed. Deeper modes trade time for semantic detail
 
 **GQL** (graph query language) matches patterns in the graph: find all functions whose name contains `Cart`, list call chains between functions, or count nodes by type. Results can be human-readable text or **JSON** for scripts.
 
-Named **macros** (`all_functions`, `direct_calls`, `call_chain`) bundle common patterns so you do not rewrite long queries. The dashboard **Graph** tab visualizes the same package metagraph that many inventory queries summarize.
+Named **macros** (`all_functions`, `direct_calls`, `call_chain`, `all_communities`) bundle common patterns so you do not rewrite long queries. Communities are an **analysis overlay** (virtual `:Community` + `community_id`) — not membership edges in the topology snapshot. The dashboard **Graph** tab visualizes the same package metagraph that many inventory queries summarize.
 
 ### Key benefits
 
-- **Fast orientation** in unfamiliar repos (“how many functions?”, “who calls whom?”)  
+- **Fast orientation** in unfamiliar repos (“how many functions?”, “who calls whom?”, “what are the clusters?”)  
 - **Repeatable audits** — same query on every release  
 - **Automation** — pipe JSON to `jq` or your own tools  
 - **No LLM required** — deterministic answers from the indexed graph
 
 ### How to run it
 
-→ [User Guide §6 — Query the graph with GQL](user-guide.md#6-query-the-graph-with-gql)  
-→ Design: **[GQL design](design/gql-design.md)** · HTTP: **[HTTP API](http-api.md)**
+→ [User Guide §6 — Query the graph with GQL](user-guide.md#6-query-the-graph-with-gql) (includes named communities)  
+→ Design: **[GQL design](design/gql-design.md)** · **[Community query & naming](design/community-query-and-naming-plan.md)** · HTTP: **[HTTP API](http-api.md)**
 
 ---
 

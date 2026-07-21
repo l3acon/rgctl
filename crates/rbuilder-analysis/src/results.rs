@@ -39,6 +39,12 @@ pub struct CommunityTable {
     pub modularity: f64,
     /// Number of distinct communities
     pub num_communities: usize,
+    /// Human-readable labels keyed by community id (heuristic / override).
+    #[serde(default)]
+    pub labels: HashMap<usize, String>,
+    /// Community id for stripped infrastructure hubs, if any.
+    #[serde(default)]
+    pub infrastructure_community_id: Option<usize>,
 }
 
 impl CommunityTable {
@@ -48,12 +54,19 @@ impl CommunityTable {
             assignments: vec![0; node_count],
             modularity: 0.0,
             num_communities: 0,
+            labels: HashMap::new(),
+            infrastructure_community_id: None,
         }
     }
 
     /// Get community ID for a compact node ID.
     pub fn get(&self, id: CompactId) -> Option<usize> {
         self.assignments.get(id as usize).copied()
+    }
+
+    /// Label for a community id, if known.
+    pub fn label(&self, community_id: usize) -> Option<&str> {
+        self.labels.get(&community_id).map(String::as_str)
     }
 }
 

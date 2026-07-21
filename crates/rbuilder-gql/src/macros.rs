@@ -44,6 +44,11 @@ impl QueryMacroRegistry {
             description: "Multi-hop call chain up to 3 hops".into(),
             query: "MATCH (a:Function)-[:CALLS*1..3]->(b:Function) RETURN a,b".into(),
         });
+        registry.register(QueryMacro {
+            name: "all_communities".into(),
+            description: "Named communities from analysis overlay (virtual :Community)".into(),
+            query: "MATCH (c:Community) RETURN c".into(),
+        });
         registry
     }
 
