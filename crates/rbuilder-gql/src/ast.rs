@@ -43,8 +43,10 @@ pub struct Pattern {
 pub struct NodePattern {
     /// Binding variable name
     pub variable: String,
-    /// Optional node type label
+    /// Optional graph node type label
     pub node_type: Option<NodeType>,
+    /// When true, match virtual `:Community` overlay nodes (not graph topology).
+    pub match_community: bool,
     /// Inline property matchers
     pub properties: HashMap<String, PropertyMatcher>,
 }

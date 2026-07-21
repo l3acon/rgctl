@@ -14,6 +14,8 @@ pub mod cfg_builder;
 pub mod cfg_pdg_archive;
 pub mod cold_metadata;
 pub mod community;
+pub mod community_label;
+pub mod community_query;
 pub mod complexity;
 pub mod dataflow;
 pub mod def_use;
@@ -90,6 +92,14 @@ pub use community::{
     CommunityResult, DashboardCommunity, HubStripPolicy, TieBreakStrategy, DEFAULT_HUB_SIGMA_K,
     DEFAULT_MAX_FROZEN_FRACTION, DEFAULT_MIN_NODES_FOR_HUB_STRIP,
 };
+pub use community_label::{
+    dedupe_community_labels, fill_community_labels, fill_community_labels_from_nodes,
+    infer_community_label, CommunityLabelHints,
+};
+pub use community_query::{
+    is_virtual_community, CommunityInfo, CommunityQueryContext, VIRTUAL_COMMUNITY_PROP,
+    VIRTUAL_COMMUNITY_VALUE,
+};
 pub use complexity::{classify_complexity, ComplexityAnalyzer, ComplexityLevel, ComplexityReport};
 pub use dataflow::{compute_reaching_definitions, Definition, ReachingDefs};
 pub use def_use::{extract_def_use, extract_used_variables};
@@ -158,10 +168,10 @@ pub use semantic_hybrid::{
 };
 pub use semantic_search::{
     build_from_backend, build_index, embed_text_for_function, embed_text_for_node,
-    hamming_distance, hamming_top_k, quantize_binary, query_index, query_index_with_embedder,
-    sign_hash_embed, SemanticBuildOptions, SemanticBuildStats, SemanticEntry, SemanticHit,
-    SemanticIndex, DEFAULT_EMBEDDING_DIMENSIONS, SEMANTIC_INDEX_FILE,
-    SEMANTIC_INDEX_SCHEMA_VERSION, SIGN_HASH_MODEL_ID,
+    hamming_distance, hamming_top_k, quantize_binary, query_communities, query_index,
+    query_index_with_embedder, sign_hash_embed, CommunitySemanticHit, SemanticBuildOptions,
+    SemanticBuildStats, SemanticEntry, SemanticHit, SemanticIndex, DEFAULT_EMBEDDING_DIMENSIONS,
+    SEMANTIC_INDEX_FILE, SEMANTIC_INDEX_SCHEMA_VERSION, SIGN_HASH_MODEL_ID,
 };
 pub use semantic_vocab::{
     TokenSpaceAccumulator, VocabAccumulateEmbedder, VOCAB_ACCUMULATE_MODEL_ID,

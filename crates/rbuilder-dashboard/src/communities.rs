@@ -25,7 +25,11 @@ pub struct CommunitySummary {
 }
 
 /// Build community rollups from metanodes that already carry `community_id`.
-pub fn summarize_communities(modularity: f64, metanodes: &[Metanode]) -> CommunitiesPayload {
+pub fn summarize_communities(
+    modularity: f64,
+    metanodes: &[Metanode],
+    labels: &std::collections::HashMap<usize, String>,
+) -> CommunitiesPayload {
     let mut by_id: HashMap<usize, CommunitySummary> = HashMap::new();
 
     for node in metanodes {
@@ -34,7 +38,10 @@ pub fn summarize_communities(modularity: f64, metanodes: &[Metanode]) -> Communi
         };
         let entry = by_id.entry(cid).or_insert_with(|| CommunitySummary {
             id: cid,
-            label: format!("Community {cid}"),
+            label: labels
+                .get(&cid)
+                .cloned()
+                .unwrap_or_else(|| format!("Community {cid}")),
             color: community_color_hex(cid),
             member_count: 0,
             package_count: 0,
@@ -131,9 +138,30 @@ mod tests {
                 community_id: Some(2),
             },
         ];
-        let payload = summarize_communities(0.42, &nodes);
+        let payload = summarize_communities(0.42, &nodes, &std::collections::HashMap::new());
         assert_eq!(payload.communities.len(), 2);
         assert_eq!(payload.communities[0].member_count, 15);
         assert_eq!(payload.communities[0].package_count, 2);
+        assert_eq!(payload.communities[0].label, "Community 1");
+    }
+
+    #[test]
+    fn summarize_uses_provided_labels() {
+        let nodes = vec![Metanode {
+            id: 0,
+            label: "a".into(),
+            size: 10,
+            functions: 8,
+            classes: 2,
+            avg_complexity: 1.0,
+            x: 0.0,
+            y: 0.0,
+            member_indices: vec![],
+            community_id: Some(7),
+        }];
+        let mut labels = std::collections::HashMap::new();
+        labels.insert(7, "checkout".into());
+        let payload = summarize_communities(0.1, &nodes, &labels);
+        assert_eq!(payload.communities[0].label, "checkout");
     }
 }

@@ -507,6 +507,106 @@ pub fn query_index_with_embedder(
         .collect())
 }
 
+/// One community-level semantic hit (pooled member embeddings).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommunitySemanticHit {
+    /// Community id.
+    pub community_id: usize,
+    /// Human-readable label.
+    pub label: String,
+    /// Members contributing to the centroid.
+    pub member_count: usize,
+    /// Hamming distance to the query (lower is better).
+    pub distance: u32,
+    /// Similarity score in (0, 1].
+    pub score: f64,
+}
+
+/// Search communities by pooling member function embeddings (majority-bit centroid).
+pub fn query_communities(
+    index: &SemanticIndex,
+    analysis: &crate::results::AnalysisResults,
+    labels: &std::collections::HashMap<usize, String>,
+    text: &str,
+    k: usize,
+    reload: &OnnxReloadOptions,
+) -> Result<Vec<CommunitySemanticHit>> {
+    let Some(_table) = analysis.community.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let embedder = embedder_for_index(index, reload)?;
+    let query_bits = embedder.embed_binary(text)?;
+    let stride = index.bytes_per_vector();
+    if stride == 0 || query_bits.len() != stride {
+        return Ok(Vec::new());
+    }
+
+    let mut by_community: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (row, entry) in index.entries.iter().enumerate() {
+        if let Some(cid) = analysis.get_community(entry.node_id) {
+            by_community.entry(cid).or_default().push(row);
+        }
+    }
+
+    let mut hits: Vec<CommunitySemanticHit> = Vec::new();
+    for (cid, rows) in by_community {
+        if rows.is_empty() {
+            continue;
+        }
+        let mut bit_counts = vec![0i32; stride * 8];
+        let mut used = 0usize;
+        for row in &rows {
+            let Some(bits) = index.embedding_row(*row) else {
+                continue;
+            };
+            used += 1;
+            for (byte_i, byte) in bits.iter().enumerate() {
+                for bit in 0..8 {
+                    let idx = byte_i * 8 + bit;
+                    if idx >= bit_counts.len() {
+                        break;
+                    }
+                    if (byte >> bit) & 1 == 1 {
+                        bit_counts[idx] += 1;
+                    } else {
+                        bit_counts[idx] -= 1;
+                    }
+                }
+            }
+        }
+        if used == 0 {
+            continue;
+        }
+        let mut centroid = vec![0u8; stride];
+        for (idx, count) in bit_counts.iter().enumerate() {
+            if *count >= 0 {
+                centroid[idx / 8] |= 1 << (idx % 8);
+            }
+        }
+        let distance = hamming_distance(&query_bits, &centroid);
+        let dims = index.dimensions.max(1);
+        let score = 1.0 - (distance as f64 / dims as f64);
+        hits.push(CommunitySemanticHit {
+            community_id: cid,
+            label: labels
+                .get(&cid)
+                .cloned()
+                .unwrap_or_else(|| format!("Community {cid}")),
+            member_count: rows.len(),
+            distance,
+            score,
+        });
+    }
+
+    hits.sort_by(|a, b| {
+        a.distance
+            .cmp(&b.distance)
+            .then_with(|| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    hits.truncate(k);
+    Ok(hits)
+}
+
 /// One query hit with Hamming distance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SemanticHit {

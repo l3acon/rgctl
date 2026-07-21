@@ -478,6 +478,49 @@ JSON (trimmed):
 - Nodes: `Function`, `Class`, `Interface`, `Module`, `File`, `Import`, `ConfigKey`, …
 - Edges: `CALLS`, `IMPORTS`, `CONTAINS`, `DEPENDS_ON`, `IMPLEMENTS`, …
 
+### Named communities (analysis overlay)
+
+`discover` runs label-propagation community detection and stores assignments in
+`.rbuilder/analysis_results.bin` — **not** as edges in the topology graph.
+`gql` joins that sidecar so you can list and filter communities:
+
+```bash
+# Macro: list communities (id, heuristic label, member_count)
+rbuilder -r "$REPO" -f json gql --macro-name all_communities unused | jq '.rows[:3]'
+```
+
+```json
+[
+  [
+    {
+      "binding": "c",
+      "node": "ecommerce.service::checkout",
+      "type": "Community",
+      "label": "ecommerce.service::checkout",
+      "community_id": 385,
+      "member_count": 19,
+      "file": null
+    }
+  ]
+]
+```
+
+```bash
+# Members of one community (use an id from the list above)
+rbuilder -r "$REPO" -f json gql \
+  "MATCH (f:Function) WHERE f.community_id = '385' RETURN f LIMIT 10" | jq '.count'
+
+# CLI helpers (same labels; --write refreshes analysis_results.bin)
+rbuilder -r "$REPO" communities list
+rbuilder -r "$REPO" communities label --write
+```
+
+Labels are **heuristic** (package path, top PageRank symbol, token majority, infrastructure hubs).
+They are for orientation — not ground-truth domain names. See
+[community query & naming plan](design/community-query-and-naming-plan.md).
+
+Virtual type `:Community` is query-only; there is no `MEMBER_OF` edge in the snapshot.
+
 ---
 
 ## 7. Blast radius (change impact)
@@ -732,6 +775,9 @@ rbuilder -r "$REPO" -f json metrics --communities | jq .
 }
 ```
 
+That summary is counts only. For **named** communities and membership, use GQL / `communities list`
+([§6](#6-query-the-graph-with-gql)) or `.rbuilder/dashboard/communities.json` after `--with-dashboard`.
+
 ```bash
 rbuilder -r "$REPO" -f json metrics --pagerank | jq '.pagerank | {iterations, converged, top: .top[:3]}'
 ```
@@ -774,6 +820,9 @@ rbuilder -r "$REPO" -f json semantic query "OrderService" --keyword-and
 # Pure Hamming (disable fusion):
 rbuilder -r "$REPO" -f json semantic query "OrderService" --no-fusion --limit 10
 
+# Community-scoped search — pool member embeddings (needs discover analysis + semantic index)
+rbuilder -r "$REPO" -f json semantic query "shopping cart" --scope community --limit 5
+
 # Hash embedder (no ONNX) — e.g. CI
 rbuilder -r "$REPO" semantic index --embedder hash
 
@@ -787,6 +836,7 @@ Passing `--diffuse` recomputes dense vectors and mixes call-graph neighbors **be
 
 | Flag | Purpose |
 |------|---------|
+| `--scope function\|community` | Rank functions (default) or pooled communities |
 | `--no-fusion` | Disable late fusion (default is fusion **on**: blast, PageRank, name, token-bloom) |
 | `--keyword-and` | Every query token must match metadata or body sketch |
 | `--candidate-pool <N>` | Hamming pool size before fusion [default: 256] |
@@ -907,6 +957,8 @@ rbuilder discover . -l java -e target \
 
 # 3. Explore structure
 rbuilder -r "$REPO" -f json gql --macro-name all_functions unused | jq '.count'
+rbuilder -r "$REPO" -f json gql --macro-name all_communities unused | jq '.rows[:5]'
+rbuilder -r "$REPO" communities list | head -15
 rbuilder -r "$REPO" gql \
   "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = 'clearCart' RETURN a,b"
 
@@ -939,14 +991,15 @@ Migration hints (with `--export-migration-hints`) land under `.rbuilder/migratio
 | Command | Purpose |
 |---------|---------|
 | `discover` | Index repo, build `.rbuilder/` artifacts |
-| `gql` | Graph query language |
+| `gql` | Graph query language (incl. virtual `:Community`) |
+| `communities` | List / refresh heuristic community labels |
 | `blast-radius` | Upstream call-graph impact for a symbol |
 | `slice` | Line-level program slice or taint trace |
 | `inspect` | CFG / PDG / dominance for a function |
-| `metrics` | PageRank, betweenness, communities |
+| `metrics` | PageRank, betweenness, communities summary |
 | `export` | Serialize graph (json, graphml, dot, mermaid) |
 | `check` | CI policy gateway |
-| `semantic` | Opt-in function semantic index + query |
+| `semantic` | Opt-in function semantic index + query (`--scope community`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/semantic/*` (default); `serve --daemon` for blast socket |
 
 ### `discover` flags

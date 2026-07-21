@@ -1,18 +1,24 @@
 /**
- * Record an rBuilder dashboard feature montage — 5 seconds per feature.
+ * Record an rBuilder dashboard feature montage — aligned with the User Guide.
  *
- * Each segment highlights the active tab in `.rb-main-tabs` and the tab's
- * main content panel so viewers can see which area belongs to which feature.
+ * No on-page caption overlay (same idea as the CLI VHS tape). Captions are
+ * burned later from docs/videos/rbuilder-feature-demo.srt via
+ * docs/videos/burn-feature-demo-captions.sh.
  *
- * Prereq:
- *   rbuilder -r /path/to/gbuilder discover . --all
- *   rbuilder -r /path/to/gbuilder semantic index   # Search tab
- *   rbuilder -r /path/to/gbuilder serve --port 8080
+ * Prereq (ecommerce-java fixture recommended):
+ *   rbuilder -r rbuilder-tests/ecommerce-java discover . -l java -e target \
+ *     --with-cfg --with-security --with-taint --with-dashboard --with-harmonic \
+ *     --export-migration-hints
+ *   rbuilder -r rbuilder-tests/ecommerce-java semantic index --embedder vocab
+ *   rbuilder -r rbuilder-tests/ecommerce-java serve --port 8080
  *
  * Usage:
  *   DASHBOARD_URL=http://127.0.0.1:8080/ node dashboard/scripts/record-feature-demo.mjs
  *
- * Output: docs/videos/rbuilder-feature-demo.mp4
+ * Outputs:
+ *   docs/videos/rbuilder-feature-demo-no-captions.mp4
+ *   docs/videos/rbuilder-feature-demo.srt
+ *   docs/videos/rbuilder-feature-demo.raw.webm  (intermediate)
  */
 
 import { chromium } from "playwright";
@@ -24,32 +30,117 @@ const BASE = process.env.DASHBOARD_URL ?? "http://127.0.0.1:8080/";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const OUT_DIR = path.join(ROOT, "docs/videos");
 const RAW_WEBM = path.join(OUT_DIR, "rbuilder-feature-demo.raw.webm");
-const OUT_MP4 = path.join(OUT_DIR, "rbuilder-feature-demo.mp4");
+const OUT_NO_CAPTIONS = path.join(OUT_DIR, "rbuilder-feature-demo-no-captions.mp4");
+const OUT_SRT = path.join(OUT_DIR, "rbuilder-feature-demo.srt");
 const SEC_PER_FEATURE = Number(process.env.DEMO_SEC_PER_FEATURE ?? "5");
 const HOLD_MS = Math.round(SEC_PER_FEATURE * 1000);
 
-const FN = process.env.CAPTURE_FN_DATAFLOW ?? "addEmbeddingSimilarityEdges";
-const FN_BLAST = process.env.CAPTURE_FN_BLAST ?? "addEmbeddingSimilarityEdges";
-const FN_TAINT = process.env.CAPTURE_FN_TAINT ?? "clearFileGraph";
-const SEMANTIC_QUERY = process.env.CAPTURE_SEMANTIC_QUERY ?? "embedding similarity graph";
-const SLICE_LINE = process.env.CAPTURE_SLICE_LINE ?? "45";
-const SLICE_VAR = process.env.CAPTURE_SLICE_VAR ?? "threshold";
+/** Defaults match rbuilder-tests/ecommerce-java + user-guide walkthrough. */
+const FN = process.env.CAPTURE_FN_DATAFLOW ?? "checkout";
+const FN_BLAST = process.env.CAPTURE_FN_BLAST ?? "clearCart";
+const FN_TAINT = process.env.CAPTURE_FN_TAINT ?? "checkout";
+const FN_CFG = process.env.CAPTURE_FN_CFG ?? "checkout";
+const FN_SLICE = process.env.CAPTURE_FN_SLICE ?? "addItem";
+const SEMANTIC_QUERY = process.env.CAPTURE_SEMANTIC_QUERY ?? "shopping cart checkout";
+const SLICE_LINE = process.env.CAPTURE_SLICE_LINE ?? "53";
+const SLICE_VAR = process.env.CAPTURE_SLICE_VAR ?? "item";
 
-/** One segment per dashboard feature (order matches README feature list). */
+/**
+ * One segment per feature (order matches README / user-guide).
+ * `caption` / `body` feed the SRT (not drawn in the page).
+ */
 const FEATURE_SEGMENTS = [
-  { key: "discover", tab: null, panel: ".rb-stats-row", caption: "discover · graph snapshot & index metrics" },
-  { key: "gql", tab: "Graph Visualization", panel: ".graph-panel.h-100", caption: "GQL · package call graph" },
-  { key: "semantic-search", tab: "Search", panel: ".search-view", caption: "Semantic search · code-daemon · fusion ranking" },
-  { key: "graph-metrics", tab: "Functions", panel: ".functions-view, .functions-table", caption: "Graph metrics · PageRank · betweenness · blast" },
-  { key: "cfg", tab: "CFG / PDG Analysis", panel: ".cfg-detail, .cfg-graph-panel", caption: "CFG · control-flow blocks & dominators" },
-  { key: "pdg", tab: "Dataflow", panel: ".dataflow-graph-panel", caption: "PDG · data & control dependencies" },
-  { key: "dominance", tab: "Dataflow", panel: ".dataflow-graph-panel", caption: "Dominance · dominator tree & frontiers" },
-  { key: "program-slicing", tab: "Program Slicing", panel: ".slice-view", caption: "Program slicing · criterion & highlighted lines" },
-  { key: "blast-radius", tab: "Blast Radius", panel: ".blast-view", caption: "Blast radius · impact score & caller table" },
-  { key: "taint", tab: "Taint Analysis", panel: ".taint-view", caption: "Taint analysis · source → sink flows" },
-  { key: "migration", tab: "Migration", panel: ".migration-view, .migration-tuning", caption: "Migration planner · presets & package roadmap" },
-  { key: "ci-policy", tab: "Query Guide", panel: ".guide-view", caption: "CI policy · check · blast-radius gates" },
-  { key: "export", tab: "Query Guide", panel: ".guide-view", caption: "Export · GraphML · Mermaid · JSON subgraphs" },
+  {
+    key: "discover",
+    tab: null,
+    panel: ".rb-stats-row",
+    caption: "discover",
+    body: "Graph snapshot & index metrics",
+  },
+  {
+    key: "gql",
+    tab: "Graph Visualization",
+    panel: ".graph-panel.h-100",
+    caption: "gql",
+    body: "Package call graph — exact structure for agents",
+  },
+  {
+    key: "semantic-search",
+    tab: "Search",
+    panel: ".search-view",
+    caption: "semantic search",
+    body: "Vocab / code-daemon index · Hamming + late fusion",
+  },
+  {
+    key: "graph-metrics",
+    tab: "Functions",
+    panel: ".functions-view, .functions-table",
+    caption: "metrics",
+    body: "PageRank · betweenness · blast hotspots",
+  },
+  {
+    key: "cfg",
+    tab: "CFG / PDG Analysis",
+    panel: ".cfg-detail, .cfg-graph-panel",
+    caption: "inspect cfg",
+    body: "Control-flow blocks & dominators",
+  },
+  {
+    key: "pdg",
+    tab: "Dataflow",
+    panel: ".dataflow-graph-panel",
+    caption: "inspect pdg",
+    body: "Data & control dependencies",
+  },
+  {
+    key: "dominance",
+    tab: "Dataflow",
+    panel: ".dataflow-graph-panel",
+    caption: "inspect dom",
+    body: "Dominator tree & frontiers",
+  },
+  {
+    key: "program-slicing",
+    tab: "Program Slicing",
+    panel: ".slice-view",
+    caption: "slice",
+    body: "Backward slice — criterion & highlighted lines",
+  },
+  {
+    key: "blast-radius",
+    tab: "Blast Radius",
+    panel: ".blast-view",
+    caption: "blast-radius",
+    body: "Upstream impact score & caller table",
+  },
+  {
+    key: "taint",
+    tab: "Taint Analysis",
+    panel: ".taint-view",
+    caption: "taint",
+    body: "Source → sink flows",
+  },
+  {
+    key: "migration",
+    tab: "Migration",
+    panel: ".migration-view, .migration-tuning",
+    caption: "migration",
+    body: "Package roadmap · presets & dual ordering",
+  },
+  {
+    key: "ci-policy",
+    tab: "Query Guide",
+    panel: ".guide-view",
+    caption: "check",
+    body: "CI policy · blast-radius gates",
+  },
+  {
+    key: "export",
+    tab: "Query Guide",
+    panel: ".guide-view",
+    caption: "export",
+    body: "GraphML · Mermaid · JSON subgraphs",
+  },
 ];
 
 const TARGET_SECS = FEATURE_SEGMENTS.length * SEC_PER_FEATURE;
@@ -58,6 +149,33 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function resolveFfmpeg() {
+  const full = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg";
+  if (fs.existsSync(full)) return full;
+  return "ffmpeg";
+}
+
+function writeSrt(outPath, segments, secPer) {
+  const lines = [];
+  const ts = (sec) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    const ms = Math.round((sec - Math.floor(sec)) * 1000);
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+  };
+  segments.forEach((seg, i) => {
+    const start = i * secPer;
+    const end = (i + 1) * secPer;
+    lines.push(String(i + 1));
+    lines.push(`${ts(start)} --> ${ts(end)}`);
+    lines.push(seg.caption);
+    lines.push(seg.body);
+    lines.push("");
+  });
+  fs.writeFileSync(outPath, lines.join("\n"));
 }
 
 async function clickTab(page, label) {
@@ -116,35 +234,6 @@ async function waitForBlastResults(page) {
   await sleep(400);
 }
 
-async function setCaption(page, text) {
-  await page.evaluate((caption) => {
-    let el = document.getElementById("rb-demo-caption");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "rb-demo-caption";
-      Object.assign(el.style, {
-        position: "fixed",
-        left: "50%",
-        bottom: "24px",
-        transform: "translateX(-50%)",
-        zIndex: "99999",
-        background: "rgba(13, 110, 253, 0.94)",
-        color: "#fff",
-        padding: "10px 20px",
-        borderRadius: "8px",
-        font: "600 17px/1.25 system-ui, sans-serif",
-        boxShadow: "0 4px 18px rgba(0,0,0,0.28)",
-        pointerEvents: "none",
-        maxWidth: "92vw",
-        textAlign: "center",
-      });
-      document.body.appendChild(el);
-    }
-    el.textContent = caption;
-    el.style.opacity = "1";
-  }, text);
-}
-
 async function clearHighlights(page) {
   await page.evaluate(() => {
     document.querySelectorAll("[data-rb-demo-highlight]").forEach((el) => {
@@ -153,13 +242,12 @@ async function clearHighlights(page) {
       el.style.boxShadow = "";
       el.removeAttribute("data-rb-demo-highlight");
     });
+    document.getElementById("rb-demo-caption")?.remove();
   });
 }
 
-/** Highlight active tab button + main panel for HOLD_MS. */
-async function focusTabAndPanel(page, tabLabel, panelSelector, caption) {
-  await setCaption(page, caption);
-
+/** Highlight active tab button + main panel for HOLD_MS (no caption overlay). */
+async function focusTabAndPanel(page, tabLabel, panelSelector) {
   if (tabLabel) {
     await clickTab(page, tabLabel);
   }
@@ -220,7 +308,7 @@ async function prepareSegment(page, key) {
         break;
       }
       case "cfg": {
-        await selectFunction(page, FN);
+        await selectFunction(page, FN_CFG);
         const loadCfg = page.getByRole("button", { name: /Load CFG graph/i });
         if (await loadCfg.count()) await loadCfg.click();
         await page.locator(".cfg-detail").first().waitFor({ state: "visible", timeout: 25000 }).catch(() => {});
@@ -246,7 +334,7 @@ async function prepareSegment(page, key) {
         break;
       }
       case "program-slicing": {
-        await selectFunction(page, FN);
+        await selectFunction(page, FN_SLICE);
         await page.locator("#slice-line").fill(String(SLICE_LINE));
         await page.locator("#slice-var").fill(SLICE_VAR);
         await page.getByRole("button", { name: "Compute slice" }).click();
@@ -318,12 +406,9 @@ for (const segment of FEATURE_SEGMENTS) {
     await clickTab(page, segment.tab);
   }
   await prepareSegment(page, segment.key);
-  await focusTabAndPanel(page, segment.tab, segment.panel, segment.caption);
+  await focusTabAndPanel(page, segment.tab, segment.panel);
 }
 
-await page.evaluate(() => {
-  document.getElementById("rb-demo-caption")?.remove();
-});
 await clearHighlights(page);
 
 const video = page.video();
@@ -335,6 +420,9 @@ if (!video) throw new Error("Playwright did not return a video handle");
 const saved = await video.path();
 fs.renameSync(saved, RAW_WEBM);
 
+writeSrt(OUT_SRT, FEATURE_SEGMENTS, SEC_PER_FEATURE);
+
+const ffmpegBin = resolveFfmpeg();
 const probe = spawnSync(
   "ffprobe",
   ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", RAW_WEBM],
@@ -371,7 +459,7 @@ if (rawDur > TARGET_SECS + 1) {
   ffArgs.push("-t", String(TARGET_SECS));
 }
 
-const ff = spawnSync("ffmpeg", [...ffArgs, OUT_MP4], { encoding: "utf8" });
+const ff = spawnSync(ffmpegBin, [...ffArgs, OUT_NO_CAPTIONS], { encoding: "utf8" });
 if (ff.status !== 0) {
   console.error(ff.stderr);
   throw new Error("ffmpeg encode failed");
@@ -379,7 +467,7 @@ if (ff.status !== 0) {
 
 const finalProbe = spawnSync(
   "ffprobe",
-  ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", OUT_MP4],
+  ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", OUT_NO_CAPTIONS],
   { encoding: "utf8" },
 );
 
@@ -387,13 +475,15 @@ console.log(
   JSON.stringify(
     {
       dashboard: BASE,
-      output: OUT_MP4,
+      output_no_captions: OUT_NO_CAPTIONS,
+      srt: OUT_SRT,
       raw_duration_s: rawDur,
       final_duration_s: parseFloat(finalProbe.stdout.trim() || "0"),
       sec_per_feature: SEC_PER_FEATURE,
       target_secs: TARGET_SECS,
       encode_mode: encodeMode,
       features: FEATURE_SEGMENTS.map((s) => s.key),
+      next: "./docs/videos/burn-feature-demo-captions.sh",
     },
     null,
     2,

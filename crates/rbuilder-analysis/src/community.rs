@@ -581,16 +581,27 @@ fn build_dashboard_community(
         0.0
     };
 
-    let label = if infrastructure_community_id == Some(id) {
-        "Infrastructure / Common Library".to_string()
-    } else if let Some(common) = find_common_path_prefix_strings(&file_paths) {
-        if !common.is_empty() {
-            common
-        } else {
-            infer_label_from_names(&names, id)
-        }
-    } else {
-        infer_label_from_names(&names, id)
+    let label = {
+        use crate::community_label::{infer_community_label, CommunityLabelHints};
+        let packages: Vec<String> = file_paths
+            .iter()
+            .map(|p| {
+                let path = p.replace('\\', "/");
+                std::path::Path::new(&path)
+                    .parent()
+                    .map(|parent| parent.to_string_lossy().replace('/', "."))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "root".into())
+            })
+            .collect();
+        infer_community_label(&CommunityLabelHints {
+            id,
+            names: &names,
+            file_paths: &file_paths,
+            package_labels: &packages,
+            top_pagerank_name: None,
+            is_infrastructure: infrastructure_community_id == Some(id),
+        })
     };
 
     Ok(DashboardCommunity {
@@ -643,53 +654,7 @@ fn connected_components(backend: &MemoryBackend) -> Result<Vec<Vec<Uuid>>> {
     Ok(components)
 }
 
-// Zero-copy helper: work with String references instead of Node references
-fn find_common_path_prefix_strings(paths: &[String]) -> Option<String> {
-    if paths.is_empty() {
-        return None;
-    }
-    let first = &paths[0];
-    let mut prefix_len = first.len();
-    for path in &paths[1..] {
-        prefix_len = first
-            .chars()
-            .zip(path.chars())
-            .take(prefix_len)
-            .take_while(|(a, b)| a == b)
-            .count();
-    }
-    if prefix_len == 0 {
-        return None;
-    }
-    if let Some(last_slash) = first[..prefix_len].rfind('/') {
-        return Some(first[..last_slash].to_string());
-    }
-    Some(first[..prefix_len].to_string())
-}
-
-fn infer_label_from_names(names: &[String], idx: usize) -> String {
-    if names.is_empty() {
-        return format!("Community {}", idx + 1);
-    }
-
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for name in names {
-        let tokens: Vec<&str> = name.split(&['_', '-', '.'][..]).collect();
-        for token in tokens {
-            if !token.is_empty() && token.len() > 2 {
-                *counts.entry(token).or_insert(0) += 1;
-            }
-        }
-    }
-
-    if let Some((token, _)) = counts.iter().max_by_key(|(_, count)| *count) {
-        if counts[token] >= names.len() / 3 {
-            return token.to_string();
-        }
-    }
-
-    format!("Community {}", idx + 1)
-}
+// Zero-copy helper removed — path/token naming lives in `community_label`.
 
 #[cfg(test)]
 mod tests {

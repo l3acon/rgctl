@@ -29,8 +29,11 @@ rbuilder -r "$REPO" -f json gql 'MATCH (n:Function) RETURN n LIMIT 20'
 | Intent | Command |
 |--------|---------|
 | Inventory functions | `rbuilder -f json gql --macro-name all_functions unused` |
+| List communities | `rbuilder -f json gql --macro-name all_communities unused` |
 | Find symbol by pattern | `rbuilder -f json gql "MATCH (n:Function) WHERE n.name LIKE '*Service*' RETURN n LIMIT 20"` |
+| Community members | `rbuilder -f json gql "MATCH (f:Function) WHERE f.community_id = '12' RETURN f LIMIT 20"` |
 | Natural-language function search | `rbuilder semantic index` (or `--embedder vocab`) then `rbuilder -f json semantic query "checkout flow" --limit 10` |
+| Community semantic search | `rbuilder -f json semantic query "checkout" --scope community --limit 10` |
 | Impact before editing | `rbuilder -f json blast-radius <Symbol> [--depth N]` |
 | Architectural hotspots | `rbuilder -f json metrics --pagerank` |
 | Call neighborhood | `rbuilder -f json gql "MATCH (a:Function)-[:CALLS*1..3]->(b:Function) RETURN a,b LIMIT 50"` |

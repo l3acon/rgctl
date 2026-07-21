@@ -18,21 +18,43 @@ pub use macros::{QueryMacro, QueryMacroRegistry};
 pub use optimizer::{OptimizationReport, QueryOptimizer};
 pub use parser::parse;
 
+use rbuilder_analysis::CommunityQueryContext;
 use rbuilder_error::Result;
 use rbuilder_graph::backend::MemoryBackend;
 
 /// Parse, optimize, and execute a GQL query string against the backend.
 pub fn execute(backend: &MemoryBackend, query: &str) -> Result<QueryResult> {
+    execute_with_community(backend, query, None)
+}
+
+/// Parse, optimize, and execute with an optional community overlay.
+pub fn execute_with_community(
+    backend: &MemoryBackend,
+    query: &str,
+    community: Option<&CommunityQueryContext>,
+) -> Result<QueryResult> {
     let parsed = parse(query)?;
     let (optimized, _) = QueryOptimizer::new(backend).optimize(parsed);
-    QueryExecutor::new(backend).execute(&optimized)
+    QueryExecutor::new(backend)
+        .with_community(community)
+        .execute(&optimized)
 }
 
 /// Parse, optimize, and execute with explain plan collection.
 pub fn execute_explain(backend: &MemoryBackend, query: &str) -> Result<QueryResult> {
+    execute_explain_with_community(backend, query, None)
+}
+
+/// Explain variant with community overlay.
+pub fn execute_explain_with_community(
+    backend: &MemoryBackend,
+    query: &str,
+    community: Option<&CommunityQueryContext>,
+) -> Result<QueryResult> {
     let parsed = parse(query)?;
     let (optimized, report) = QueryOptimizer::new(backend).optimize(parsed);
     QueryExecutor::new(backend)
+        .with_community(community)
         .with_explain(true)
         .with_optimization_report(report)
         .execute(&optimized)
@@ -44,8 +66,18 @@ pub fn execute_macro(
     registry: &QueryMacroRegistry,
     name: &str,
 ) -> Result<QueryResult> {
+    execute_macro_with_community(backend, registry, name, None)
+}
+
+/// Macro execution with community overlay.
+pub fn execute_macro_with_community(
+    backend: &MemoryBackend,
+    registry: &QueryMacroRegistry,
+    name: &str,
+    community: Option<&CommunityQueryContext>,
+) -> Result<QueryResult> {
     let query = registry.resolve(name)?;
-    execute(backend, query)
+    execute_with_community(backend, query, community)
 }
 
 #[cfg(test)]

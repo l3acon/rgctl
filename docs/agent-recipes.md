@@ -16,12 +16,26 @@ export REPO=/path/to/repo   # contains .rbuilder/ after discover
 rbuilder -r "$REPO" discover .
 rbuilder -r "$REPO" -f json discover . | jq '.metrics'
 rbuilder -r "$REPO" -f json gql --macro-name all_functions unused | jq '.count'
+rbuilder -r "$REPO" -f json gql --macro-name all_communities unused | jq '.rows[:5]'
 rbuilder -r "$REPO" -f json metrics --pagerank | jq '.rows[:10]'
 ```
 
 **Use when:** first turn on a codebase; replaces reading directory trees.
 
 ---
+
+## Recipe 1b — Named communities
+
+```bash
+rbuilder -r "$REPO" communities list
+rbuilder -r "$REPO" -f json gql 'MATCH (c:Community) RETURN c' | jq '.rows[:10]'
+# members of community 12 (id from list / communities.json):
+rbuilder -r "$REPO" -f json gql "MATCH (f:Function) WHERE f.community_id = '12' RETURN f LIMIT 20"
+# optional: refresh heuristic labels into analysis_results.bin
+rbuilder -r "$REPO" communities label --write
+```
+
+**Use when:** mapping subsystems without reading `communities.json` by hand. Labels are heuristic (package / path / token); they are **not** written into the topology graph.
 
 ## Recipe 2 — Before editing a symbol
 

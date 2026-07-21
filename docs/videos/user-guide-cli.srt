@@ -1,69 +1,80 @@
 1
-00:00:00,000 --> 00:00:01,000
+00:00:00,000 --> 00:00:00,891
 rBuilder
 User-guide CLI walkthrough · ecommerce-java
 
 2
-00:00:01,000 --> 00:00:08,056
+00:00:00,891 --> 00:00:07,574
 discover
 Index the repo: graph + reachability + CFG/PDG
 
 3
-00:00:08,056 --> 00:00:12,102
+00:00:07,574 --> 00:00:11,584
 gql
 Exact graph inventory — compact JSON for agents
 
 4
-00:00:12,102 --> 00:00:17,620
+00:00:11,584 --> 00:00:16,930
 gql (CALLS)
 Who calls clearCart? Relation query, not grep
 
 5
-00:00:17,620 --> 00:00:21,682
+00:00:16,930 --> 00:00:25,395
+communities
+Named communities — GQL overlay + communities list
+
+6
+00:00:25,395 --> 00:00:30,295
 blast-radius
 What breaks upstream if I change CartService::clearCart?
 
-6
-00:00:21,682 --> 00:00:27,772
+7
+00:00:30,295 --> 00:00:36,087
 blast-radius -f json
 Same answer as structured metrics for CI / agents
 
-7
-00:00:27,772 --> 00:00:32,542
+8
+00:00:36,087 --> 00:00:41,433
 metrics --pagerank
 Architectural hotspots on the call graph
 
-8
-00:00:32,542 --> 00:00:37,814
+9
+00:00:41,433 --> 00:00:46,780
 inspect
 CFG for checkout — control-flow inside one function
 
-9
-00:00:37,814 --> 00:00:43,904
+10
+00:00:46,780 --> 00:00:52,571
 slice
 Backward slice: which lines influence item at addItem:53?
 
-10
-00:00:43,904 --> 00:00:49,208
+11
+00:00:52,571 --> 00:00:58,809
 semantic index
 Opt-in Hamming index (vocab = offline, no ONNX)
 
-11
-00:00:49,208 --> 00:00:54,946
+12
+00:00:58,809 --> 00:01:04,601
 semantic query
 Natural-language search over functions (fusion on by default)
 
-12
-00:00:54,946 --> 00:00:59,174
+13
+00:01:04,601 --> 00:01:10,392
+semantic --scope community
+Pool member embeddings — find subsystems by theme
+
+14
+00:01:10,392 --> 00:01:14,848
 export
 Filter syntax (not GQL): name:clearCart → Mermaid subgraph
 
-13
-00:00:59,174 --> 00:01:02,318
+15
+00:01:14,848 --> 00:01:18,857
 export (preview)
 Show the Mermaid subgraph
 
-14
-00:01:02,318 --> 00:01:10,360
+16
+00:01:18,857 --> 00:01:25,540
 check
 CI gate: blast-radius policy on changed symbols
+

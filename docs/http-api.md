@@ -77,7 +77,13 @@ rbuilder -r "$REPO" serve --open
 curl -sS -X POST http://127.0.0.1:8080/api/query \
   -H 'Content-Type: application/json' \
   -d '{"macro":"all_functions"}' | jq '.count'
+
+curl -sS -X POST http://127.0.0.1:8080/api/query \
+  -H 'Content-Type: application/json' \
+  -d '{"macro":"all_communities"}' | jq '.rows[:5]'
 ```
+
+`serve` loads `.rbuilder/analysis_results.bin` so virtual `:Community` nodes and `community_id` filters work the same as CLI `gql`.
 
 ### Response
 
@@ -104,9 +110,12 @@ Returns JSON: `{ "available": true, "model_id": "...", "dimensions": N, "functio
   "query": "shopping cart checkout",
   "limit": 20,
   "fusion": true,
-  "keyword_and": false
+  "keyword_and": false,
+  "scope": "function"
 }
 ```
+
+`scope` may be `"function"` (default) or `"community"` (pooled member embeddings; requires discover analysis).
 
 Response matches `rbuilder -f json semantic query`. Errors return HTTP 503 when the index is missing.
 
@@ -115,6 +124,9 @@ curl -sS http://127.0.0.1:8080/api/semantic/status | jq .
 curl -sS -X POST http://127.0.0.1:8080/api/semantic/query \
   -H 'Content-Type: application/json' \
   -d '{"query":"OrderService","limit":5}' | jq '.hits[:3]'
+curl -sS -X POST http://127.0.0.1:8080/api/semantic/query \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"checkout","scope":"community","limit":5}' | jq '.hits'
 ```
 
 ---

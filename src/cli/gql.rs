@@ -4,6 +4,8 @@ use super::args::OutputFormat;
 use super::context::CliContext;
 use super::gql_output::gql_result_to_json;
 use anyhow::Result;
+use rbuilder_analysis::{AnalysisResults, CommunityQueryContext};
+use rbuilder_graph::backend::GraphBackend;
 
 pub struct GqlArgs {
     pub query: String,
@@ -12,18 +14,22 @@ pub struct GqlArgs {
 }
 
 pub fn run(ctx: &CliContext, args: GqlArgs) -> Result<()> {
-    use crate::gql::{execute, execute_explain, execute_macro, QueryMacroRegistry};
+    use crate::gql::{
+        execute_explain_with_community, execute_macro_with_community, execute_with_community,
+        QueryMacroRegistry,
+    };
 
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
     let registry = QueryMacroRegistry::with_defaults();
+    let community = load_community_context(ctx, backend);
 
     let result = if let Some(name) = args.macro_name {
-        execute_macro(backend, &registry, &name)?
+        execute_macro_with_community(backend, &registry, &name, community.as_ref())?
     } else if args.explain {
-        execute_explain(backend, &args.query)?
+        execute_explain_with_community(backend, &args.query, community.as_ref())?
     } else {
-        execute(backend, &args.query)?
+        execute_with_community(backend, &args.query, community.as_ref())?
     };
 
     if ctx.format == OutputFormat::Json {
@@ -44,4 +50,22 @@ pub fn run(ctx: &CliContext, args: GqlArgs) -> Result<()> {
         println!("{}", names.join(" -> "));
     }
     Ok(())
+}
+
+pub(crate) fn load_community_context(
+    ctx: &CliContext,
+    backend: &rbuilder_graph::backend::MemoryBackend,
+) -> Option<CommunityQueryContext> {
+    let path = ctx.repo.join(".rbuilder/analysis_results.bin");
+    if !path.is_file() {
+        return None;
+    }
+    let analysis = AnalysisResults::load(&path).ok()?;
+    Some(CommunityQueryContext::from_analysis(&analysis, |uuid| {
+        backend
+            .get_node(uuid)
+            .ok()
+            .flatten()
+            .map(|n| (n.name.clone(), n.file_path.clone()))
+    }))
 }

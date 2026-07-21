@@ -96,10 +96,15 @@ impl<'a> Parser<'a> {
         let variable = self.parse_ident()?;
         self.skip_whitespace();
 
-        let node_type = if self.consume(':') {
-            Some(self.parse_node_type()?)
+        let (node_type, match_community) = if self.consume(':') {
+            let ident = self.parse_ident()?;
+            if ident.eq_ignore_ascii_case("community") {
+                (None, true)
+            } else {
+                (Some(parse_node_type_name(&ident)?), false)
+            }
         } else {
-            None
+            (None, false)
         };
         self.skip_whitespace();
 
@@ -116,6 +121,7 @@ impl<'a> Parser<'a> {
         Ok(NodePattern {
             variable,
             node_type,
+            match_community,
             properties,
         })
     }
@@ -224,6 +230,7 @@ impl<'a> Parser<'a> {
         Ok(ReturnClause { variables })
     }
 
+    #[allow(dead_code)]
     fn parse_node_type(&mut self) -> Result<NodeType> {
         let ident = self.parse_ident()?;
         parse_node_type_name(&ident)

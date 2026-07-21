@@ -168,13 +168,19 @@ interface GqlResponse {
 
 interface GqlRow {
   binding: string;      // variable name from MATCH (e.g. "n", "a")
-  node: string;         // bare symbol name
-  type: string;         // node type label, e.g. "Function"
+  node: string;         // bare symbol name (or community label)
+  type: string;         // node type label, e.g. "Function" or "Community"
   file: string | null;  // source path when indexed
+  community_id?: number; // present on :Community rows; optional on functions when joined
+  label?: string;        // :Community label
+  member_count?: number; // :Community size
 }
 ```
 
 Each `rows[i]` is an **array** of bindings (one object per variable in the `RETURN` clause).
+
+Virtual `:Community` nodes and `f.community_id` filters join `.rbuilder/analysis_results.bin`
+(see [community-query-and-naming-plan.md](design/community-query-and-naming-plan.md)).
 
 ### Example
 
@@ -206,6 +212,10 @@ rbuilder -f json gql 'MATCH (n:Function) RETURN n' \
 # Multi-binding row (a,b) from a CALLS query
 rbuilder -f json gql 'MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a,b LIMIT 5' \
   | jq '.rows[] | map({binding, node, file})'
+
+# Named communities
+rbuilder -f json gql --macro-name all_communities unused \
+  | jq '.rows[:5][][] | {id: .community_id, label, member_count}'
 ```
 
 ### Macros
@@ -214,7 +224,7 @@ When `--macro-name` is set, the positional query string is ignored:
 
 ```bash
 rbuilder -f json gql --macro-name all_functions 'unused'
-# Macros: all_functions | direct_calls | call_chain
+# Macros: all_functions | direct_calls | call_chain | all_communities
 ```
 
 ---

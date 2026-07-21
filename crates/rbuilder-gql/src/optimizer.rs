@@ -110,6 +110,9 @@ impl<'a> QueryOptimizer<'a> {
     }
 
     fn estimate_selectivity(&self, pattern: &crate::ast::Pattern) -> f64 {
+        if pattern.node.match_community {
+            return 0.01;
+        }
         let total = self.backend.node_count().max(1) as f64;
         let type_sel = if let Some(node_type) = pattern.node.node_type {
             self.backend

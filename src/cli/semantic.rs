@@ -29,6 +29,14 @@ pub enum CliEmbedderKind {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum CliSemanticScope {
+    /// Rank function symbols (default).
+    Function,
+    /// Rank communities via pooled member embeddings.
+    Community,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
 pub enum CliExpandMode {
     Neighbors,
     Blast,
@@ -58,6 +66,7 @@ pub struct SemanticQueryArgs {
     pub fusion: bool,
     pub candidate_pool: usize,
     pub keyword_and: bool,
+    pub scope: CliSemanticScope,
 }
 
 pub fn run_index(ctx: &CliContext, args: SemanticIndexArgs) -> Result<()> {
@@ -180,13 +189,19 @@ pub fn run_query(ctx: &CliContext, args: SemanticQueryArgs) -> Result<()> {
                 .as_deref()
                 .map(|p| format!(" ({p})"))
                 .unwrap_or_default();
+            let ranking = hit
+                .ranking
+                .as_deref()
+                .map(|r| format!(" [{r}]"))
+                .unwrap_or_default();
             println!(
-                "{label}{file}  distance={} score={:.3}{}",
+                "{label}{file}  distance={} score={:.3}{}{}",
                 hit.distance,
                 hit.score,
                 hit.fused_score
                     .map(|score| format!(" fused={score:.3}"))
-                    .unwrap_or_default()
+                    .unwrap_or_default(),
+                ranking
             );
         }
         if let Some(exp) = &response.expansion {

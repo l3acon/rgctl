@@ -304,6 +304,7 @@ pub(crate) fn run_full_analysis(
         let table = analysis_results.init_community();
         table.modularity = community_result.modularity;
         table.num_communities = community_result.communities.len();
+        table.infrastructure_community_id = community_result.infrastructure_community_id;
         for (compact_id, community_id) in community_data {
             table.assignments[compact_id as usize] = community_id;
         }
@@ -361,6 +362,20 @@ pub(crate) fn run_full_analysis(
     }
 
     debug!("{}", mem_monitor.report());
+
+    // Name communities after centrality so PageRank can influence labels.
+    {
+        let infra = analysis_results
+            .community
+            .as_ref()
+            .and_then(|c| c.infrastructure_community_id);
+        let _ = rbuilder_analysis::fill_community_labels(&mut analysis_results, infra, |uuid| {
+            cold.get_node(uuid)
+                .ok()
+                .flatten()
+                .map(|n| (n.name.clone(), n.file_path.clone()))
+        });
+    }
 
     // Dependency analysis
     let dependency_start = Instant::now();
