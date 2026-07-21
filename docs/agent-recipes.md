@@ -178,6 +178,30 @@ rbuilder -r "$REPO" export --export-format mermaid \
 
 ---
 
+## Recipe 11 — DTO → record safety (hybrid CPG)
+
+```bash
+rbuilder -r "$REPO" discover . --with-cfg
+# Optional fidelity: --with-dfg-loops  --with-ast-skeleton
+
+# Turn 2 — any non-constructor field writes?
+rbuilder -r "$REPO" -f json cpg mutations --type OrderDTO --exclude-ctors
+
+# Turn 5 — after picking a hit at file:line, forward flows on the receiver:
+rbuilder -r "$REPO" -f json cpg flows path/to/OrderProcessor.java \
+  --line 114 --variable order --function process --direction forward --with-alias
+
+# Optional: coarse syntax tree for the function
+rbuilder -r "$REPO" -f json cpg ast process
+
+# Optional: export L_repo (+ L_proc if archived) for Joern/Neo4j tooling
+rbuilder -r "$REPO" cpg export --format graphson --output order-cpg.json --path-contains src/
+```
+
+**Use when:** proving immutability before converting a Java class to a `record`. Empty mutations ⇒ no typed non-ctor field writes found (unresolved receivers excluded unless `--include-unresolved`). Requires `--with-cfg`. `--with-alias` expands may-alias names (copies + field bases). See [hybrid-cpg-plan.md](design/hybrid-cpg-plan.md).
+
+---
+
 ## See also
 
 - [AGENTS.md](../AGENTS.md)
