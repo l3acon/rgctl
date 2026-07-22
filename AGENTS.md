@@ -38,7 +38,7 @@ rbuilder -r "$REPO" -f json gql 'MATCH (n:Function) RETURN n LIMIT 20'
 | Architectural hotspots | `rbuilder -f json metrics --pagerank` |
 | Call neighborhood | `rbuilder -f json gql "MATCH (a:Function)-[:CALLS*1..3]->(b:Function) RETURN a,b LIMIT 50"` |
 | Hybrid CPG status / CALL / PDG / slice | `rbuilder -f json cpg status` then `cpg function\|calls\|pdg\|slice` (needs `discover --with-cfg` for PDG/slice) |
-| Field mutations (DTO safety) | `rbuilder -f json cpg mutations --type OrderDTO --exclude-ctors` (needs `--with-cfg`) |
+| Field mutations (cart / DTO safety) | `rbuilder -f json cpg mutations --type ShoppingCart --exclude-ctors` (ecommerce CoolStore; or any type name; needs `--with-cfg`) |
 | Data flows / slice (CPG) | `rbuilder -f json cpg flows FILE --line N --variable V --function F [--direction forward\|backward] [--with-alias]` |
 | Loop-carried DFG tags | `rbuilder discover . --with-cfg --with-dfg-loops` (tags `DataDependency.loop_carried` in PDG) |
 | AST skeleton | `rbuilder discover --with-ast-skeleton` then `rbuilder -f json cpg ast <Symbol>` |

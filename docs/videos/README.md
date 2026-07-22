@@ -43,6 +43,6 @@ cargo build --release
 #   ./docs/videos/burn-feature-demo-captions.sh
 ```
 
-Defaults: `checkout` / `clearCart` / `addItem` / semantic query `shopping cart checkout` / vocab index. Override with `CAPTURE_FN_*` / `CAPTURE_SEMANTIC_QUERY`.
+Defaults: one beat per main tab (Dataflow shows mutations + PDG + dominator). Hold `DEMO_HOLD_SEC` (default 6.5). Override symbols with `CAPTURE_FN_*` / `CAPTURE_SEMANTIC_QUERY` / `MUTATIONS_TYPE`.
 
 Captions need ffmpeg with `subtitles` (`brew install ffmpeg-full`).
