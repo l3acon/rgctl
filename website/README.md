@@ -14,10 +14,20 @@ Static marketing + docs hub (Next.js App Router, `output: "export"`).
 ```bash
 cd website
 pnpm install
+cp .env.example .env.local   # optional: set NEXT_PUBLIC_GA_MEASUREMENT_ID
 pnpm dev
 ```
 
 Open http://localhost:3000
+
+## Analytics
+
+GA4 loads only when `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set (e.g. `G-XXXXXXXXXX`).
+
+- Local: put the ID in `website/.env.local` (gitignored)
+- CI / Pages: add repo secret `NEXT_PUBLIC_GA_MEASUREMENT_ID` (Actions → Secrets)
+
+With the secret unset, the site builds with analytics disabled.
 
 ## Build
 
