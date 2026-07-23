@@ -30,7 +30,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -45,6 +45,8 @@ jobs:
         env:
           # Project Pages site: https://sshaaf.github.io/rBuilder/
           NEXT_PUBLIC_BASE_PATH: /rBuilder
+          # Optional: repo Settings → Secrets → Actions → NEXT_PUBLIC_GA_MEASUREMENT_ID (G-…)
+          NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
         run: pnpm build
 
       - name: Upload Pages artifact
