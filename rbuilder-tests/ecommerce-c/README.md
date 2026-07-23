@@ -3,7 +3,7 @@
 C reference fixture for rBuilder Tier 1 language support.
 
 Layered REST-style ecommerce API (SQLite + service/repository pattern) used by
-`rbuilder discover --all -l c` dashboard gates.
+`rbuilder discover --with-cfg -l c` dashboard gates (add `--with-dashboard` when exercising the UI).
 
 ## Layout
 
@@ -15,7 +15,7 @@ Layered REST-style ecommerce API (SQLite + service/repository pattern) used by
 See [summary report](../rbuilder-reports/REPORT.md) · [language report](../rbuilder-reports/languages/c.md) · [HTML](../rbuilder-reports/languages/c.html) (2026-07-22).
 
 ```bash
-rbuilder -f json discover . --cfg -e build,cmake-build-debug,.rbuilder
+rbuilder -f json discover . --with-cfg -e build,cmake-build-debug,.rbuilder
 rbuilder -f json blast-radius 'src/coolstore/services/shopping_cart_service.c::price_shopping_cart'
 rbuilder -f json metrics --communities --pagerank
 rbuilder -f json check --policy-file ../rbuilder-policy.json
