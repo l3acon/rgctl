@@ -309,7 +309,7 @@ pub enum Commands {
 pub enum SemanticCommands {
     /// Build `.rbuilder/semantic_index.bin` from function symbols (not run by default discover)
     Index {
-        /// Embedding dimensions before sign quantization (multiple of 8) [default: 1024]
+        /// Embedding dimensions before sign quantization (multiple of 8) [default: 256]
         #[arg(long, default_value_t = DEFAULT_EMBEDDING_DIMENSIONS)]
         dimensions: usize,
 
