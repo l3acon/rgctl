@@ -16,6 +16,24 @@ pub struct CheckArgs {
 }
 
 pub fn run(ctx: &CliContext, args: CheckArgs) -> Result<()> {
+    if ctx.format == OutputFormat::Json {
+        let mut session = rgbuilder_service::Session::new(&ctx.repo);
+        if !session.graph_ready() {
+            anyhow::bail!("Graph not found (run `rg-build discover` first)");
+        }
+        let value = rgbuilder_service::execute(
+            &mut session,
+            rgbuilder_service::Command::Check(rgbuilder_service::CheckArgs {
+                policy_file: args.policy_file.clone(),
+            }),
+        )?;
+        ctx.emit_json_value(&value)?;
+        if value.get("passed").and_then(|v| v.as_bool()) == Some(false) {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     let registry = PolicyFile::load(Path::new(&args.policy_file))?.into_registry();
     let centrality_threshold = registry.centrality_alert_threshold;
     let graph = ctx.load_graph()?;
