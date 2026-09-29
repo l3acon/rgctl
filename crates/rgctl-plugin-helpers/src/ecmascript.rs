@@ -380,13 +380,83 @@ pub fn is_function_expression_kind(kind: &str) -> bool {
     matches!(kind, "arrow_function" | "function_expression")
 }
 
+/// True when `node` is a real JS/TS callable CST node (not the anonymous
+/// `'function'` keyword token that appears under `function_declaration`).
+///
+/// Tree-sitter emits that keyword as `kind == "function"` with `is_named() == false`.
+/// Matching it as a Function symbol produces a body-less `anonymous@L{N}` duplicate
+/// on every declaration.
+pub fn is_ecmascript_function_node(node: Node<'_>) -> bool {
+    match node.kind() {
+        "function_declaration"
+        | "function_expression"
+        | "method_definition"
+        | "arrow_function"
+        | "generator_function"
+        | "generator_function_declaration" => true,
+        "function" => node.is_named(),
+        _ => false,
+    }
+}
+
+/// Graph Function name for a JS/TS callable node — matches language-plugin naming.
+///
+/// Bound arrows / function expressions use the parent binding; true callbacks use
+/// `anonymous@L{line}`. Declarations and methods use the CST name field.
+pub fn ecmascript_function_symbol_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    if !is_ecmascript_function_node(node) {
+        return None;
+    }
+
+    let is_expr = is_function_expression_kind(node.kind())
+        || (node.kind() == "function"
+            && node.is_named()
+            && node.child_by_field_name("name").is_none());
+
+    if is_expr {
+        return Some(
+            bound_function_expression_name(node, source).unwrap_or_else(|| {
+                format!("anonymous@L{}", node.start_position().row + 1)
+            }),
+        );
+    }
+
+    if let Some(name_node) = node.child_by_field_name("name") {
+        if let Ok(text) = name_node.utf8_text(source) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    // method_definition / fallbacks
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if matches!(
+            child.kind(),
+            "identifier" | "property_identifier" | "private_property_identifier"
+        ) {
+            if let Ok(text) = child.utf8_text(source) {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Resolve a display name for `arrow_function` / `function_expression` from a
 /// parent binding: `variable_declarator`, object `pair`, or class field.
 ///
 /// Returns `None` for true callbacks (e.g. `arr.map(x => …)`).
 pub fn bound_function_expression_name(node: Node, source: &[u8]) -> Option<String> {
     if !is_function_expression_kind(node.kind())
-        && !(node.kind() == "function" && node.child_by_field_name("name").is_none())
+        && !(node.kind() == "function"
+            && node.is_named()
+            && node.child_by_field_name("name").is_none())
     {
         return None;
     }
@@ -659,5 +729,45 @@ mod tests {
         let tree = parse_js(source);
         let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
         assert_eq!(bound_function_expression_name(arrow, source.as_bytes()), None);
+    }
+
+    #[test]
+    fn test_keyword_function_token_is_not_a_function_node() {
+        let source = "export function gamma(n: number): number { return n + 1; }";
+        let tree = parse_ts(source);
+        let mut keyword = None;
+        let mut decl = None;
+        let mut stack = vec![tree.root_node()];
+        while let Some(n) = stack.pop() {
+            if n.kind() == "function_declaration" {
+                decl = Some(n);
+            }
+            if n.kind() == "function" && !n.is_named() {
+                keyword = Some(n);
+            }
+            let mut c = n.walk();
+            for ch in n.children(&mut c) {
+                stack.push(ch);
+            }
+        }
+        let keyword = keyword.expect("anonymous 'function' keyword token");
+        let decl = decl.expect("function_declaration");
+        assert!(!is_ecmascript_function_node(keyword));
+        assert!(is_ecmascript_function_node(decl));
+        assert_eq!(
+            ecmascript_function_symbol_name(decl, source.as_bytes()).as_deref(),
+            Some("gamma")
+        );
+    }
+
+    #[test]
+    fn test_cfg_name_for_bound_arrow() {
+        let source = "export const uniqueOne = (n: number): number => n + 1;";
+        let tree = parse_ts(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(
+            ecmascript_function_symbol_name(arrow, source.as_bytes()).as_deref(),
+            Some("uniqueOne")
+        );
     }
 }

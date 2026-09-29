@@ -7,7 +7,8 @@ use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use rgctl_plugin_helpers::{
     bound_function_expression_name, extract_class_extends_relations, extract_import_symbols,
-    find_child_kind, is_function_expression_kind, simple_type_name, type_name_from_node,
+    find_child_kind, is_ecmascript_function_node, is_function_expression_kind, simple_type_name,
+    type_name_from_node,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -164,7 +165,9 @@ impl TypeScriptPlugin {
         // Arrow / function expressions put the binding on a parent; their first
         // identifier child is often a parameter (e.g. `x => x`), not a name.
         let is_expr = is_function_expression_kind(node.kind())
-            || (node.kind() == "function" && node.child_by_field_name("name").is_none());
+            || (node.kind() == "function"
+                && node.is_named()
+                && node.child_by_field_name("name").is_none());
 
         for child in node.children(&mut cursor) {
             match child.kind() {
@@ -598,10 +601,10 @@ impl TypeScriptPlugin {
             symbols: &mut Vec<Symbol>,
             plugin: &TypeScriptPlugin,
         ) -> Result<()> {
+            if is_ecmascript_function_node(node) {
+                symbols.push(plugin.extract_function(node, source, file_path)?);
+            }
             match node.kind() {
-                "function_declaration" | "function" | "method_definition" | "arrow_function" => {
-                    symbols.push(plugin.extract_function(node, source, file_path)?);
-                }
                 "class_declaration" | "abstract_class_declaration" => {
                     symbols.push(plugin.extract_class(node, source, file_path)?);
                 }
@@ -1317,6 +1320,35 @@ class C { foo = (): number => 2; }
             names.iter().any(|n| n.starts_with("anonymous@L")),
             "callback should stay span-disambiguated anonymous: {names:?}"
         );
+        // Declarations must not also emit a body-less keyword duplicate.
+        let decl_dupes: Vec<_> = names
+            .iter()
+            .filter(|n| n.starts_with("anonymous@L"))
+            .collect();
+        assert_eq!(
+            decl_dupes.len(),
+            1,
+            "only the map callback should be anonymous, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn test_function_declaration_has_no_anonymous_duplicate() {
+        let plugin = TypeScriptPlugin::new().unwrap();
+        let source = br#"
+export function gamma(n: number): number {
+  return n + 1;
+}
+"#;
+        let symbols = plugin
+            .extract_symbols(Path::new("gamma.ts"), source)
+            .unwrap();
+        let fns: Vec<_> = symbols
+            .iter()
+            .filter(|s| s.symbol_type == SymbolType::Function)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(fns, vec!["gamma"], "unexpected functions: {fns:?}");
     }
 
     #[test]

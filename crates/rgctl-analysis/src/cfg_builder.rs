@@ -4,7 +4,7 @@ use crate::cfg::{BasicBlock, BlockId, CfgEdgeType, ControlFlowGraph, Statement, 
 use crate::def_use::extract_def_use;
 use crate::language_profile::{function_kinds_for, parse_source};
 use rgctl_error::{Error, Result};
-use rgctl_plugin_helpers::extract_name_from_node;
+use rgctl_plugin_helpers::{ecmascript_function_symbol_name, extract_name_from_node};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
@@ -23,7 +23,7 @@ pub fn build_cfg_for_function(
     let tree = parse_language(language, bytes)?;
     let function_kinds = function_kinds_for(language)?;
     let func_node =
-        find_function_by_name(tree.root_node(), bytes, function_name, function_kinds)
+        find_function_by_name(tree.root_node(), bytes, function_name, function_kinds, language)
             .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
     build_cfg_from_function_node(language, func_node, bytes, function_name)
 }
@@ -83,8 +83,9 @@ pub fn build_cfg_for_function_in_tree(
     function_name: &str,
 ) -> Result<ControlFlowGraph> {
     let function_kinds = function_kinds_for(language)?;
-    let func_node = find_function_by_name(tree.root_node(), source, function_name, function_kinds)
-        .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
+    let func_node =
+        find_function_by_name(tree.root_node(), source, function_name, function_kinds, language)
+            .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
     build_cfg_from_function_node(language, func_node, source, function_name)
 }
 
@@ -96,7 +97,7 @@ pub fn index_function_locations(
     let tree = parse_language(language, source)?;
     let function_kinds = function_kinds_for(language)?;
     let mut index = HashMap::new();
-    collect_function_locations(tree.root_node(), source, function_kinds, &mut index);
+    collect_function_locations(tree.root_node(), source, function_kinds, language, &mut index);
     Ok((tree, index))
 }
 
@@ -104,12 +105,13 @@ fn collect_function_locations(
     root: Node<'_>,
     source: &[u8],
     function_kinds: &[&str],
+    language: &str,
     out: &mut HashMap<String, FunctionLocation>,
 ) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
         if function_kinds.contains(&node.kind()) {
-            if let Ok(Some(func_name)) = extract_name_from_node(node, source) {
+            if let Some(func_name) = callable_name_for_cfg(node, source, language) {
                 out.entry(func_name).or_insert(FunctionLocation {
                     start_byte: node.start_byte(),
                     end_byte: node.end_byte(),
@@ -127,11 +129,22 @@ fn parse_language(language: &str, source: &[u8]) -> Result<Tree> {
     parse_source(language, source)
 }
 
+/// Resolve the Function name CFG should look up, matching language-plugin naming.
+fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Option<String> {
+    match language {
+        "javascript" | "js" | "typescript" | "ts" => {
+            ecmascript_function_symbol_name(node, source)
+        }
+        _ => extract_name_from_node(node, source).ok().flatten(),
+    }
+}
+
 fn find_function_by_name<'a>(
     node: Node<'a>,
     source: &[u8],
     name: &str,
     function_kinds: &[&str],
+    language: &str,
 ) -> Option<Node<'a>> {
     // Java instance initializer blocks are bare `block` children of `class_body`,
     // extracted as synthetic `<initblock>N` functions (not a distinct CST kind).
@@ -157,7 +170,7 @@ fn find_function_by_name<'a>(
     let mut stack = vec![node];
     while let Some(node) = stack.pop() {
         if function_kinds.contains(&node.kind()) {
-            if let Ok(Some(func_name)) = extract_name_from_node(node, source) {
+            if let Some(func_name) = callable_name_for_cfg(node, source, language) {
                 if func_name == name {
                     return Some(node);
                 }
@@ -6024,6 +6037,36 @@ function classify(v) {
 "#;
         let cfg = build_cfg_for_function("javascript", code, "classify").unwrap();
         assert!(cfg.blocks.len() >= 5);
+    }
+
+    #[test]
+    fn test_typescript_bound_arrow_cfg() {
+        let code = r#"
+export const dup = (n: number): number => n + 1;
+export const uniqueOne = (n: number): number => dup(n);
+
+export function dupDecl(n: number): number { return n + 1; }
+export function uniqueDecl(n: number): number { return dupDecl(n); }
+"#;
+        let arrow_cfg = build_cfg_for_function("typescript", code, "uniqueOne").unwrap();
+        assert!(
+            arrow_cfg.blocks.len() >= 2,
+            "bound arrow should have a CFG, got {} blocks",
+            arrow_cfg.blocks.len()
+        );
+        let decl_cfg = build_cfg_for_function("typescript", code, "uniqueDecl").unwrap();
+        assert!(decl_cfg.blocks.len() >= 2);
+    }
+
+    #[test]
+    fn test_javascript_bound_arrow_cfg() {
+        let code = r#"
+const tickDown = (n) => n - 1;
+function tickDecl(n) { return n - 1; }
+"#;
+        let cfg = build_cfg_for_function("javascript", code, "tickDown").unwrap();
+        assert!(cfg.blocks.len() >= 2);
+        let _ = build_cfg_for_function("javascript", code, "tickDecl").unwrap();
     }
 
     #[test]

@@ -10,7 +10,8 @@ use rgctl_plugin_api::{
 };
 use rgctl_plugin_helpers::{
     bound_function_expression_name, extract_cjs_require_symbols, extract_class_extends_relations,
-    extract_import_symbols, is_function_expression_kind, simple_type_name, type_name_from_node,
+    extract_import_symbols, is_ecmascript_function_node, is_function_expression_kind,
+    simple_type_name, type_name_from_node,
 };
 use rgctl_semantic::type_inference::TypeInferencer;
 use std::path::Path;
@@ -59,7 +60,9 @@ impl JavaScriptPlugin {
         // Arrow / function expressions put the binding on a parent; their first
         // identifier child is often a parameter (e.g. `x => x`), not a name.
         let is_expr = is_function_expression_kind(node.kind())
-            || (node.kind() == "function" && node.child_by_field_name("name").is_none());
+            || (node.kind() == "function"
+                && node.is_named()
+                && node.child_by_field_name("name").is_none());
 
         for child in node.children(&mut cursor) {
             match child.kind() {
@@ -359,10 +362,10 @@ impl JavaScriptPlugin {
         file_path: &str,
         symbols: &mut Vec<Symbol>,
     ) -> Result<()> {
+        if is_ecmascript_function_node(node) {
+            symbols.push(self.extract_function(node, source, file_path)?);
+        }
         match node.kind() {
-            "function_declaration" | "function" | "method_definition" | "arrow_function" => {
-                symbols.push(self.extract_function(node, source, file_path)?);
-            }
             "class_declaration" => {
                 symbols.push(self.extract_class(node, source, file_path)?);
             }
@@ -897,6 +900,26 @@ const api = { fetchAll: async () => 0 };
             names.iter().any(|n| n.starts_with("anonymous@L")),
             "callback should stay span-disambiguated anonymous: {names:?}"
         );
+        assert_eq!(
+            names.iter().filter(|n| n.starts_with("anonymous@L")).count(),
+            1,
+            "only the map callback should be anonymous, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn test_function_declaration_has_no_anonymous_duplicate() {
+        let plugin = JavaScriptPlugin::new().unwrap();
+        let source = b"export function gamma(n) { return n + 1; }";
+        let symbols = plugin
+            .extract_symbols(Path::new("gamma.js"), source)
+            .unwrap();
+        let fns: Vec<_> = symbols
+            .iter()
+            .filter(|s| s.symbol_type == SymbolType::Function)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(fns, vec!["gamma"], "unexpected functions: {fns:?}");
     }
 
     #[test]
