@@ -4,6 +4,7 @@
 
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 /// Inferred type for a variable or parameter.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,18 @@ pub struct TypeInference {
     pub confidence: f64,
 }
 
+fn python_def_params_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"def\s+\w+\s*\(([^)]*)\)").expect("python def regex"))
+}
+
+fn javascript_fn_params_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"function\s+\w+\s*\(([^)]*)\)").expect("javascript function regex")
+    })
+}
+
 /// Type inferencer for dynamically typed languages.
 pub struct TypeInferencer;
 
@@ -55,19 +68,17 @@ impl TypeInferencer {
     pub fn infer_python(&self, source: &str) -> HashMap<String, TypeInference> {
         let mut types: HashMap<String, TypeInference> = HashMap::new();
 
-        if let Ok(re) = Regex::new(r"def\s+\w+\s*\(([^)]*)\)") {
-            if let Some(cap) = re.captures(source) {
-                for param in cap[1].split(',') {
-                    let name = param.trim().split(':').next().unwrap_or("").trim();
-                    if !name.is_empty() && name != "self" {
-                        types.insert(
-                            name.to_string(),
-                            TypeInference {
-                                inferred: InferredType::Unknown,
-                                confidence: 0.3,
-                            },
-                        );
-                    }
+        if let Some(cap) = python_def_params_re().captures(source) {
+            for param in cap[1].split(',') {
+                let name = param.trim().split(':').next().unwrap_or("").trim();
+                if !name.is_empty() && name != "self" {
+                    types.insert(
+                        name.to_string(),
+                        TypeInference {
+                            inferred: InferredType::Unknown,
+                            confidence: 0.3,
+                        },
+                    );
                 }
             }
         }
@@ -94,22 +105,28 @@ impl TypeInferencer {
     }
 
     /// Infer types from JavaScript/TypeScript source.
+    ///
+    /// Only matches classic `function name(...)` forms. Arrow / method bodies that do
+    /// not contain that pattern return empty (callers should skip when params are empty).
     pub fn infer_javascript(&self, source: &str) -> HashMap<String, TypeInference> {
         let mut types = HashMap::new();
 
-        if let Ok(re) = Regex::new(r"function\s+\w+\s*\(([^)]*)\)") {
-            if let Some(cap) = re.captures(source) {
-                for param in cap[1].split(',') {
-                    let name = param.trim();
-                    if !name.is_empty() {
-                        types.insert(
-                            name.to_string(),
-                            TypeInference {
-                                inferred: InferredType::Unknown,
-                                confidence: 0.3,
-                            },
-                        );
-                    }
+        // Cheap reject: regex never matches arrows / methods without a `function` keyword.
+        if !source.contains("function") {
+            return types;
+        }
+
+        if let Some(cap) = javascript_fn_params_re().captures(source) {
+            for param in cap[1].split(',') {
+                let name = param.trim();
+                if !name.is_empty() {
+                    types.insert(
+                        name.to_string(),
+                        TypeInference {
+                            inferred: InferredType::Unknown,
+                            confidence: 0.3,
+                        },
+                    );
                 }
             }
         }
@@ -164,6 +181,22 @@ def calculate(x, y):
         let types = inferencer.infer_python(source);
         assert!(types["x"].inferred.is_numeric());
         assert!(types["y"].inferred.is_numeric());
+    }
+
+    #[test]
+    fn test_javascript_skips_arrows_without_function_keyword() {
+        let inferencer = TypeInferencer::new();
+        let types = inferencer.infer_javascript("const add = (x, y) => x + y;");
+        assert!(types.is_empty());
+    }
+
+    #[test]
+    fn test_javascript_function_params() {
+        let inferencer = TypeInferencer::new();
+        let types = inferencer.infer_javascript("function add(x, y) { return x + y; }");
+        assert!(types.contains_key("x"));
+        assert!(types.contains_key("y"));
+        assert!(types["x"].inferred.is_numeric());
     }
 
     #[test]

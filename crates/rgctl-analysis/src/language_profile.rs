@@ -95,6 +95,7 @@ const PROFILES: &[LanguageAnalysisProfile] = &[
         extensions: &["js", "jsx", "mjs", "cjs"],
         function_kinds: &[
             "function_declaration",
+            "function_expression",
             "method_definition",
             "arrow_function",
         ],
@@ -107,6 +108,7 @@ const PROFILES: &[LanguageAnalysisProfile] = &[
         extensions: &["ts", "tsx"],
         function_kinds: &[
             "function_declaration",
+            "function_expression",
             "method_definition",
             "arrow_function",
         ],

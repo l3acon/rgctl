@@ -92,11 +92,7 @@ pub fn parse_fqn_symbol(
         let scope_hint = &input[..idx];
         let target_name = &input[idx + 2..];
 
-        if scope_hint.contains('/')
-            || scope_hint.contains('\\')
-            || scope_hint.ends_with(".java")
-            || scope_hint.ends_with(".rs")
-        {
+        if looks_like_file_scope(scope_hint) {
             ParsedSymbol {
                 target_name: target_name.to_string(),
                 class_filter: explicit_class,
@@ -116,6 +112,19 @@ pub fn parse_fqn_symbol(
             file_filter: explicit_file,
         }
     }
+}
+
+fn looks_like_file_scope(scope: &str) -> bool {
+    if scope.contains('/') || scope.contains('\\') {
+        return true;
+    }
+    matches!(
+        scope.rsplit_once('.').map(|(_, ext)| ext),
+        Some(
+            "java" | "rs" | "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "py" | "go" | "php"
+                | "cs" | "c" | "h" | "cpp" | "cc" | "cxx" | "hpp" | "hh" | "rb"
+        )
+    )
 }
 
 /// Extract lowercase language id from graph node metadata or file extension.
@@ -827,6 +836,24 @@ mod tests {
         let parsed = parse_fqn_symbol("src/Foo.java::bar", None, None);
         assert_eq!(parsed.target_name, "bar");
         assert_eq!(parsed.file_filter.as_deref(), Some("src/Foo.java"));
+    }
+
+    #[test]
+    fn parse_fqn_typescript_file_scope() {
+        let parsed = parse_fqn_symbol("fixtures/caseB_one.ts::dup", None, None);
+        assert_eq!(parsed.target_name, "dup");
+        assert_eq!(
+            parsed.file_filter.as_deref(),
+            Some("fixtures/caseB_one.ts")
+        );
+        assert!(parsed.class_filter.is_none());
+    }
+
+    #[test]
+    fn parse_fqn_bare_ts_filename_is_file_scope() {
+        let parsed = parse_fqn_symbol("caseB_one.ts::dup", None, None);
+        assert_eq!(parsed.file_filter.as_deref(), Some("caseB_one.ts"));
+        assert!(parsed.class_filter.is_none());
     }
 
     #[test]

@@ -375,6 +375,168 @@ pub fn find_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
     None
 }
 
+/// True for arrow / anonymous function expressions (not declarations or methods).
+pub fn is_function_expression_kind(kind: &str) -> bool {
+    matches!(kind, "arrow_function" | "function_expression")
+}
+
+/// True when `node` is a real JS/TS callable CST node (not the anonymous
+/// `'function'` keyword token that appears under `function_declaration`).
+///
+/// Tree-sitter emits that keyword as `kind == "function"` with `is_named() == false`.
+/// Matching it as a Function symbol produces a body-less `anonymous@L{N}` duplicate
+/// on every declaration.
+pub fn is_ecmascript_function_node(node: Node<'_>) -> bool {
+    match node.kind() {
+        "function_declaration"
+        | "function_expression"
+        | "method_definition"
+        | "arrow_function"
+        | "generator_function"
+        | "generator_function_declaration" => true,
+        "function" => node.is_named(),
+        _ => false,
+    }
+}
+
+/// Graph Function name for a JS/TS callable node — matches language-plugin naming.
+///
+/// Bound arrows / function expressions use the parent binding; true callbacks use
+/// `anonymous@L{line}`. Declarations and methods use the CST name field.
+pub fn ecmascript_function_symbol_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    if !is_ecmascript_function_node(node) {
+        return None;
+    }
+
+    let is_expr = is_function_expression_kind(node.kind())
+        || (node.kind() == "function"
+            && node.is_named()
+            && node.child_by_field_name("name").is_none());
+
+    if is_expr {
+        return Some(
+            bound_function_expression_name(node, source).unwrap_or_else(|| {
+                format!("anonymous@L{}", node.start_position().row + 1)
+            }),
+        );
+    }
+
+    if let Some(name_node) = node.child_by_field_name("name") {
+        if let Ok(text) = name_node.utf8_text(source) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    // method_definition / fallbacks
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if matches!(
+            child.kind(),
+            "identifier" | "property_identifier" | "private_property_identifier"
+        ) {
+            if let Ok(text) = child.utf8_text(source) {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Resolve a display name for `arrow_function` / `function_expression` from a
+/// parent binding: `variable_declarator`, object `pair`, or class field.
+///
+/// Returns `None` for true callbacks (e.g. `arr.map(x => …)`).
+pub fn bound_function_expression_name(node: Node, source: &[u8]) -> Option<String> {
+    if !is_function_expression_kind(node.kind())
+        && !(node.kind() == "function"
+            && node.is_named()
+            && node.child_by_field_name("name").is_none())
+    {
+        return None;
+    }
+
+    let mut current = node;
+    for _ in 0..12 {
+        let parent = current.parent()?;
+        match parent.kind() {
+            "variable_declarator" => {
+                return identifier_text(parent.child_by_field_name("name")?, source);
+            }
+            "pair" => {
+                let key = parent
+                    .child_by_field_name("key")
+                    .or_else(|| find_direct_child_kinds(parent, &["property_identifier", "identifier", "string", "number"]))?;
+                return property_key_text(key, source);
+            }
+            "public_field_definition" | "field_definition" | "property_definition" => {
+                let name = parent.child_by_field_name("name").or_else(|| {
+                    find_direct_child_kinds(
+                        parent,
+                        &[
+                            "property_identifier",
+                            "private_property_identifier",
+                            "identifier",
+                        ],
+                    )
+                })?;
+                return identifier_text(name, source);
+            }
+            "assignment_expression" => {
+                let left = parent.child_by_field_name("left")?;
+                return match left.kind() {
+                    "identifier" => identifier_text(left, source),
+                    "member_expression" | "subscript_expression" => left
+                        .child_by_field_name("property")
+                        .and_then(|p| property_key_text(p, source)),
+                    _ => None,
+                };
+            }
+            // Peel type / grouping wrappers without consuming a binding.
+            "parenthesized_expression"
+            | "as_expression"
+            | "type_assertion"
+            | "satisfies_expression"
+            | "non_null_expression"
+            | "await_expression"
+            | "ternary_expression" => {
+                current = parent;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn find_direct_child_kinds<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if kinds.contains(&child.kind()) {
+            return Some(child);
+        }
+    }
+    None
+}
+
+fn identifier_text(node: Node, source: &[u8]) -> Option<String> {
+    node.utf8_text(source).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+fn property_key_text(node: Node, source: &[u8]) -> Option<String> {
+    let raw = node.utf8_text(source).ok()?.trim();
+    let trimmed = raw.trim_matches(['"', '\'', '`']);
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 fn push_relation(
     from: &str,
     to: &str,
@@ -512,6 +674,100 @@ mod tests {
             relations
                 .iter()
                 .any(|r| r.relation_type == RelationType::Extends && r.to == "Error")
+        );
+    }
+
+    fn find_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
+        if node.kind() == kind {
+            return Some(node);
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(found) = find_kind(child, kind) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn test_bound_name_const_arrow() {
+        let source = "const multiply = (x, y) => x * y;";
+        let tree = parse_ts(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(
+            bound_function_expression_name(arrow, source.as_bytes()).as_deref(),
+            Some("multiply")
+        );
+    }
+
+    #[test]
+    fn test_bound_name_object_property_arrow() {
+        let source = "const api = { fetchAll: async () => 1 };";
+        let tree = parse_ts(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(
+            bound_function_expression_name(arrow, source.as_bytes()).as_deref(),
+            Some("fetchAll")
+        );
+    }
+
+    #[test]
+    fn test_bound_name_class_field_arrow() {
+        let source = "class C { foo = () => 2; }";
+        let tree = parse_ts(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(
+            bound_function_expression_name(arrow, source.as_bytes()).as_deref(),
+            Some("foo")
+        );
+    }
+
+    #[test]
+    fn test_callback_arrow_has_no_bound_name() {
+        let source = "[1].map(x => x + 1);";
+        let tree = parse_js(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(bound_function_expression_name(arrow, source.as_bytes()), None);
+    }
+
+    #[test]
+    fn test_keyword_function_token_is_not_a_function_node() {
+        let source = "export function gamma(n: number): number { return n + 1; }";
+        let tree = parse_ts(source);
+        let mut keyword = None;
+        let mut decl = None;
+        let mut stack = vec![tree.root_node()];
+        while let Some(n) = stack.pop() {
+            if n.kind() == "function_declaration" {
+                decl = Some(n);
+            }
+            if n.kind() == "function" && !n.is_named() {
+                keyword = Some(n);
+            }
+            let mut c = n.walk();
+            for ch in n.children(&mut c) {
+                stack.push(ch);
+            }
+        }
+        let keyword = keyword.expect("anonymous 'function' keyword token");
+        let decl = decl.expect("function_declaration");
+        assert!(!is_ecmascript_function_node(keyword));
+        assert!(is_ecmascript_function_node(decl));
+        assert_eq!(
+            ecmascript_function_symbol_name(decl, source.as_bytes()).as_deref(),
+            Some("gamma")
+        );
+    }
+
+    #[test]
+    fn test_cfg_name_for_bound_arrow() {
+        let source = "export const uniqueOne = (n: number): number => n + 1;";
+        let tree = parse_ts(source);
+        let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
+        assert_eq!(
+            ecmascript_function_symbol_name(arrow, source.as_bytes()).as_deref(),
+            Some("uniqueOne")
         );
     }
 }
