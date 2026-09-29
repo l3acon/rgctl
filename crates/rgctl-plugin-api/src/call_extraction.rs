@@ -20,6 +20,36 @@ pub const PHP_CALL_KINDS: &[&str] = &[
     "nullsafe_member_call_expression",
 ];
 pub const RUBY_CALL_KINDS: &[&str] = &["call"];
+pub const KOTLIN_CALL_KINDS: &[&str] = &["call_expression"];
+
+/// Callee name from a Kotlin `call_expression` (`foo()`, `recv.method()`).
+pub fn kotlin_call_callee(call: Node, source: &[u8]) -> Option<String> {
+    if call.kind() != "call_expression" {
+        return None;
+    }
+    let mut cursor = call.walk();
+    for child in call.children(&mut cursor) {
+        match child.kind() {
+            "navigation_expression" => {
+                let mut last = None;
+                let mut nc = child.walk();
+                for nchild in child.children(&mut nc) {
+                    if nchild.kind() == "identifier" {
+                        last = nchild.utf8_text(source).ok().map(str::to_string);
+                    }
+                }
+                if let Some(name) = last {
+                    return Some(name);
+                }
+            }
+            "identifier" => {
+                return child.utf8_text(source).ok().map(str::to_string);
+            }
+            _ => {}
+        }
+    }
+    callee_name(call, source)
+}
 
 /// Callee name from a Ruby `call` node (`receiver.method`, command call, or operator).
 pub fn ruby_call_callee(call: Node, source: &[u8]) -> Option<String> {
@@ -177,6 +207,8 @@ pub fn push_call_relation(
 
     let callee = if language == "ruby" && node.kind() == "call" {
         ruby_call_callee(node, source)
+    } else if language == "kotlin" && node.kind() == "call_expression" {
+        kotlin_call_callee(node, source)
     } else {
         None
     }

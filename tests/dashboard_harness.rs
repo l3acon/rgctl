@@ -81,6 +81,20 @@ pub fn default_puppet_repo() -> PathBuf {
         .unwrap_or_else(|_| in_tree_ecommerce("ecommerce-puppet"))
 }
 
+/// Default Kotlin ecommerce test repo (override with env).
+pub fn default_kotlin_repo() -> PathBuf {
+    env_rg("ECOMMERCE_KOTLIN_REPO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| in_tree_ecommerce("ecommerce-kotlin"))
+}
+
+/// Default Groovy ecommerce test repo (override with env).
+pub fn default_groovy_repo() -> PathBuf {
+    env_rg("ECOMMERCE_GROOVY_REPO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| in_tree_ecommerce("ecommerce-groovy"))
+}
+
 pub fn golden_repo_path() -> PathBuf {
     env_rg("DASHBOARD_GOLDEN_REPO")
         .map(PathBuf::from)

@@ -1,6 +1,6 @@
 # Build manifests & configuration graph — honesty notes
 
-OpenSpec change: [`openspec/changes/add-build-and-config-graph/`](../openspec/changes/add-build-and-config-graph/).
+OpenSpec change: [`openspec/changes/archive/2026-09-29-add-build-and-config-graph/`](../openspec/changes/archive/2026-09-29-add-build-and-config-graph/).
 
 ## Ingest routing
 

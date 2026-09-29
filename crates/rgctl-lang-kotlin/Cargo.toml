@@ -1,0 +1,18 @@
+[package]
+name = "rgctl-lang-kotlin"
+version = "0.4.16"
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl language plugin: kotlin"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+rgctl-plugin-helpers = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-kotlin-ng = "1.1.0"
+serde_json = "1"
+
+[dev-dependencies]
+rgctl-languages = { workspace = true }

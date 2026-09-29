@@ -1160,4 +1160,70 @@ OrderDTO process(OrderDTO order) {
             "status",
         );
     }
+
+    #[test]
+    fn kotlin_cfg_captures_field_write_and_query() {
+        let source = r#"
+class OrderDTO {
+  var status: String = ""
+  constructor(status: String) {
+    this.status = status
+  }
+}
+class OrderProcessor {
+  fun process(order: OrderDTO): OrderDTO {
+    order.status = "PROCESSED"
+    return order
+  }
+}
+"#;
+        mutation_hit_helper(
+            "kotlin",
+            source,
+            "OrderDTO",
+            "process",
+            fn_node("OrderDTO", "OrderDTO.<init>", "OrderDTO.kt", true, vec![]),
+            fn_node(
+                "process",
+                "OrderProcessor.process",
+                "OrderProcessor.kt",
+                false,
+                vec![("order", "OrderDTO")],
+            ),
+            "OrderDTO",
+            "status",
+        );
+    }
+
+    #[test]
+    fn groovy_cfg_captures_field_write_and_query() {
+        let source = r#"
+class OrderDTO {
+  String status
+  OrderDTO(String status) { this.status = status }
+}
+class OrderProcessor {
+  OrderDTO process(OrderDTO order) {
+    order.status = "PROCESSED"
+    return order
+  }
+}
+"#;
+        mutation_hit_helper(
+            "groovy",
+            source,
+            "OrderDTO",
+            "process",
+            fn_node("OrderDTO", "OrderDTO.<init>", "OrderDTO.groovy", true, vec![]),
+            fn_node(
+                "process",
+                "OrderProcessor.process",
+                "OrderProcessor.groovy",
+                false,
+                vec![("order", "OrderDTO")],
+            ),
+            "OrderDTO",
+            "status",
+        );
+    }
 }

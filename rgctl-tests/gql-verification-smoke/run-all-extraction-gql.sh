@@ -8,8 +8,10 @@ LANGS=(
   cpp
   csharp
   go
+  groovy
   java
   javascript
+  kotlin
   php
   puppet
   python
