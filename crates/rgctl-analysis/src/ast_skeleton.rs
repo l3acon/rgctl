@@ -5,7 +5,7 @@
 
 use crate::language_profile::{function_kinds_for, parse_source};
 use rgctl_error::{Error, Result};
-use rgctl_plugin_helpers::extract_name_from_node;
+use rgctl_plugin_helpers::{ecmascript_function_symbol_name, extract_name_from_node};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -140,11 +140,13 @@ pub fn build_function_skeleton(
     let bytes = source.as_bytes();
     let tree = parse_source(language, bytes)?;
     let kinds = function_kinds_for(language)?;
-    let func = find_function(tree.root_node(), bytes, function_name, kinds).ok_or_else(|| {
-        Error::NotFound(format!(
-            "function '{function_name}' not found for AST skeleton"
-        ))
-    })?;
+    let func = find_function(tree.root_node(), bytes, function_name, kinds, language).ok_or_else(
+        || {
+            Error::NotFound(format!(
+                "function '{function_name}' not found for AST skeleton"
+            ))
+        },
+    )?;
     let mut nodes = Vec::new();
     let root_id = 0u32;
     nodes.push(AstSkeletonNode {
@@ -169,17 +171,22 @@ fn find_function<'a>(
     source: &[u8],
     name: &str,
     kinds: &[&str],
+    language: &str,
 ) -> Option<Node<'a>> {
     if kinds.contains(&node.kind()) {
-        if let Ok(Some(n)) = extract_name_from_node(node, source) {
-            if n == name {
-                return Some(node);
+        let resolved = match language {
+            "javascript" | "js" | "typescript" | "ts" => {
+                ecmascript_function_symbol_name(node, source)
             }
+            _ => extract_name_from_node(node, source).ok().flatten(),
+        };
+        if resolved.as_deref() == Some(name) {
+            return Some(node);
         }
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if let Some(found) = find_function(child, source, name, kinds) {
+        if let Some(found) = find_function(child, source, name, kinds, language) {
             return Some(found);
         }
     }
