@@ -133,6 +133,9 @@ struct MatchSpec {
     name: String,
     #[serde(default)]
     class: Option<String>,
+    /// Optional path / file suffix filter (`path/to/file.ts::name` for inspect/blast).
+    #[serde(default)]
+    file: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -373,8 +376,14 @@ fn run_json(bin: &Path, cwd: &Path, args: &[&str]) -> Option<Value> {
 
 fn symbol_candidates(m: &MatchSpec) -> Vec<String> {
     let mut out = Vec::new();
+    if let Some(file) = &m.file {
+        out.push(format!("{file}::{}", m.name));
+    }
     if let Some(cls) = &m.class {
-        out.push(format!("{}::{}", cls, m.name));
+        // File-like class hints (Go) are handled via --file in run_blast; skip Class:: here.
+        if !(cls.ends_with(".go") || cls.contains('/')) {
+            out.push(format!("{cls}::{}", m.name));
+        }
     }
     out.push(m.name.clone());
     out
@@ -391,6 +400,19 @@ fn run_blast(bin: &Path, cwd: &Path, m: &MatchSpec) -> Option<Value> {
             ) {
                 return Some(v);
             }
+        }
+    }
+    if let Some(file) = &m.file {
+        if let Some(v) = run_json(
+            bin,
+            cwd,
+            &["-f", "json", "blast-radius", &m.name, "--file", file],
+        ) {
+            return Some(v);
+        }
+        let fqn = format!("{file}::{}", m.name);
+        if let Some(v) = run_json(bin, cwd, &["-f", "json", "blast-radius", &fqn]) {
+            return Some(v);
         }
     }
     for sym in symbol_candidates(m) {
@@ -619,7 +641,12 @@ fn check_symbol(
     if sev == "unsupported" {
         return vec![];
     }
-    let m = entry.match_spec();
+    let mut m = entry.match_spec();
+    if m.file.is_none() {
+        if let Some(ident) = &entry.identity {
+            m.file = ident.file_suffix.clone();
+        }
+    }
     if m.name.is_empty() {
         return vec![check(
             format!("symbol.{sid}"),
@@ -1321,7 +1348,12 @@ fn check_invariants(
             let Some(entry) = facts.symbols.get(sid) else {
                 continue;
             };
-            let m = entry.match_spec();
+            let mut m = entry.match_spec();
+            if m.file.is_none() {
+                if let Some(ident) = &entry.identity {
+                    m.file = ident.file_suffix.clone();
+                }
+            }
             let cfg = run_inspect(bin, cwd, &m, "cfg");
             let ok = cfg
                 .as_ref()
