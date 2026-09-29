@@ -236,6 +236,8 @@ pub enum NodeType {
     PuppetVariable,
     /// Puppet fact reference
     PuppetFact,
+    /// Puppet node definition (`node { ... }`)
+    PuppetNode,
     /// Konveyor Kantra ruleset container (discover `--with-kantra`)
     KantraRuleset,
     /// Konveyor Kantra migration rule
@@ -724,10 +726,11 @@ mod tests {
             NodeType::PuppetResource,
             NodeType::PuppetVariable,
             NodeType::PuppetFact,
+            NodeType::PuppetNode,
             NodeType::KantraRuleset,
             NodeType::KantraRule,
         ];
-        assert_eq!(types.len(), 38);
+        assert_eq!(types.len(), 39);
     }
 
     #[test]

@@ -236,11 +236,12 @@ fn walk_skeleton(
 fn classify(kind: &str) -> Option<AstSkeletonKind> {
     Some(match kind {
         "block" | "compound_statement" | "statement_block" | "body" => AstSkeletonKind::Block,
-        "if_statement" | "if_expression" | "if" | "unless" => AstSkeletonKind::If,
-        "while_statement" | "while_expression" | "for_statement" | "for_expression"
-        | "loop_expression" | "do_statement" | "foreach_statement" | "while" | "until" | "for" => {
-            AstSkeletonKind::Loop
+        "if_statement" | "if_expression" | "if" | "unless" | "unless_statement" => {
+            AstSkeletonKind::If
         }
+        "while_statement" | "while_expression" | "for_statement" | "for_expression"
+        | "loop_expression" | "do_statement" | "foreach_statement" | "while" | "until" | "for"
+        | "iterator_statement" | "case_statement" => AstSkeletonKind::Loop,
         "call_expression" | "method_invocation" | "invocation_expression" | "function_call"
         | "call" => {
             AstSkeletonKind::Call

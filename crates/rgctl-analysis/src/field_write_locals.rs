@@ -59,6 +59,7 @@ fn language_visit(language: &str) -> Option<(tree_sitter::Language, VisitFn)> {
         "cpp" => (tree_sitter_cpp::LANGUAGE.into(), visit_c_family),
         "php" => (tree_sitter_php::LANGUAGE_PHP.into(), visit_php),
         "ruby" => (tree_sitter_ruby::LANGUAGE.into(), visit_ruby),
+        "puppet" => (tree_sitter_puppet::LANGUAGE.into(), visit_puppet),
         _ => return None,
     })
 }
@@ -676,6 +677,94 @@ fn visit_ruby(
         now_in,
         visit_ruby,
         &["method", "singleton_method"],
+    );
+}
+
+/// Puppet: merge typed parameters from class / define / function hosts into `env`.
+fn visit_puppet(
+    node: Node,
+    source: &[u8],
+    function_name: &str,
+    env: &mut HashMap<String, String>,
+    in_target: bool,
+) {
+    let kind = node.kind();
+    let mut now_in = in_target;
+    if matches!(
+        kind,
+        "class_definition" | "defined_resource_type" | "function_declaration" | "node_definition"
+    ) {
+        let mut name = None;
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if matches!(
+                child.kind(),
+                "class_identifier" | "identifier" | "node_name" | "string"
+            ) {
+                name = text_of(child, source).map(|s| {
+                    let t = s.trim_matches('\'').trim_matches('"').to_string();
+                    if kind == "node_definition" {
+                        format!("node:{t}")
+                    } else {
+                        t
+                    }
+                });
+                break;
+            }
+        }
+        now_in = name.as_deref() == Some(function_name);
+        if now_in {
+            let mut c = node.walk();
+            for child in node.children(&mut c) {
+                if child.kind() != "parameter_list" {
+                    continue;
+                }
+                let mut pc = child.walk();
+                for param in child.children(&mut pc) {
+                    if param.kind() != "parameter" {
+                        continue;
+                    }
+                    let mut pname = None;
+                    let mut pty = None;
+                    let mut pp = param.walk();
+                    for part in param.children(&mut pp) {
+                        match part.kind() {
+                            "variable" => {
+                                pname = text_of(part, source)
+                                    .map(|s| s.trim_start_matches('$').to_string());
+                            }
+                            "type"
+                            | "builtin_type"
+                            | "array_type"
+                            | "composite_type"
+                            | "attribute_type" => {
+                                if pty.is_none() {
+                                    pty = text_of(part, source);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    if let Some(n) = pname {
+                        insert_ty(env, &n, pty.as_deref().unwrap_or("Any"));
+                    }
+                }
+            }
+        }
+    }
+    walk_children(
+        node,
+        source,
+        function_name,
+        env,
+        now_in,
+        visit_puppet,
+        &[
+            "class_definition",
+            "defined_resource_type",
+            "function_declaration",
+            "node_definition",
+        ],
     );
 }
 

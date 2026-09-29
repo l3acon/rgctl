@@ -159,7 +159,31 @@ impl<'a> TaintAnalyzer<'a> {
             "cpp" => self.detect_cpp_patterns(),
             "php" => self.detect_php_patterns(),
             "ruby" => self.detect_ruby_patterns(),
+            "puppet" => self.detect_puppet_patterns(),
             _ => {}
+        }
+    }
+
+    fn detect_puppet_patterns(&mut self) {
+        for (node_id, node) in &self.pdg.nodes {
+            let text = &node.statement.text;
+            if text.contains("lookup(")
+                || text.contains("hiera(")
+                || text.contains("hiera_hash(")
+                || text.contains("$facts[")
+                || text.contains("$::facts")
+            {
+                self.sources.insert(*node_id, TaintSource::HttpParameter);
+            }
+
+            if text.contains("exec {")
+                || text.contains("command =>")
+                || text.contains("provider => 'shell'")
+            {
+                self.sinks.insert(*node_id, TaintSink::ShellCommand);
+            } else if text.contains("file {") && text.contains("content =>") {
+                self.sinks.insert(*node_id, TaintSink::FileWrite);
+            }
         }
     }
 
@@ -968,6 +992,27 @@ end
         assert!(!pdg.nodes.is_empty(), "expected PDG nodes for Ruby");
         let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
         analyzer.detect_patterns("ruby");
+    }
+
+    #[test]
+    fn test_puppet_taint_lookup_to_exec_patterns() {
+        let code = r#"
+class profile::web {
+  $cmd = lookup('web.healthcheck_cmd')
+  exec { 'healthcheck':
+    command => $cmd,
+    path    => ['/bin', '/usr/bin'],
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("puppet", code, "profile::web").unwrap();
+        let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
+        let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
+        analyzer.detect_patterns("puppet");
+        assert!(
+            !analyzer.sources.is_empty() || !analyzer.sinks.is_empty(),
+            "expected Puppet taint sources (lookup) and/or sinks (exec)"
+        );
     }
 
     #[test]

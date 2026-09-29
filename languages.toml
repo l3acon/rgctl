@@ -149,3 +149,16 @@ class_kinds = ["class", "module", "singleton_class"]
 import_kinds = ["call"]
 enable_complexity = true
 enable_type_inference = false
+
+[languages.puppet]
+handler = "custom"
+plugin = "PuppetPlugin"
+module = "crate::languages::builtin::puppet"
+crate = "tree-sitter-puppet"
+extensions = ["pp"]
+aliases = ["puppet", "pp"]
+function_kinds = ["function_declaration", "class_definition", "defined_resource_type", "node_definition"]
+class_kinds = ["class_definition", "defined_resource_type"]
+import_kinds = ["include_statement", "require_statement"]
+enable_complexity = true
+enable_type_inference = false

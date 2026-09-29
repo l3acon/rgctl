@@ -128,6 +128,8 @@ pub enum SymbolType {
     PuppetVariable,
     /// Puppet fact reference
     PuppetFact,
+    /// Puppet node definition (`node { ... }`)
+    PuppetNode,
 }
 
 /// Source code location

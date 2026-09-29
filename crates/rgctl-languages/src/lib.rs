@@ -16,6 +16,7 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_markdown::register(registry);
     rgctl_lang_php::register(registry);
     rgctl_lang_ruby::register(registry);
+    rgctl_lang_puppet::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -71,6 +72,16 @@ mod tests {
             .get_plugin_for_file(Path::new("lib/order.rb"))
             .expect("ruby plugin");
         assert_eq!(plugin.language_id(), "ruby");
+    }
+
+    #[test]
+    fn default_registry_can_process_puppet_files() {
+        let registry = default_registry();
+        assert!(registry.can_process_file(Path::new("modules/nginx/manifests/init.pp")));
+        let plugin = registry
+            .get_plugin_for_file(Path::new("manifests/site.pp"))
+            .expect("puppet plugin");
+        assert_eq!(plugin.language_id(), "puppet");
     }
 
     #[test]
