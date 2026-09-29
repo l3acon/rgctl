@@ -151,6 +151,17 @@ case "${RGCTL_CMD_ID}" in
     RGCTL_CMD_SEMANTIC_QUERY='order service process'
     RGCTL_CMD_SLICE_FILE=''
     ;;
+  puppet)
+    RGCTL_CMD_DISCOVER_EXTRA=(-l puppet --with-cfg --with-taint)
+    RGCTL_CMD_BLAST_PRIMARY='profile::web'
+    RGCTL_CMD_BLAST_COOLSTORE='role::web'
+    RGCTL_CMD_INSPECT_FN='profile::web'
+    RGCTL_CMD_CPG_TYPE='profile::web'
+    RGCTL_CMD_CPG_MIN_LINES=0
+    RGCTL_CMD_EXPORT_QUERY='name:profile::web'
+    RGCTL_CMD_SEMANTIC_QUERY='nginx web profile'
+    RGCTL_CMD_SLICE_FILE=''
+    ;;
   *)
     echo "error: unknown RGCTL_CMD_ID=${RGCTL_CMD_ID}" >&2
     exit 1

@@ -85,11 +85,10 @@ impl PuppetPlugin {
                     if matches!(
                         child.kind(),
                         "identifier" | "class_identifier" | "string" | "node_name"
-                    ) {
-                        if let Some(t) = Self::ident_text(child, source) {
+                    )
+                        && let Some(t) = Self::ident_text(child, source) {
                             return Some(t);
                         }
-                    }
                 }
                 Self::text(node, source)
             }
@@ -122,11 +121,10 @@ impl PuppetPlugin {
             for part in child.children(&mut pc) {
                 match part.kind() {
                     "variable" => name = Self::text(part, source),
-                    "type" | "builtin_type" | "array_type" | "composite_type" | "attribute_type" => {
-                        if param_type.is_none() {
+                    "type" | "builtin_type" | "array_type" | "composite_type" | "attribute_type"
+                        if param_type.is_none() => {
                             param_type = Self::text(part, source);
                         }
-                    }
                     _ => {}
                 }
             }
@@ -170,6 +168,39 @@ impl PuppetPlugin {
         None
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn push_cfg_host_function(
+        symbols: &mut Vec<Symbol>,
+        name: String,
+        qualified_name: String,
+        node: Node,
+        file_path: &str,
+        source: &[u8],
+        parameters: Vec<Parameter>,
+        puppet_kind: &str,
+    ) {
+        // Discover CFG indexes `NodeType::Function` only; Puppet class/define/node
+        // bodies are the CFG hosts, so emit a parallel Function symbol.
+        symbols.push(Symbol {
+            name: name.clone(),
+            symbol_type: SymbolType::Function,
+            qualified_name: Some(qualified_name),
+            location: Self::loc(node, file_path),
+            signature: Self::text(node, source)
+                .and_then(|s| s.lines().next().map(|l| l.trim().to_string())),
+            return_type: None,
+            parameters,
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({
+                "language": "puppet",
+                "cfg_host": true,
+                "puppet_kind": puppet_kind
+            }),
+        });
+    }
+
     fn walk_symbols(
         &self,
         node: Node,
@@ -189,17 +220,28 @@ impl PuppetPlugin {
                     symbols.push(Symbol {
                         name: name.clone(),
                         symbol_type: SymbolType::PuppetClass,
-                        qualified_name: Some(name),
+                        qualified_name: Some(name.clone()),
                         location: Self::loc(node, file_path),
                         signature: Self::text(node, source)
                             .and_then(|s| s.lines().next().map(|l| l.trim().to_string())),
                         return_type: None,
-                        parameters: params,
+                        parameters: params.clone(),
                         fields,
                         modifiers: vec![],
                         documentation: None,
                         metadata: serde_json::json!({ "language": "puppet" }),
                     });
+                    // Distinct qn so Function is not deduped against PuppetClass.
+                    Self::push_cfg_host_function(
+                        symbols,
+                        name.clone(),
+                        format!("cfg:{name}"),
+                        node,
+                        file_path,
+                        source,
+                        params,
+                        "class",
+                    );
                 }
             }
             "defined_resource_type" => {
@@ -213,35 +255,44 @@ impl PuppetPlugin {
                     symbols.push(Symbol {
                         name: name.clone(),
                         symbol_type: SymbolType::PuppetDefinedType,
-                        qualified_name: Some(name),
+                        qualified_name: Some(name.clone()),
                         location: Self::loc(node, file_path),
                         signature: Self::text(node, source)
                             .and_then(|s| s.lines().next().map(|l| l.trim().to_string())),
                         return_type: None,
-                        parameters: params,
+                        parameters: params.clone(),
                         fields,
                         modifiers: vec![],
                         documentation: None,
                         metadata: serde_json::json!({ "language": "puppet" }),
                     });
+                    Self::push_cfg_host_function(
+                        symbols,
+                        name.clone(),
+                        format!("cfg:{name}"),
+                        node,
+                        file_path,
+                        source,
+                        params,
+                        "defined_type",
+                    );
                 }
             }
             "node_definition" => {
                 let mut names = Vec::new();
                 let mut c = node.walk();
                 for child in node.children(&mut c) {
-                    if child.kind() == "node_name" {
-                        if let Some(n) = Self::ident_text(child, source) {
+                    if child.kind() == "node_name"
+                        && let Some(n) = Self::ident_text(child, source) {
                             names.push(n);
                         }
-                    }
                 }
                 for name in names {
                     let q = format!("node:{name}");
                     symbols.push(Symbol {
                         name: name.clone(),
                         symbol_type: SymbolType::PuppetNode,
-                        qualified_name: Some(q),
+                        qualified_name: Some(q.clone()),
                         location: Self::loc(node, file_path),
                         signature: Some(format!("node {name}")),
                         return_type: None,
@@ -251,6 +302,17 @@ impl PuppetPlugin {
                         documentation: None,
                         metadata: serde_json::json!({ "language": "puppet", "kind": "node" }),
                     });
+                    // CFG `callable_name_for_cfg` returns `node:{name}`.
+                    Self::push_cfg_host_function(
+                        symbols,
+                        q.clone(),
+                        format!("cfg:{q}"),
+                        node,
+                        file_path,
+                        source,
+                        vec![],
+                        "node",
+                    );
                 }
             }
             "function_declaration" => {
@@ -337,8 +399,8 @@ impl PuppetPlugin {
             "assignment" => {
                 // Emit variable on LHS
                 let mut c = node.walk();
-                if let Some(var) = node.children(&mut c).find(|ch| ch.kind() == "variable") {
-                    if let Some(raw) = Self::text(var, source) {
+                if let Some(var) = node.children(&mut c).find(|ch| ch.kind() == "variable")
+                    && let Some(raw) = Self::text(var, source) {
                         let name = raw.trim_start_matches('$').to_string();
                         symbols.push(Symbol {
                             name: name.clone(),
@@ -354,7 +416,6 @@ impl PuppetPlugin {
                             metadata: serde_json::json!({ "language": "puppet" }),
                         });
                     }
-                }
             }
             "lambda" => {
                 // Synthetic anonymous function at line
@@ -403,8 +464,8 @@ impl PuppetPlugin {
                     if matches!(
                         child.kind(),
                         "identifier" | "class_identifier" | "string" | "variable"
-                    ) {
-                        if let Some(to) = Self::ident_text(child, source) {
+                    )
+                        && let Some(to) = Self::ident_text(child, source) {
                             relations.push(Relation {
                                 from: from.clone(),
                                 to,
@@ -415,7 +476,6 @@ impl PuppetPlugin {
                                 to_type_hint: Some("puppetclass".to_string()),
                             });
                         }
-                    }
                 }
             }
             "require_statement" => {
@@ -466,8 +526,8 @@ impl PuppetPlugin {
                         if let Some(t) = Self::text(child, source) {
                             refs.push(t.replace(' ', ""));
                         }
-                    } else if child.kind() == "resource_declaration" {
-                        if let (Some(ty), Some(title)) = (
+                    } else if child.kind() == "resource_declaration"
+                        && let (Some(ty), Some(title)) = (
                             child
                                 .child_by_field_name("type")
                                 .and_then(|n| Self::ident_text(n, source)),
@@ -477,18 +537,16 @@ impl PuppetPlugin {
                         ) {
                             refs.push(format!("{ty}[{title}]"));
                         }
-                    }
                 }
                 // Also scan nested resource_reference under statement children
                 if refs.len() < 2 {
                     let mut stack = vec![node];
                     refs.clear();
                     while let Some(n) = stack.pop() {
-                        if n.kind() == "resource_reference" {
-                            if let Some(t) = Self::text(n, source) {
+                        if n.kind() == "resource_reference"
+                            && let Some(t) = Self::text(n, source) {
                                 refs.push(t.replace(' ', ""));
                             }
-                        }
                         let mut cc = n.walk();
                         for ch in n.children(&mut cc) {
                             stack.push(ch);
@@ -525,25 +583,23 @@ impl PuppetPlugin {
                 }
                 if let Some(to) = callee {
                     let mut meta = serde_json::json!({ "language": "puppet" });
-                    // Unresolved unless we know it is declared in-file
-                    meta["unresolved"] = serde_json::Value::Bool(true);
+                    if to == "lookup" || to == "hiera" || to == "hiera_hash" {
+                        meta["unresolved"] = serde_json::Value::Bool(true);
+                    }
                     relations.push(Relation {
                         from: from.clone(),
                         to: to.clone(),
                         relation_type: RelationType::Calls,
                         location: Self::loc(node, file_path),
                         metadata: meta,
-                        to_qualified_hint: None,
+                        to_qualified_hint: Some(to.clone()),
                         to_type_hint: Some("function".to_string()),
                     });
-                    if to == "lookup" || to == "hiera" || to == "hiera_hash" {
-                        // treat as soft fact/data source — UsesFact optional
-                    }
                 }
             }
             "variable" => {
-                if let Some(raw) = Self::text(node, source) {
-                    if raw.starts_with("$facts") || raw.starts_with("$::facts") {
+                if let Some(raw) = Self::text(node, source)
+                    && (raw.starts_with("$facts") || raw.starts_with("$::facts")) {
                         let fact = raw.trim_start_matches('$').to_string();
                         relations.push(Relation {
                             from: from.clone(),
@@ -555,7 +611,6 @@ impl PuppetPlugin {
                             to_type_hint: Some("puppetfact".to_string()),
                         });
                     }
-                }
             }
             "resource_reference" => {
                 if let Some(to) = Self::text(node, source) {
@@ -585,8 +640,8 @@ impl PuppetPlugin {
             let Some(d) = dir.clone() else { break };
             let meta = d.join("metadata.json");
             if meta.is_file() {
-                if let Ok(bytes) = std::fs::read(&meta) {
-                    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let Ok(bytes) = std::fs::read(&meta)
+                    && let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                         let name = v
                             .get("name")
                             .and_then(|n| n.as_str())
@@ -634,7 +689,6 @@ impl PuppetPlugin {
                             }
                         }
                     }
-                }
                 break;
             }
             dir = d.parent().map(Path::to_path_buf);

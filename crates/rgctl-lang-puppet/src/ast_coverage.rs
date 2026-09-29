@@ -34,11 +34,10 @@ pub fn grammar_named_kinds() -> HashSet<String> {
     let lang: tree_sitter::Language = tree_sitter_puppet::LANGUAGE.into();
     let mut set = HashSet::new();
     for i in 0..lang.node_kind_count() {
-        if lang.node_kind_is_named(i as u16) {
-            if let Some(k) = lang.node_kind_for_id(i as u16) {
+        if lang.node_kind_is_named(i as u16)
+            && let Some(k) = lang.node_kind_for_id(i as u16) {
                 set.insert(k.to_string());
             }
-        }
     }
     set
 }
