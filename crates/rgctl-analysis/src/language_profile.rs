@@ -149,6 +149,32 @@ const PROFILES: &[LanguageAnalysisProfile] = &[
         cfg_enabled: true,
         taint_enabled: true,
     },
+    LanguageAnalysisProfile {
+        id: "kotlin",
+        aliases: &["kt"],
+        extensions: &["kt", "kts"],
+        function_kinds: &[
+            "function_declaration",
+            "primary_constructor",
+            "secondary_constructor",
+            "anonymous_function",
+        ],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "groovy",
+        aliases: &[],
+        extensions: &["groovy", "gradle"],
+        function_kinds: &[
+            "method_declaration",
+            "function_definition",
+            "constructor_declaration",
+            "compact_constructor_declaration",
+        ],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
 ];
 
 /// Return the profile for a canonical id or alias.
@@ -220,6 +246,8 @@ fn grammar_for(profile: &LanguageAnalysisProfile) -> Result<Language> {
         "php" => Ok(tree_sitter_php::LANGUAGE_PHP.into()),
         "ruby" => Ok(tree_sitter_ruby::LANGUAGE.into()),
         "puppet" => Ok(tree_sitter_puppet::LANGUAGE.into()),
+        "kotlin" => Ok(tree_sitter_kotlin_ng::LANGUAGE.into()),
+        "groovy" => Ok(tree_sitter_groovy::LANGUAGE.into()),
         other => Err(Error::UnsupportedLanguage(other.to_string())),
     }
 }

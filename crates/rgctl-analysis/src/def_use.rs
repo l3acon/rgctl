@@ -38,11 +38,49 @@ fn is_field_access_kind(kind: &str) -> bool {
             | "member_access_expression"
             | "selector_expression"
             | "attribute"
+            // Kotlin: `order.status` / `this.status` (expression + identifier children).
+            | "navigation_expression"
     )
 }
 
 /// Build a typed field definition for a field-access style AST node.
 fn field_access_def(node: Node, source: &[u8]) -> Option<DefVar> {
+    // Kotlin navigation_expression: children are expression + identifier (no field names).
+    if node.kind() == "navigation_expression" {
+        let mut named: Vec<Node> = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.is_named() {
+                named.push(child);
+            }
+        }
+        // Last identifier is the member; everything before is the receiver expression.
+        if let Some((last, prefix)) = named.split_last() {
+            if matches!(last.kind(), "identifier" | "simple_identifier") {
+                let member = last.utf8_text(source).ok()?.to_string();
+                let receiver = if prefix.is_empty() {
+                    None
+                } else if prefix.len() == 1 {
+                    prefix[0].utf8_text(source).ok().map(str::to_string)
+                } else {
+                    // Multi-hop `a.b.c` — use full prefix text as receiver (best-effort).
+                    let start = prefix[0].start_byte();
+                    let end = prefix[prefix.len() - 1].end_byte();
+                    std::str::from_utf8(&source[start..end])
+                        .ok()
+                        .map(str::to_string)
+                };
+                if let Some(receiver) = receiver {
+                    return Some(DefVar::Field { receiver, member });
+                }
+            }
+        }
+        return node
+            .utf8_text(source)
+            .ok()
+            .map(|s| DefVar::local(s.to_string()));
+    }
+
     let field = node
         .child_by_field_name("field")
         .or_else(|| node.child_by_field_name("property"))
@@ -586,6 +624,30 @@ mod tests {
         assert!(
             defs_has(&defs, "order.Status"),
             "defs should include order.Status, got {defs:?}"
+        );
+        let _ = uses;
+    }
+
+    #[test]
+    fn test_kotlin_navigation_assignment_def_use() {
+        let source = r#"
+class OrderProcessor {
+  fun process(order: OrderDTO): OrderDTO {
+    order.status = "PROCESSED"
+    return order
+  }
+}
+"#;
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_kotlin_ng::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let assign = find_kind(tree.root_node(), "assignment").expect("assignment");
+        let (defs, _uses) = extract_def_use(assign, source.as_bytes());
+        assert!(
+            defs_has(&defs, "order.status"),
+            "kotlin defs should include order.status, got {defs:?}"
         );
     }
 

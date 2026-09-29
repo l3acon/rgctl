@@ -15,6 +15,8 @@
 # - node (nodejs/node test/ — JavaScript language-scale corpus)
 # - roslyn (C# compiler)
 # - llvm-project (C++ via sparse clang/)
+# - kotlin (JetBrains/kotlin sparse libraries+plugins+analysis — Kotlin Gate B)
+# - groovy (gradle/gradle — Groovy Gate B; largest single OSS .groovy tree)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -122,6 +124,34 @@ clone_sparse_node_test_if_missing() {
 }
 
 clone_sparse_node_test_if_missing "$EXAMPLE_DIR/node"
+
+# Kotlin Gate B: JetBrains/kotlin is huge; sparse libraries+plugins+analysis ≈ O(10⁴) .kt
+# (full tree is 70k+ .kt / multi-GB). Override root with RGCTL_KOTLIN_REPO.
+clone_sparse_kotlin_if_missing() {
+  local dest="$1"
+  local tmp="$TMP_DIR/kotlin-clone"
+  local url="https://github.com/JetBrains/kotlin.git"
+  if [[ -d "$dest/libraries" && -d "$dest/plugins" ]]; then
+    echo "Already present: $dest (libraries+plugins)"
+    return 0
+  fi
+  rm -rf "$tmp"
+  echo "Cloning sparse JetBrains/kotlin libraries plugins analysis -> $dest"
+  git clone --depth 1 --filter=blob:none --sparse "$url" "$tmp"
+  (
+    cd "$tmp"
+    git sparse-checkout set libraries plugins analysis
+  )
+  rm -rf "$dest"
+  mv "$tmp" "$dest"
+  rm -rf "$TMP_DIR/kotlin-clone"
+}
+
+clone_sparse_kotlin_if_missing "$EXAMPLE_DIR/kotlin"
+
+# Groovy Gate B: gradle/gradle is the densest single public .groovy tree (~6k; Jenkins core is tiny).
+# Override with RGCTL_GROOVY_REPO. apache/groovy alone is ~3k.
+clone_if_missing "https://github.com/gradle/gradle.git" "$EXAMPLE_DIR/groovy" 1
 
 echo
 echo "All requested example repos are available under: $EXAMPLE_DIR"

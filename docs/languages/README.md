@@ -12,8 +12,10 @@ rgctl indexes source through **Tier 1 custom language plugins** (`LanguagePlugin
 | [C++](cpp.md) | `.cpp`, `.hpp`, … | `verify-extraction-gql-cpp.sh` |
 | [C#](csharp.md) | `.cs` | `verify-extraction-gql-csharp.sh` |
 | [Go](go.md) | `.go` | `verify-extraction-gql-go.sh` |
+| [Groovy](groovy.md) | `.groovy`, `.gradle` | `verify-extraction-gql-groovy.sh` |
 | [Java](java.md) | `.java` | `verify-extraction-gql-java.sh` |
 | [JavaScript](javascript.md) | `.js`, `.jsx`, `.mjs` | `verify-extraction-gql-javascript.sh` |
+| [Kotlin](kotlin.md) | `.kt`, `.kts` | `verify-extraction-gql-kotlin.sh` |
 | [PHP](php.md) | `.php` | `verify-extraction-gql-php.sh` |
 | [Puppet](puppet.md) | `.pp` | (pending `puppet_langfeatures`) |
 | [Python](python.md) | `.py`, `.pyw` | `verify-extraction-gql-python.sh` |

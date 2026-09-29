@@ -162,6 +162,28 @@ case "${RGCTL_CMD_ID}" in
     RGCTL_CMD_SEMANTIC_QUERY='nginx web profile'
     RGCTL_CMD_SLICE_FILE=''
     ;;
+  kotlin)
+    RGCTL_CMD_DISCOVER_EXTRA=(-l kotlin --with-cfg --with-taint)
+    RGCTL_CMD_BLAST_PRIMARY='com.example.ecommerce.OrderService.process'
+    RGCTL_CMD_BLAST_COOLSTORE='com.example.ecommerce.OrdersController.create'
+    RGCTL_CMD_INSPECT_FN='process'
+    RGCTL_CMD_CPG_TYPE='OrderDTO'
+    RGCTL_CMD_CPG_MIN_LINES=0
+    RGCTL_CMD_EXPORT_QUERY='name:process'
+    RGCTL_CMD_SEMANTIC_QUERY='order service process'
+    RGCTL_CMD_SLICE_FILE=''
+    ;;
+  groovy)
+    RGCTL_CMD_DISCOVER_EXTRA=(-l groovy --with-cfg --with-taint)
+    RGCTL_CMD_BLAST_PRIMARY='com.example.ecommerce.OrderService.process'
+    RGCTL_CMD_BLAST_COOLSTORE='com.example.ecommerce.OrdersController.create'
+    RGCTL_CMD_INSPECT_FN='process'
+    RGCTL_CMD_CPG_TYPE='OrderDTO'
+    RGCTL_CMD_CPG_MIN_LINES=0
+    RGCTL_CMD_EXPORT_QUERY='name:process'
+    RGCTL_CMD_SEMANTIC_QUERY='order service process'
+    RGCTL_CMD_SLICE_FILE=''
+    ;;
   *)
     echo "error: unknown RGCTL_CMD_ID=${RGCTL_CMD_ID}" >&2
     exit 1

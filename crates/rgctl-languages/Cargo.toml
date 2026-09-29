@@ -22,3 +22,5 @@ rgctl-lang-markdown = { workspace = true }
 rgctl-lang-php = { workspace = true }
 rgctl-lang-ruby = { workspace = true }
 rgctl-lang-puppet = { workspace = true }
+rgctl-lang-kotlin = { workspace = true }
+rgctl-lang-groovy = { workspace = true }

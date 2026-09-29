@@ -1,0 +1,17 @@
+[package]
+name = "rgctl-lang-groovy"
+version = "0.4.16"
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl language plugin: groovy (tree-sitter-groovy)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/amaanq/tree-sitter-groovy"
+
+[dependencies]
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+rgctl-plugin-helpers = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-groovy = "0.1.2"
+serde_json = "1"
+tracing = "0.1"

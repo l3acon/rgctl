@@ -119,8 +119,19 @@ impl LanguageRegistry {
         self.config_plugins.get(format_id).cloned()
     }
 
-    /// Get a language plugin for a file path
+    /// Get a language plugin for a file path.
+    ///
+    /// Manifest ingest routes never resolve to a language plugin so basenames
+    /// like `build.gradle.kts` stay exclusive to Dependency extractors even when
+    /// a Kotlin/Groovy plugin registers `.kts` / `.gradle`. Ordinary sources that
+    /// fall through to [`IngestRoute::Ignore`] (e.g. `.kt`) still use language plugins.
     pub fn get_plugin_for_file(&self, file_path: &Path) -> Result<Arc<dyn LanguagePlugin>> {
+        if classify_ingest_path(file_path) == IngestRoute::Manifest {
+            return Err(Error::UnsupportedLanguage(
+                file_path.to_string_lossy().to_string(),
+            ));
+        }
+
         let path_str = file_path.to_string_lossy().replace('\\', "/");
 
         if let Some(plugin) = self.language_plugin_for_path(&path_str) {
@@ -194,23 +205,22 @@ impl LanguageRegistry {
 
     /// True when the path is a build manifest (Dependency extract route).
     pub fn is_manifest_file(&self, file_path: &Path) -> bool {
-        if self.get_plugin_for_file(file_path).is_ok() {
-            return false;
-        }
         classify_ingest_path(file_path) == IngestRoute::Manifest
     }
 
     /// Check if a file can be processed (code, config/workflow, or manifest).
     pub fn can_process_file(&self, file_path: &Path) -> bool {
+        if classify_ingest_path(file_path) == IngestRoute::Manifest {
+            return true;
+        }
         if self.get_plugin_for_file(file_path).is_ok() {
             return true;
         }
         match classify_ingest_path(file_path) {
-            IngestRoute::Manifest => true,
             IngestRoute::Config | IngestRoute::Workflow => {
                 self.get_config_plugin_for_file(file_path).is_ok()
             }
-            IngestRoute::Ignore => false,
+            IngestRoute::Ignore | IngestRoute::Manifest => false,
         }
     }
 
@@ -323,6 +333,13 @@ mod tests {
         assert!(registry.can_process_file(Path::new("package.json")));
         assert!(registry.is_manifest_file(Path::new("package.json")));
         assert!(registry.get_config_plugin_for_file(Path::new("package.json")).is_err());
+
+        // Gradle Kotlin DSL build script stays Manifest even if a future
+        // language plugin registers `.kts` (language lookup is blocked).
+        assert!(registry.is_manifest_file(Path::new("app/build.gradle.kts")));
+        assert!(registry.get_plugin_for_file(Path::new("app/build.gradle.kts")).is_err());
+        assert!(registry.is_manifest_file(Path::new("build.gradle")));
+        assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
     }
 
     #[test]

@@ -154,8 +154,45 @@ fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Optio
             }
             extract_name_from_node(node, source).ok().flatten()
         }
+        "kotlin" | "kt"
+            if matches!(
+                node.kind(),
+                "primary_constructor" | "secondary_constructor"
+            ) =>
+        {
+            // Constructors are looked up by enclosing type simple name (Java-shaped).
+            enclosing_type_simple_name(node, source)
+                .or_else(|| extract_name_from_node(node, source).ok().flatten())
+        }
         _ => extract_name_from_node(node, source).ok().flatten(),
     }
+}
+
+fn enclosing_type_simple_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if matches!(
+            n.kind(),
+            "class_declaration" | "object_declaration" | "companion_object"
+        ) {
+            return n
+                .child_by_field_name("name")
+                .and_then(|x| x.utf8_text(source).ok().map(str::to_string))
+                .or_else(|| {
+                    let mut c = n.walk();
+                    n.children(&mut c).find_map(|ch| {
+                        if matches!(ch.kind(), "identifier" | "simple_identifier" | "type_identifier")
+                        {
+                            ch.utf8_text(source).ok().map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                });
+        }
+        cur = n.parent();
+    }
+    None
 }
 
 fn find_function_by_name<'a>(
@@ -483,11 +520,21 @@ impl<'a> CfgBuilder<'a> {
             }
             "selector" if self.language == "puppet" => self.visit_expression_stmt(node, source),
             "while_statement" | "while_expression" => self.visit_while(node, source),
-            "do_statement" => self.visit_do(node, source),
+            "do_statement" | "do_while_statement" => self.visit_do(node, source),
             "for_statement" | "for_expression" | "for_in_expression" | "foreach_statement"
             | "for_range_loop" => self.visit_for(node, source),
             "enhanced_for_statement" => self.visit_enhanced_for(node, source),
             "loop_expression" => self.visit_loop(node, source),
+            // Kotlin `when` — treat like switch expression (arm fan-out)
+            "when_expression" => self.visit_kotlin_when(node, source),
+            "property_declaration" => {
+                self.visit_declaration_initializers(node, source)?;
+                if !self.flow_active {
+                    return Ok(());
+                }
+                self.add_statement(node, source, StatementKind::Declaration)?;
+                Ok(())
+            }
 
             // Returns / coroutine / iterator yields
             "return_statement" | "return_expression" | "co_return_statement" => {
@@ -724,6 +771,7 @@ impl<'a> CfgBuilder<'a> {
                 "await_expression" => self.visit_await_expression(node, source)?,
                 "conditional_access_expression" => self.visit_conditional_access(node, source)?,
                 "switch_expression" => self.visit_switch_expression(node, source)?,
+                "when_expression" => self.visit_kotlin_when(node, source)?,
                 "lambda_expression" | "anonymous_method_expression" => {
                     self.visit_nested_subcfg(node, source)?
                 }
@@ -1961,18 +2009,23 @@ impl<'a> CfgBuilder<'a> {
 
     fn visit_return(&mut self, node: Node, source: &[u8]) -> Result<()> {
         // Java: `return switch (...) { ... };` — lower the switch CFG, then exit.
+        // Kotlin: `return when (...) { ... }`
         if let Some(sw) = {
             let mut found = None;
             let mut c = node.walk();
             for ch in node.children(&mut c) {
-                if ch.kind() == "switch_expression" {
+                if matches!(ch.kind(), "switch_expression" | "when_expression") {
                     found = Some(ch);
                     break;
                 }
             }
             found
         } {
-            self.visit_switch_expression(sw, source)?;
+            if sw.kind() == "when_expression" {
+                self.visit_kotlin_when(sw, source)?;
+            } else {
+                self.visit_switch_expression(sw, source)?;
+            }
             if !self.flow_active {
                 return Ok(());
             }
@@ -3039,6 +3092,102 @@ impl<'a> CfgBuilder<'a> {
             self.cfg.add_edge(fail, merge, CfgEdgeType::Next);
         }
 
+        self.flow_active = true;
+        self.current_block = merge;
+        Ok(())
+    }
+
+    /// Kotlin `when (x) { … -> … }` — multi-way branch over `when_entry` arms.
+    fn visit_kotlin_when(&mut self, node: Node, source: &[u8]) -> Result<()> {
+        let mut arms = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "when_entry" {
+                arms.push(child);
+            }
+        }
+        if arms.is_empty() {
+            return self.visit_expression_stmt(node, source);
+        }
+
+        let subject = node
+            .child_by_field_name("value")
+            .or_else(|| find_child_kind(node, "when_subject"))
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "when".to_string());
+        self.add_statement_to_current(Statement {
+            kind: StatementKind::Branch,
+            line: node.start_position().row + 1,
+            text: subject,
+            defined_vars: SmallVec::new(),
+            used_vars: SmallVec::new(),
+        });
+        let cond_block = self.current_block;
+        let merge = self.new_block();
+        self.breakable_stack.push(BreakableContext {
+            exit: merge,
+            continue_target: None,
+            label: None,
+        });
+
+        let mut pending_fail: Option<BlockId> = None;
+        for arm in arms {
+            let test = self.new_block();
+            if let Some(fail) = pending_fail.take() {
+                self.cfg.add_edge(fail, test, CfgEdgeType::Next);
+            } else {
+                self.cfg.add_edge(cond_block, test, CfgEdgeType::IfTrue);
+            }
+            self.flow_active = true;
+            self.current_block = test;
+
+            let fail = self.new_block();
+            let arm_text = arm
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string())
+                .unwrap_or_else(|| "entry".to_string());
+            self.add_statement_to_current(Statement {
+                kind: StatementKind::Branch,
+                line: arm.start_position().row + 1,
+                text: arm_text,
+                defined_vars: SmallVec::new(),
+                used_vars: SmallVec::new(),
+            });
+            self.cfg
+                .add_edge(self.current_block, fail, CfgEdgeType::IfFalse);
+            let body = self.new_block();
+            self.cfg
+                .add_edge(self.current_block, body, CfgEdgeType::IfTrue);
+            self.flow_active = true;
+            self.current_block = body;
+
+            // Prefer explicit body / last expression child after `->`
+            if let Some(body_node) = arm.child_by_field_name("body") {
+                self.visit_statement(body_node, source)?;
+            } else {
+                let mut c = arm.walk();
+                let children: Vec<Node> = arm.children(&mut c).filter(|c| c.is_named()).collect();
+                if let Some(last) = children.last() {
+                    if last.kind() != "when_condition" && last.kind() != "when_entry" {
+                        self.visit_statement(*last, source)?;
+                    }
+                }
+            }
+            if self.flow_active {
+                self.cfg
+                    .add_edge(self.current_block, merge, CfgEdgeType::Next);
+            }
+            pending_fail = Some(fail);
+        }
+
+        if let Some(fail) = pending_fail {
+            self.cfg.add_edge(fail, merge, CfgEdgeType::Next);
+        }
+
+        self.breakable_stack.pop();
         self.flow_active = true;
         self.current_block = merge;
         Ok(())
@@ -6971,5 +7120,55 @@ class profile::os {
 "#;
         let cfg = build_cfg_for_function("puppet", code, "profile::os").unwrap();
         assert!(cfg.blocks.len() >= 3, "expected case arms, got {}", cfg.blocks.len());
+    }
+
+    #[test]
+    fn test_kotlin_if_and_when_cfg() {
+        let code = r#"
+class OrderService {
+  fun validate(x: Int): Int {
+    return if (x > 0) x else -x
+  }
+  fun find(id: Long): String {
+    return when (id) {
+      0L -> "none"
+      else -> "order"
+    }
+  }
+}
+"#;
+        let if_cfg = build_cfg_for_function("kotlin", code, "validate").unwrap();
+        assert!(
+            if_cfg.blocks.len() >= 3,
+            "kotlin if should branch, got {}",
+            if_cfg.blocks.len()
+        );
+        let when_cfg = build_cfg_for_function("kotlin", code, "find").unwrap();
+        assert!(
+            when_cfg.blocks.len() >= 3,
+            "kotlin when should fan out, got {}",
+            when_cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_groovy_if_cfg() {
+        let code = r#"
+class OrderService {
+  int validate(int x) {
+    if (x > 0) {
+      return x;
+    } else {
+      return -x;
+    }
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("groovy", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "groovy if should branch, got {}",
+            cfg.blocks.len()
+        );
     }
 }

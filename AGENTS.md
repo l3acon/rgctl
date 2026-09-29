@@ -83,6 +83,8 @@ Fetch: `./scripts/fetch-profile-repos.sh`
 | **Puppet** | *(deferred)* | `RGCTL_PUPPET_REPO` | `-l puppet` | `RGCTL_PUPPET_REPO` — no default ~10k corpus yet |
 | **Rust** | rustc | `example/rust` | `-l rust` | `RGCTL_RUST_REPO` |
 | **TypeScript** | VS Code | `example/vscode` | `-l typescript` on `src/` | `RGCTL_VSCODE_REPO` |
+| **Kotlin** | JetBrains/kotlin | `example/kotlin` | `-l kotlin` (sparse `libraries` `plugins` `analysis`) | `RGCTL_KOTLIN_REPO` |
+| **Groovy** | Gradle | `example/groovy` | `-l groovy` | `RGCTL_GROOVY_REPO` |
 
 File counts are approximate (goal **O(10⁴)** sources). Exclude `vendor/`, `node_modules/`, `target/`, `third_party/`.
 

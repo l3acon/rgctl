@@ -44,6 +44,14 @@ const NODE_JAVASCRIPT_COLD_WITH_CFG_WALL_BASELINE_SECS: f64 = 7.0;
 /// home-assistant/core with `-l python`. Baseline: **20 s** on reference M3 Pro (2026-09-04).
 const HOME_ASSISTANT_PYTHON_COLD_WALL_BASELINE_SECS: f64 = 20.0;
 const DISCOURSE_RUBY_COLD_WALL_BASELINE_SECS: f64 = 120.0;
+/// JetBrains/kotlin sparse `libraries`+`plugins`+`analysis` (`-l kotlin`).
+/// Baseline: **10 s** wall on maintainer machine (2026-09-29; ~18k `.kt`, ~178k nodes).
+/// Override via `RGCTL_KOTLIN_COLD_BASELINE_SECS`.
+const KOTLIN_COLD_WALL_BASELINE_SECS: f64 = 10.0;
+/// gradle/gradle under `example/groovy` (`-l groovy`).
+/// Baseline: **5 s** wall on maintainer machine (2026-09-29; ~6.7k `.groovy`, ~67k nodes).
+/// Override via `RGCTL_GROOVY_COLD_BASELINE_SECS`.
+const GROOVY_COLD_WALL_BASELINE_SECS: f64 = 5.0;
 /// kubernetes/website `content/en`, markdown-only discover (~2–3s on maintainer machine).
 const K8S_WEBSITE_MARKDOWN_COLD_WALL_BASELINE_SECS: f64 = 3.0;
 /// ecommerce-java default discover cold wall (inheritance stub gate).
@@ -157,6 +165,18 @@ pub fn discourse_ruby_repo_path() -> PathBuf {
         .unwrap_or_else(|_| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/discourse")
         })
+}
+
+pub fn kotlin_repo_path() -> PathBuf {
+    std::env::var("RGCTL_KOTLIN_REPO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/kotlin"))
+}
+
+pub fn groovy_repo_path() -> PathBuf {
+    std::env::var("RGCTL_GROOVY_REPO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/groovy"))
 }
 
 pub fn node_javascript_repo_path() -> PathBuf {
@@ -1104,6 +1124,78 @@ fn discourse_cold_discover_within_baseline() {
         baseline
     );
     assert_within_baseline("discourse ruby cold discover", elapsed, baseline);
+}
+
+#[test]
+#[ignore = "manual: cold discover Gate B on example/kotlin (-l kotlin); ./scripts/fetch-profile-repos.sh"]
+fn kotlin_cold_discover_within_baseline() {
+    let repo = kotlin_repo_path();
+    if !repo.is_dir() {
+        eprintln!(
+            "skip: kotlin corpus not at {} (run ./scripts/fetch-profile-repos.sh or set RGCTL_KOTLIN_REPO)",
+            repo.display()
+        );
+        return;
+    }
+
+    let baseline = std::env::var("RGCTL_KOTLIN_COLD_BASELINE_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(KOTLIN_COLD_WALL_BASELINE_SECS);
+
+    let (output, elapsed) = run_cold_discover_timed(&repo, &["-l", "kotlin"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "discover failed:\nstdout={stdout}\nstderr={stderr}"
+    );
+    let profile = resolve_profile_summary(&stdout, &stderr, elapsed);
+    eprintln!(
+        "kotlin cold: wall={:.1}s nodes={} functions={} index_graph_build={:?} (baseline {:.0}s)",
+        profile.wall_secs,
+        profile.nodes,
+        profile.functions,
+        profile.index_graph_build_secs,
+        baseline
+    );
+    assert_within_baseline("kotlin cold discover", elapsed, baseline);
+}
+
+#[test]
+#[ignore = "manual: cold discover Gate B on example/groovy (gradle/gradle, -l groovy); ./scripts/fetch-profile-repos.sh"]
+fn groovy_cold_discover_within_baseline() {
+    let repo = groovy_repo_path();
+    if !repo.is_dir() {
+        eprintln!(
+            "skip: groovy corpus not at {} (run ./scripts/fetch-profile-repos.sh or set RGCTL_GROOVY_REPO)",
+            repo.display()
+        );
+        return;
+    }
+
+    let baseline = std::env::var("RGCTL_GROOVY_COLD_BASELINE_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(GROOVY_COLD_WALL_BASELINE_SECS);
+
+    let (output, elapsed) = run_cold_discover_timed(&repo, &["-l", "groovy"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "discover failed:\nstdout={stdout}\nstderr={stderr}"
+    );
+    let profile = resolve_profile_summary(&stdout, &stderr, elapsed);
+    eprintln!(
+        "groovy cold: wall={:.1}s nodes={} functions={} index_graph_build={:?} (baseline {:.0}s)",
+        profile.wall_secs,
+        profile.nodes,
+        profile.functions,
+        profile.index_graph_build_secs,
+        baseline
+    );
+    assert_within_baseline("groovy cold discover", elapsed, baseline);
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -257,12 +257,13 @@ fn walk_skeleton(
 fn classify(kind: &str) -> Option<AstSkeletonKind> {
     Some(match kind {
         "block" | "compound_statement" | "statement_block" | "body" => AstSkeletonKind::Block,
-        "if_statement" | "if_expression" | "if" | "unless" | "unless_statement" => {
-            AstSkeletonKind::If
-        }
+        "if_statement" | "if_expression" | "if" | "unless" | "unless_statement"
+        | "when_expression" => AstSkeletonKind::If,
         "while_statement" | "while_expression" | "for_statement" | "for_expression"
-        | "loop_expression" | "do_statement" | "foreach_statement" | "while" | "until" | "for"
-        | "iterator_statement" | "case_statement" => AstSkeletonKind::Loop,
+        | "loop_expression" | "do_statement" | "do_while_statement" | "foreach_statement"
+        | "while" | "until" | "for" | "iterator_statement" | "case_statement" => {
+            AstSkeletonKind::Loop
+        }
         "call_expression" | "method_invocation" | "invocation_expression" | "function_call"
         | "call" => {
             AstSkeletonKind::Call
@@ -277,6 +278,7 @@ fn classify(kind: &str) -> Option<AstSkeletonKind> {
         | "local_variable_declaration"
         | "variable_declaration"
         | "short_var_declaration"
+        | "property_declaration"
         | "declaration" => AstSkeletonKind::Decl,
         _ => return None,
     })

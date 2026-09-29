@@ -160,7 +160,67 @@ impl<'a> TaintAnalyzer<'a> {
             "php" => self.detect_php_patterns(),
             "ruby" => self.detect_ruby_patterns(),
             "puppet" => self.detect_puppet_patterns(),
+            "kotlin" => self.detect_kotlin_patterns(),
+            "groovy" => self.detect_groovy_patterns(),
             _ => {}
+        }
+    }
+
+    fn detect_groovy_patterns(&mut self) {
+        for (node_id, node) in &self.pdg.nodes {
+            let text = &node.statement.text;
+            if text.contains("System.getenv")
+                || text.contains("args[")
+                || text.contains("request.getParameter")
+            {
+                self.sources.insert(*node_id, TaintSource::HttpParameter);
+            }
+            if text.contains("executeQuery")
+                || text.contains("prepareStatement")
+                || text.contains("sql.execute")
+            {
+                self.sinks.insert(*node_id, TaintSink::SqlQuery);
+            } else if text.contains("Runtime.getRuntime().exec")
+                || text.contains("ProcessBuilder")
+                || text.contains("evaluate(")
+            {
+                self.sinks.insert(*node_id, TaintSink::ShellCommand);
+            }
+        }
+    }
+
+    fn detect_kotlin_patterns(&mut self) {
+        // JVM-shaped patterns (Kotlin/Android/Spring); honesty: pattern text only.
+        for (node_id, node) in &self.pdg.nodes {
+            let text = &node.statement.text;
+            if text.contains("readLine(")
+                || text.contains("readln(")
+                || text.contains("System.getenv")
+                || text.contains("request.getParameter")
+                || text.contains("call.receive")
+            {
+                self.sources.insert(*node_id, TaintSource::HttpParameter);
+            } else if text.contains("File(") && text.contains("readText") {
+                self.sources.insert(*node_id, TaintSource::FileInput);
+            }
+
+            if text.contains("executeQuery")
+                || text.contains("createStatement")
+                || text.contains("prepareStatement")
+                || text.contains("rawQuery")
+            {
+                self.sinks.insert(*node_id, TaintSink::SqlQuery);
+            } else if text.contains("Runtime.getRuntime().exec")
+                || text.contains("ProcessBuilder")
+            {
+                self.sinks.insert(*node_id, TaintSink::ShellCommand);
+            } else if text.contains("Files.write") || text.contains("writeText(") {
+                self.sinks.insert(*node_id, TaintSink::FileWrite);
+            }
+
+            if text.contains("prepareStatement") || text.contains("HtmlUtils.htmlEscape") {
+                self.sanitizers.insert(*node_id, Sanitizer::SqlParameterize);
+            }
         }
     }
 
@@ -1012,6 +1072,46 @@ class profile::web {
         assert!(
             !analyzer.sources.is_empty() || !analyzer.sinks.is_empty(),
             "expected Puppet taint sources (lookup) and/or sinks (exec)"
+        );
+    }
+
+    #[test]
+    fn test_kotlin_taint_http_to_sql_patterns() {
+        let code = r#"
+class Handler {
+  fun bad(request: HttpServletRequest) {
+    val id = request.getParameter("id")
+    db.executeQuery("SELECT * FROM users WHERE id = " + id)
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("kotlin", code, "bad").unwrap();
+        let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
+        let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
+        analyzer.detect_patterns("kotlin");
+        assert!(
+            !analyzer.sources.is_empty() && !analyzer.sinks.is_empty(),
+            "expected Kotlin HTTP source and SQL sink patterns"
+        );
+    }
+
+    #[test]
+    fn test_groovy_taint_http_to_sql_patterns() {
+        let code = r#"
+class Handler {
+  def bad(request) {
+    def id = request.getParameter("id")
+    db.executeQuery("SELECT * FROM users WHERE id = " + id)
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("groovy", code, "bad").unwrap();
+        let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
+        let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
+        analyzer.detect_patterns("groovy");
+        assert!(
+            !analyzer.sources.is_empty() && !analyzer.sinks.is_empty(),
+            "expected Groovy HTTP source and SQL sink patterns"
         );
     }
 
