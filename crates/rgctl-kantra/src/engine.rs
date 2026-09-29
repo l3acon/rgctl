@@ -3,7 +3,9 @@
 use crate::cache::{KantraFileCache, hash_file_content};
 use crate::classify::{ClassifiedRule, classify_rules};
 use crate::error::Result;
+use crate::eval::builtin_path::{eval_builtin_json, eval_builtin_xml};
 use crate::eval::compose::eval_compose;
+use crate::eval::dependency::eval_dependency;
 use crate::eval::file::eval_file;
 use crate::eval::filecontent::{SourceCache, eval_filecontent};
 use crate::eval::go_referenced::eval_go_referenced;
@@ -311,6 +313,53 @@ fn eval_leaf(
             ctx.sources,
         )
         .map_err(crate::error::KantraError::from),
+        WhenClause::JavaDependency {
+            name,
+            nameregex,
+            lowerbound,
+            upperbound,
+        } => Ok(eval_dependency(
+            &rule.rule_id,
+            "maven",
+            name,
+            nameregex.as_deref(),
+            lowerbound.as_deref(),
+            upperbound.as_deref(),
+            &ctx.graph.nodes,
+        )),
+        WhenClause::GoDependency {
+            name,
+            nameregex,
+            lowerbound,
+            upperbound,
+        } => Ok(eval_dependency(
+            &rule.rule_id,
+            "golang",
+            name,
+            nameregex.as_deref(),
+            lowerbound.as_deref(),
+            upperbound.as_deref(),
+            &ctx.graph.nodes,
+        )),
+        WhenClause::BuiltinXml { xpath, file_pattern } => Ok(eval_builtin_xml(
+            &rule.rule_id,
+            xpath,
+            file_pattern.as_deref(),
+            ctx.repo_root,
+            ctx.files,
+            ctx.sources,
+        )),
+        WhenClause::BuiltinJson {
+            jsonpath,
+            file_pattern,
+        } => Ok(eval_builtin_json(
+            &rule.rule_id,
+            jsonpath,
+            file_pattern.as_deref(),
+            ctx.repo_root,
+            ctx.files,
+            ctx.sources,
+        )),
         WhenClause::Unsupported { .. } => Ok(Vec::new()),
         WhenClause::And(_) | WhenClause::Or(_) | WhenClause::Not(_) => Ok(Vec::new()),
     }

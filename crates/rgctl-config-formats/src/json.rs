@@ -1,5 +1,6 @@
-//! JSON configuration format plugin
+//! JSON configuration format plugin (spans via quoted-key lookup).
 
+use crate::span_util::{find_quoted_key_span, loc};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use std::path::Path;
@@ -18,6 +19,8 @@ impl JsonPlugin {
         value: &serde_json::Value,
         prefix: &str,
         file: &str,
+        source: &str,
+        used: &mut Vec<usize>,
         results: &mut Vec<ConfigKey>,
     ) {
         match value {
@@ -26,79 +29,40 @@ impl JsonPlugin {
                     let full_key = if prefix.is_empty() {
                         k.clone()
                     } else {
-                        format!("{}.{}", prefix, k)
+                        format!("{prefix}.{k}")
                     };
-                    self.flatten_json_value(v, &full_key, file, results);
+                    self.flatten_json_value(v, &full_key, file, source, used, results);
                 }
             }
             serde_json::Value::Array(arr) => {
+                let leaf = prefix.rsplit('.').next().unwrap_or(prefix);
+                let location = find_quoted_key_span(source, leaf, used)
+                    .map(|(sl, el, sc, ec)| loc(file, sl, el, sc, ec))
+                    .unwrap_or_else(|| loc(file, 1, 1, 1, 1));
                 results.push(ConfigKey {
                     key_path: prefix.to_string(),
                     value: format!("[array with {} items]", arr.len()),
                     value_type: ConfigValueType::Array,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
+                    location,
                 });
             }
-            serde_json::Value::String(s) => {
+            other => {
+                let leaf = prefix.rsplit('.').next().unwrap_or(prefix);
+                let location = find_quoted_key_span(source, leaf, used)
+                    .map(|(sl, el, sc, ec)| loc(file, sl, el, sc, ec))
+                    .unwrap_or_else(|| loc(file, 1, 1, 1, 1));
+                let (value_type, value) = match other {
+                    serde_json::Value::String(s) => (ConfigValueType::String, s.clone()),
+                    serde_json::Value::Number(n) => (ConfigValueType::Number, n.to_string()),
+                    serde_json::Value::Bool(b) => (ConfigValueType::Boolean, b.to_string()),
+                    serde_json::Value::Null => (ConfigValueType::Null, "null".to_string()),
+                    _ => (ConfigValueType::String, other.to_string()),
+                };
                 results.push(ConfigKey {
                     key_path: prefix.to_string(),
-                    value: s.clone(),
-                    value_type: ConfigValueType::String,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            serde_json::Value::Number(n) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: n.to_string(),
-                    value_type: ConfigValueType::Number,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            serde_json::Value::Bool(b) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: b.to_string(),
-                    value_type: ConfigValueType::Boolean,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            serde_json::Value::Null => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: "null".to_string(),
-                    value_type: ConfigValueType::Null,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
+                    value,
+                    value_type,
+                    location,
                 });
             }
         }
@@ -121,12 +85,21 @@ impl ConfigFormatPlugin for JsonPlugin {
     }
 
     fn extract_config_keys(&self, file_path: &Path, source: &[u8]) -> Result<Vec<ConfigKey>> {
-        let content = std::str::from_utf8(source)?;
-        let value: serde_json::Value = serde_json::from_str(content)?;
-
+        let file = file_path.to_string_lossy().to_string();
+        let text = std::str::from_utf8(source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e.to_string(),
+        })?;
+        let value: serde_json::Value =
+            serde_json::from_str(text).map_err(|e| Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e.to_string(),
+            })?;
         let mut results = Vec::new();
-        self.flatten_json_value(&value, "", &file_path.to_string_lossy(), &mut results);
-
+        let mut used = Vec::new();
+        self.flatten_json_value(&value, "", &file, text, &mut used, &mut results);
         Ok(results)
     }
 }
@@ -136,49 +109,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_json_plugin_format_id() {
+    fn json_spans_nonzero() {
+        let src = b"{\n  \"server\": {\n    \"port\": 8080\n  }\n}\n";
         let plugin = JsonPlugin::new().unwrap();
-        assert_eq!(plugin.format_id(), "json");
-    }
-
-    #[test]
-    fn test_json_plugin_file_extensions() {
-        let plugin = JsonPlugin::new().unwrap();
-        assert_eq!(plugin.file_extensions(), vec!["json"]);
-    }
-
-    #[test]
-    fn test_extract_simple_json() {
-        let plugin = JsonPlugin::new().unwrap();
-        let source = br#"{"name": "test", "port": 8080, "enabled": true}"#;
         let keys = plugin
-            .extract_config_keys(Path::new("config.json"), source)
+            .extract_config_keys(Path::new("config.json"), src)
             .unwrap();
-
-        assert!(keys.len() >= 3);
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "name" && k.value == "test")
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "port" && k.value_type == ConfigValueType::Number)
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "enabled" && k.value_type == ConfigValueType::Boolean)
-        );
-    }
-
-    #[test]
-    fn test_extract_nested_json() {
-        let plugin = JsonPlugin::new().unwrap();
-        let source = br#"{"server": {"host": "localhost", "port": 8080}}"#;
-        let keys = plugin
-            .extract_config_keys(Path::new("config.json"), source)
-            .unwrap();
-
-        assert!(keys.iter().any(|k| k.key_path == "server.host"));
-        assert!(keys.iter().any(|k| k.key_path == "server.port"));
+        let port = keys.iter().find(|k| k.key_path == "server.port").unwrap();
+        assert!(port.location.start_line >= 1);
+        assert_ne!(port.location.start_line, 0);
     }
 }

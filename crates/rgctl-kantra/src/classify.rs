@@ -13,10 +13,6 @@ pub struct ClassifiedRule {
 }
 
 const UNSUPPORTED_PROVIDERS: &[&str] = &[
-    "java.dependency",
-    "go.dependency",
-    "builtin.xml",
-    "builtin.json",
     "annotated.elements",
     "java.referenced.annotated.elements",
 ];
@@ -68,7 +64,7 @@ pub fn classify_rules(rules: &[KantraRule]) -> Vec<ClassifiedRule> {
 fn is_unsupported_provider(provider: &str) -> bool {
     UNSUPPORTED_PROVIDERS
         .iter()
-        .any(|u| provider == *u || provider.contains("dependency") || provider.contains("annotated.elements"))
+        .any(|u| provider == *u || provider.contains("annotated.elements"))
 }
 
 fn is_supported_provider(provider: &str) -> bool {
@@ -77,8 +73,12 @@ fn is_supported_provider(provider: &str) -> bool {
         "builtin.filecontent"
             | "builtin.file"
             | "builtin.hasTags"
+            | "builtin.xml"
+            | "builtin.json"
             | "go.referenced"
             | "java.referenced"
+            | "java.dependency"
+            | "go.dependency"
     )
 }
 
@@ -120,18 +120,17 @@ mod tests {
     }
 
     #[test]
-    fn java_dependency_unsupported() {
+    fn java_dependency_supported() {
         let c = classify_rules(&[rule(
             "java.dependency:\n  name: foo\n",
         )]);
-        assert_eq!(c[0].support, RuleSupport::Unsupported);
-        assert!(c[0].reason.as_ref().unwrap().contains("java.dependency"));
+        assert_eq!(c[0].support, RuleSupport::Supported);
     }
 
     #[test]
-    fn xml_unsupported() {
+    fn xml_supported() {
         let c = classify_rules(&[rule("builtin.xml:\n  xpath: //x\n")]);
-        assert_eq!(c[0].support, RuleSupport::Unsupported);
+        assert_eq!(c[0].support, RuleSupport::Supported);
     }
 
     #[test]

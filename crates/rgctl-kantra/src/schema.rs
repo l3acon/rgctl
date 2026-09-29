@@ -60,6 +60,26 @@ pub enum WhenClause {
         location: Option<String>,
         annotated_pattern: Option<String>,
     },
+    JavaDependency {
+        name: String,
+        nameregex: Option<String>,
+        lowerbound: Option<String>,
+        upperbound: Option<String>,
+    },
+    GoDependency {
+        name: String,
+        nameregex: Option<String>,
+        lowerbound: Option<String>,
+        upperbound: Option<String>,
+    },
+    BuiltinXml {
+        xpath: String,
+        file_pattern: Option<String>,
+    },
+    BuiltinJson {
+        jsonpath: String,
+        file_pattern: Option<String>,
+    },
     And(Vec<WhenClause>),
     Or(Vec<WhenClause>),
     Not(Box<WhenClause>),
@@ -137,7 +157,13 @@ impl WhenClause {
                 }
             }
             WhenClause::Not(inner) => inner.collect_regex_patterns(out),
-            WhenClause::File { .. } | WhenClause::HasTags { .. } | WhenClause::Unsupported { .. } => {}
+            WhenClause::File { .. }
+            | WhenClause::HasTags { .. }
+            | WhenClause::JavaDependency { .. }
+            | WhenClause::GoDependency { .. }
+            | WhenClause::BuiltinXml { .. }
+            | WhenClause::BuiltinJson { .. }
+            | WhenClause::Unsupported { .. } => {}
         }
     }
 
@@ -148,6 +174,10 @@ impl WhenClause {
             WhenClause::HasTags { .. } => out.push("builtin.hasTags"),
             WhenClause::GoReferenced { .. } => out.push("go.referenced"),
             WhenClause::JavaReferenced { .. } => out.push("java.referenced"),
+            WhenClause::JavaDependency { .. } => out.push("java.dependency"),
+            WhenClause::GoDependency { .. } => out.push("go.dependency"),
+            WhenClause::BuiltinXml { .. } => out.push("builtin.xml"),
+            WhenClause::BuiltinJson { .. } => out.push("builtin.json"),
             WhenClause::And(items) | WhenClause::Or(items) => {
                 for item in items {
                     item.collect_providers(out);
@@ -195,6 +225,30 @@ fn parse_provider(provider: &str, val: &Value) -> WhenClause {
                 annotated_pattern,
             }
         }
+        "java.dependency" => WhenClause::JavaDependency {
+            name: string_field(val, "name").unwrap_or_default(),
+            nameregex: string_field(val, "nameregex").or_else(|| string_field(val, "name_regex")),
+            lowerbound: string_field(val, "lowerbound"),
+            upperbound: string_field(val, "upperbound"),
+        },
+        "go.dependency" => WhenClause::GoDependency {
+            name: string_field(val, "name").unwrap_or_default(),
+            nameregex: string_field(val, "nameregex").or_else(|| string_field(val, "name_regex")),
+            lowerbound: string_field(val, "lowerbound"),
+            upperbound: string_field(val, "upperbound"),
+        },
+        "builtin.xml" => WhenClause::BuiltinXml {
+            xpath: string_field(val, "xpath")
+                .or_else(|| string_field(val, "pattern"))
+                .unwrap_or_default(),
+            file_pattern: string_field(val, "filePattern").or_else(|| string_field(val, "filepattern")),
+        },
+        "builtin.json" => WhenClause::BuiltinJson {
+            jsonpath: string_field(val, "jsonpath")
+                .or_else(|| string_field(val, "pattern"))
+                .unwrap_or_default(),
+            file_pattern: string_field(val, "filePattern").or_else(|| string_field(val, "filepattern")),
+        },
         other => WhenClause::Unsupported {
             provider: other.to_string(),
         },
