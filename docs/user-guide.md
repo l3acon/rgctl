@@ -832,10 +832,12 @@ rgctl -r "$REPO" gql \
 
 ## 9. Inspect CFG / PDG / dominance
 
-`inspect` dumps semantic layers for an **indexed function symbol** (no `--class` flag — use a unique symbol or GQL to pick the right function). Run `discover --with-cfg` first.
+`inspect` dumps semantic layers for an **indexed function symbol**. Prefer a unique name, or the same
+`path/to/file.ts::symbol` / `Class::method` form as `blast-radius`. Run `discover --with-cfg` first.
 
 ```bash
 rgctl -r "$REPO" inspect checkout cfg
+rgctl -r "$REPO" inspect "fixtures/caseB_one.ts::dup" cfg
 ```
 
 ```text
