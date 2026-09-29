@@ -162,20 +162,20 @@ impl GraphBuilder {
             }
             // Ruby method QN uses `#` / `.` (e.g. `OrderDTO#mark_processed`, `OrderService.build`).
             if !is_field_member {
-                if let Some((_, method)) = qualified.rsplit_once('#') {
-                    if !method.is_empty() {
-                        self.symbols_by_suffix
-                            .entry(method.to_string())
-                            .or_default()
-                            .push(node.id);
-                    }
-                } else if let Some((_, method)) = qualified.rsplit_once('.') {
-                    if !method.is_empty() {
-                        self.symbols_by_suffix
-                            .entry(method.to_string())
-                            .or_default()
-                            .push(node.id);
-                    }
+                if let Some((_, method)) = qualified.rsplit_once('#')
+                    && !method.is_empty()
+                {
+                    self.symbols_by_suffix
+                        .entry(method.to_string())
+                        .or_default()
+                        .push(node.id);
+                } else if let Some((_, method)) = qualified.rsplit_once('.')
+                    && !method.is_empty()
+                {
+                    self.symbols_by_suffix
+                        .entry(method.to_string())
+                        .or_default()
+                        .push(node.id);
                 }
             }
         } else {
@@ -236,11 +236,11 @@ impl GraphBuilder {
         if let Some(bytes) = source {
             let content_hash = hash_bytes(bytes);
             node = node.with_property("content_hash".to_string(), content_hash.clone());
-            if bytes.len() > INLINE_BODY_MAX_BYTES {
-                if let Some(store) = self.content_store.as_mut() {
-                    store.insert_bytes(&content_hash, bytes.to_vec());
-                    node = node.with_property("blob_ref".to_string(), content_hash);
-                }
+            if bytes.len() > INLINE_BODY_MAX_BYTES
+                && let Some(store) = self.content_store.as_mut()
+            {
+                store.insert_bytes(&content_hash, bytes.to_vec());
+                node = node.with_property("blob_ref".to_string(), content_hash);
             }
         }
         let id = node.id;
@@ -644,10 +644,10 @@ impl GraphBuilder {
     /// Resolve a file path string to a registered File node (absolute/relative tolerant).
     fn lookup_file_node(&self, path_str: &str, anchor_file: &str) -> Option<Uuid> {
         let target = normalize_file_key(path_str);
-        if !target.is_empty() {
-            if let Some(id) = self.file_path_lookup.get(&target) {
-                return Some(*id);
-            }
+        if !target.is_empty()
+            && let Some(id) = self.file_path_lookup.get(&target)
+        {
+            return Some(*id);
         }
         let anchor = Path::new(anchor_file);
         if let Some(parent) = anchor.parent() {
@@ -786,11 +786,34 @@ impl GraphBuilder {
         };
 
         let target_id = match usage_type {
-            ConfigUsageKind::EnvVar => self.ensure_env_node(key),
-            ConfigUsageKind::ConfigKey => self.ensure_config_key_node(key, file_path),
+            ConfigUsageKind::EnvVar => Some(self.ensure_env_node(key)),
+            // v1: only link when a ConfigKey already exists — do not invent stubs.
+            ConfigUsageKind::ConfigKey => self.find_existing_config_key(key),
+        };
+
+        let Some(target_id) = target_id else {
+            return;
         };
 
         self.add_edge(from_id, target_id, EdgeType::UsesConfig);
+    }
+
+    /// Resolve an already-ingested ConfigKey by exact or normalized key path.
+    fn find_existing_config_key(&self, key: &str) -> Option<Uuid> {
+        let suffix = format!("::{key}");
+        for (lookup, id) in &self.config_key_nodes {
+            if lookup.ends_with(&suffix) || lookup.rsplit("::").next() == Some(key) {
+                return Some(*id);
+            }
+        }
+        let norm = crate::usage_detector::ConfigUsageDetector::normalize_key(key);
+        for (lookup, id) in &self.config_key_nodes {
+            let existing = lookup.rsplit("::").next().unwrap_or(lookup);
+            if crate::usage_detector::ConfigUsageDetector::normalize_key(existing) == norm {
+                return Some(*id);
+            }
+        }
+        None
     }
 
     fn ensure_env_node(&mut self, key: &str) -> Uuid {
@@ -808,6 +831,7 @@ impl GraphBuilder {
         id
     }
 
+    #[allow(dead_code)] // retained for future stub policy / tests
     fn ensure_config_key_node(&mut self, key: &str, file_path: &str) -> Uuid {
         let lookup = format!("{file_path}::{key}");
         if let Some(id) = self.config_key_nodes.get(&lookup) {
@@ -1265,6 +1289,7 @@ fn stub_node_type_for_target(relation: &Relation) -> NodeType {
             "enum" => return NodeType::Enum,
             "function" | "method" => return NodeType::Function,
             "class" | "struct" => return NodeType::Class,
+            "dependency" => return NodeType::Dependency,
             _ => {}
         }
     }

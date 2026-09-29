@@ -1,6 +1,8 @@
 //! Condition evaluators.
 
+pub mod builtin_path;
 pub mod compose;
+pub mod dependency;
 pub mod file;
 pub mod filecontent;
 pub mod go_referenced;

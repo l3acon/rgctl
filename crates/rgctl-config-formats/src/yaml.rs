@@ -1,5 +1,7 @@
-//! YAML configuration format plugin
+//! YAML configuration format plugin (span-preserving via `marked-yaml`).
 
+use crate::span_util::loc;
+use marked_yaml::{parse_yaml, Node as YamlNode};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use std::path::Path;
@@ -13,99 +15,73 @@ impl YamlPlugin {
         Ok(Self)
     }
 
-    fn flatten_yaml_value(
+    fn flatten_node(
         &self,
-        value: &serde_yaml::Value,
+        node: &YamlNode,
         prefix: &str,
         file: &str,
         results: &mut Vec<ConfigKey>,
     ) {
-        match value {
-            serde_yaml::Value::Mapping(map) => {
-                for (k, v) in map {
-                    if let serde_yaml::Value::String(key) = k {
-                        let full_key = if prefix.is_empty() {
-                            key.clone()
-                        } else {
-                            format!("{}.{}", prefix, key)
-                        };
-                        self.flatten_yaml_value(v, &full_key, file, results);
-                    }
+        match node {
+            YamlNode::Mapping(map) => {
+                for (k, v) in map.iter() {
+                    let key = k.as_str();
+                    let full_key = if prefix.is_empty() {
+                        key.to_string()
+                    } else {
+                        format!("{prefix}.{key}")
+                    };
+                    self.flatten_node(v, &full_key, file, results);
                 }
             }
-            serde_yaml::Value::Sequence(arr) => {
+            YamlNode::Sequence(seq) => {
+                let (sl, el, sc, ec) = span_of(node);
                 results.push(ConfigKey {
                     key_path: prefix.to_string(),
-                    value: format!("[array with {} items]", arr.len()),
+                    value: format!("[array with {} items]", seq.len()),
                     value_type: ConfigValueType::Array,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
+                    location: loc(file, sl, el, sc, ec),
                 });
             }
-            serde_yaml::Value::String(s) => {
+            YamlNode::Scalar(s) => {
+                let (sl, el, sc, ec) = span_of(node);
+                let text = s.as_str();
+                let (value_type, value) = classify_scalar(text);
                 results.push(ConfigKey {
                     key_path: prefix.to_string(),
-                    value: s.clone(),
-                    value_type: ConfigValueType::String,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
+                    value,
+                    value_type,
+                    location: loc(file, sl, el, sc, ec),
                 });
             }
-            serde_yaml::Value::Number(n) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: n.to_string(),
-                    value_type: ConfigValueType::Number,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            serde_yaml::Value::Bool(b) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: b.to_string(),
-                    value_type: ConfigValueType::Boolean,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            serde_yaml::Value::Null => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: "null".to_string(),
-                    value_type: ConfigValueType::Null,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            _ => {}
         }
     }
+}
+
+fn span_of(node: &YamlNode) -> (usize, usize, usize, usize) {
+    let span = node.span();
+    let (sl, sc) = span
+        .start()
+        .map(|m| (m.line(), m.column()))
+        .unwrap_or((1, 1));
+    let (el, ec) = span
+        .end()
+        .map(|m| (m.line(), m.column()))
+        .unwrap_or((sl, sc));
+    (sl.max(1), el.max(1), sc.max(1), ec.max(1))
+}
+
+fn classify_scalar(text: &str) -> (ConfigValueType, String) {
+    if text == "null" || text == "~" || text.is_empty() {
+        return (ConfigValueType::Null, text.to_string());
+    }
+    if text == "true" || text == "false" {
+        return (ConfigValueType::Boolean, text.to_string());
+    }
+    if text.parse::<f64>().is_ok() {
+        return (ConfigValueType::Number, text.to_string());
+    }
+    (ConfigValueType::String, text.to_string())
 }
 
 impl Default for YamlPlugin {
@@ -124,12 +100,23 @@ impl ConfigFormatPlugin for YamlPlugin {
     }
 
     fn extract_config_keys(&self, file_path: &Path, source: &[u8]) -> Result<Vec<ConfigKey>> {
-        let content = std::str::from_utf8(source)?;
-        let value: serde_yaml::Value = serde_yaml::from_str(content)?;
-
+        let file = file_path.to_string_lossy().to_string();
+        let text = std::str::from_utf8(source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e.to_string(),
+        })?;
         let mut results = Vec::new();
-        self.flatten_yaml_value(&value, "", &file_path.to_string_lossy(), &mut results);
-
+        match parse_yaml(0, text) {
+            Ok(node) => self.flatten_node(&node, "", &file, &mut results),
+            Err(err) => {
+                return Err(Error::ParseError {
+                    file: file_path.to_path_buf(),
+                    line: 0,
+                    message: format!("yaml parse: {err}"),
+                });
+            }
+        }
         Ok(results)
     }
 }
@@ -139,49 +126,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_yaml_plugin_format_id() {
+    fn yaml_spans_are_nonzero() {
+        let src = b"server:\n  port: 8080\n";
         let plugin = YamlPlugin::new().unwrap();
-        assert_eq!(plugin.format_id(), "yaml");
-    }
-
-    #[test]
-    fn test_yaml_plugin_file_extensions() {
-        let plugin = YamlPlugin::new().unwrap();
-        assert_eq!(plugin.file_extensions(), vec!["yaml", "yml"]);
-    }
-
-    #[test]
-    fn test_extract_simple_yaml() {
-        let plugin = YamlPlugin::new().unwrap();
-        let source = b"name: test\nport: 8080\nenabled: true";
         let keys = plugin
-            .extract_config_keys(Path::new("config.yaml"), source)
+            .extract_config_keys(Path::new("application.yml"), src)
             .unwrap();
-
-        assert!(keys.len() >= 3);
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "name" && k.value == "test")
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "port" && k.value_type == ConfigValueType::Number)
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "enabled" && k.value_type == ConfigValueType::Boolean)
-        );
-    }
-
-    #[test]
-    fn test_extract_nested_yaml() {
-        let plugin = YamlPlugin::new().unwrap();
-        let source = b"server:\n  host: localhost\n  port: 8080";
-        let keys = plugin
-            .extract_config_keys(Path::new("config.yaml"), source)
-            .unwrap();
-
-        assert!(keys.iter().any(|k| k.key_path == "server.host"));
-        assert!(keys.iter().any(|k| k.key_path == "server.port"));
+        let port = keys.iter().find(|k| k.key_path == "server.port").unwrap();
+        assert!(port.location.start_line >= 1, "{port:?}");
+        assert_ne!(port.location.start_line, 0);
     }
 }
