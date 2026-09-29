@@ -6,6 +6,7 @@ use super::inspect_output::{inspect_cfg_json, inspect_dom_json, inspect_pdg_json
 use super::markup::markup_context_unsupported;
 use crate::analysis::{DominatorTree, ProgramDependenceGraph, build_cfg_for_function};
 use anyhow::Result;
+use rgctl_graph::backend::GraphBackend;
 use std::path::Path;
 
 pub struct InspectArgs {
@@ -20,7 +21,8 @@ pub fn run(ctx: &CliContext, args: InspectArgs) -> Result<()> {
         anyhow::bail!(msg);
     }
     let lang = language_from_path(Path::new(file));
-    let mut cfg = build_cfg_for_function(&lang, &source, &node.name)?;
+    let display_name = node.name.as_str();
+    let mut cfg = build_cfg_for_function(&lang, &source, display_name)?;
     let pdg = ProgramDependenceGraph::build(&cfg, source.as_bytes())?;
     let dom = DominatorTree::build(&cfg);
 
@@ -31,7 +33,7 @@ pub fn run(ctx: &CliContext, args: InspectArgs) -> Result<()> {
             }
             match ctx.format {
                 OutputFormat::Json => {
-                    let response = inspect_cfg_json(&args.symbol, &cfg, prune);
+                    let response = inspect_cfg_json(display_name, &cfg, prune);
                     ctx.emit_json_value(&serde_json::to_value(&response)?)?;
                 }
                 OutputFormat::Mermaid => {
@@ -43,7 +45,7 @@ pub fn run(ctx: &CliContext, args: InspectArgs) -> Result<()> {
                 OutputFormat::Text => {
                     println!(
                         "CFG for {}: {} blocks, {} edges",
-                        args.symbol,
+                        display_name,
                         cfg.blocks.len(),
                         cfg.edges.len()
                     );
@@ -60,12 +62,12 @@ pub fn run(ctx: &CliContext, args: InspectArgs) -> Result<()> {
                 PdgEdgeLayer::Control => (0, pdg.control_deps.len()),
             };
             if ctx.format == OutputFormat::Json {
-                let response = inspect_pdg_json(&args.symbol, &pdg, def_use, data, control);
+                let response = inspect_pdg_json(display_name, &pdg, def_use, data, control);
                 ctx.emit_json_value(&serde_json::to_value(&response)?)?;
             } else {
                 println!(
                     "PDG for {}: {} nodes, {} data deps, {} control deps",
-                    args.symbol,
+                    display_name,
                     pdg.nodes.len(),
                     data,
                     control
@@ -74,12 +76,12 @@ pub fn run(ctx: &CliContext, args: InspectArgs) -> Result<()> {
         }
         InspectLayer::Dom { frontiers } => {
             if ctx.format == OutputFormat::Json {
-                let response = inspect_dom_json(&args.symbol, &cfg, &dom, frontiers);
+                let response = inspect_dom_json(display_name, &cfg, &dom, frontiers);
                 ctx.emit_json_value(&serde_json::to_value(&response)?)?;
             } else if ctx.format == OutputFormat::Mermaid {
                 ctx.emit(&dom_to_mermaid(&dom))?;
             } else {
-                println!("Dominators for {}: {} blocks", args.symbol, dom.idom.len());
+                println!("Dominators for {}: {} blocks", display_name, dom.idom.len());
                 if frontiers {
                     for (block, frontier) in &dom.frontiers {
                         if !frontier.is_empty() {
@@ -122,12 +124,42 @@ fn resolve_symbol_function(
     ctx: &CliContext,
     symbol: &str,
 ) -> Result<(rgctl_graph::schema::Node, String)> {
+    use rgctl_analysis::{candidates_from_backend, parse_fqn_symbol, resolve_symbol_uuid};
     use rgctl_graph::schema::NodeType;
     use std::fs;
 
+    let parsed = parse_fqn_symbol(symbol, None, None);
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
-    let matches = backend.find_nodes_by_name(symbol)?;
+
+    // Prefer shared FQN resolution (path::symbol / Class::method) used by blast-radius.
+    let candidates = candidates_from_backend(backend, &parsed.target_name)?;
+    if !candidates.is_empty() {
+        match resolve_symbol_uuid(&candidates, &parsed) {
+            Ok(id) => {
+                let node = backend
+                    .get_node(id)?
+                    .ok_or_else(|| anyhow::anyhow!("function symbol not found: {symbol}"))?;
+                let file = node
+                    .file_path
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("function has no file path"))?;
+                let source = fs::read_to_string(&file)?;
+                return Ok((node, source));
+            }
+            Err(rgctl_error::Error::AmbiguousSymbol { name, count }) => {
+                anyhow::bail!(
+                    "Symbol '{name}' is ambiguous. Found {count} matches. \
+                     Refine with path syntax: rgctl inspect \"path/to/file.ts::{name}\" cfg"
+                );
+            }
+            Err(rgctl_error::Error::NotFound(_)) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    // Legacy fallback: bare name or suffix match when FQN filters yield nothing.
+    let matches = backend.find_nodes_by_name(&parsed.target_name)?;
     let node = matches
         .into_iter()
         .find(|n| n.node_type == NodeType::Function)
@@ -136,7 +168,11 @@ fn resolve_symbol_function(
                 .all_nodes()
                 .ok()?
                 .into_iter()
-                .find(|n| n.name == symbol || n.name.ends_with(symbol))
+                .find(|n| {
+                    n.node_type == NodeType::Function
+                        && (n.name == parsed.target_name
+                            || n.name.ends_with(&parsed.target_name))
+                })
         })
         .ok_or_else(|| anyhow::anyhow!("function symbol not found: {symbol}"))?;
     let file = node

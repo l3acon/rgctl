@@ -282,6 +282,80 @@
         "min_blocks": 6,
         "statements_contain": []
       }
+    },
+    "caseGamma": {
+      "match": {
+        "name": "gamma"
+      },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "gamma",
+        "file_suffix": "caseC2.js"
+      },
+      "cfg": {
+        "exact_block_count": 2,
+        "exact_edge_count": 1
+      }
+    },
+    "caseUniqueOne": {
+      "match": {
+        "name": "uniqueOne"
+      },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "uniqueOne",
+        "file_suffix": "caseB_one.js"
+      },
+      "exact_callees": [
+        "dup"
+      ],
+      "cfg": {
+        "min_blocks": 2
+      }
+    },
+    "caseUniqueDecl": {
+      "match": {
+        "name": "uniqueDecl"
+      },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "uniqueDecl",
+        "file_suffix": "caseB_one.js"
+      },
+      "cfg": {
+        "min_blocks": 2
+      }
+    },
+    "caseDupOne": {
+      "match": {
+        "name": "dup"
+      },
+      "severity": "required",
+      "unique": false,
+      "identity": {
+        "exact_name": "dup",
+        "file_suffix": "caseB_one.js"
+      },
+      "cfg": {
+        "min_blocks": 2
+      }
+    },
+    "caseArrowAdd": {
+      "match": {
+        "name": "arrowAdd"
+      },
+      "severity": "required",
+      "unique": true,
+      "identity": {
+        "exact_name": "arrowAdd",
+        "file_suffix": "namedArrows.js"
+      },
+      "cfg": {
+        "min_blocks": 2
+      }
     }
   },
   "invariants": {
@@ -303,7 +377,10 @@
       "symbols": [
         "correctnessRoot",
         "correctnessMid",
-        "correctnessLeaf"
+        "correctnessLeaf",
+        "caseUniqueOne",
+        "caseGamma",
+        "caseArrowAdd"
       ]
     },
     "B6_cfg_calls_subset_of_calls_edges": {

@@ -88,16 +88,17 @@ impl JavaScriptPlugin {
                 }
             });
 
-        // Infer types for parameters
-        let function_source = node.utf8_text(source).unwrap_or("");
-        let inferencer = TypeInferencer::new();
-        let inferred_types = inferencer.infer_javascript(function_source);
-
-        // Update parameters with inferred types
-        for param in &mut parameters {
-            if param.param_type.is_none() {
-                if let Some(inference) = inferred_types.get(&param.name) {
-                    param.param_type = Some(format!("{:?}", inference.inferred));
+        // Skip regex-based inference when there are no params (common for arrows /
+        // keyword-filtered nodes). Compiling/running inference per function was a
+        // Node-corpus hot-path cost (AGENTS.md clone / CPU discipline).
+        if !parameters.is_empty() {
+            let function_source = node.utf8_text(source).unwrap_or("");
+            let inferred_types = TypeInferencer::new().infer_javascript(function_source);
+            for param in &mut parameters {
+                if param.param_type.is_none() {
+                    if let Some(inference) = inferred_types.get(&param.name) {
+                        param.param_type = Some(format!("{:?}", inference.inferred));
+                    }
                 }
             }
         }
