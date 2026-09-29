@@ -34,4 +34,8 @@ FQN conventions:
 - **F6 waiver:** Puppet has no OOP field-write mutation shape comparable to Java `obj.field =`; golden `cpg mutations` is deferred. F1 (parameter fields) and F3 (typed params) are enforced in plugin unit tests.
 - Ruby plugin indexes `.rb` only — does not substitute for Puppet DSL
 
+## Cold profile Gate B
+
+No default ~10k `.pp` corpus is fetched yet. When available, set `RGCTL_PUPPET_REPO` and add `*_cold_discover_within_baseline` (see `scripts/fetch-profile-repos.sh` note). Gate A (Linux) remains mandatory for scale-sensitive merges.
+
 See also: [languages/puppet.md](languages/puppet.md) · [tier-1-language-support.md](tier-1-language-support.md) · OpenSpec `add-puppet-tier1-language-support`.

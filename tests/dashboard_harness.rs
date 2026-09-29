@@ -74,6 +74,13 @@ pub fn default_ruby_repo() -> PathBuf {
         .unwrap_or_else(|_| in_tree_ecommerce("ecommerce-ruby"))
 }
 
+/// Default Puppet ecommerce test repo (override with env).
+pub fn default_puppet_repo() -> PathBuf {
+    env_rg("ECOMMERCE_PUPPET_REPO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| in_tree_ecommerce("ecommerce-puppet"))
+}
+
 pub fn golden_repo_path() -> PathBuf {
     env_rg("DASHBOARD_GOLDEN_REPO")
         .map(PathBuf::from)

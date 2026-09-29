@@ -97,6 +97,10 @@ clone_if_missing "https://github.com/microsoft/vscode.git" "$EXAMPLE_DIR/vscode"
 clone_if_missing "https://github.com/dotnet/roslyn.git" "$EXAMPLE_DIR/roslyn" 1
 clone_sparse_llvm_clang_if_missing "$EXAMPLE_DIR/llvm-project"
 
+# Puppet Gate B (~10⁴ .pp): deferred — no default monorepo yet.
+# Override when baselining: RGCTL_PUPPET_REPO=/path/to/puppet/modules
+# Suggested candidates: OpenStack puppet-* modules or a Forge module bundle under example/puppet.
+
 clone_sparse_node_test_if_missing() {
   local dest="$1"
   local tmp="$TMP_DIR/node-clone"

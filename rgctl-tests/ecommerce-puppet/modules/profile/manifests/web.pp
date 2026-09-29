@@ -15,4 +15,5 @@ class profile::web (
     command => $cmd,
     path    => ['/bin', '/usr/bin'],
   }
+  profile::helpers::ok()
 }

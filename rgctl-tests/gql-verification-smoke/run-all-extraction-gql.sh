@@ -11,6 +11,7 @@ LANGS=(
   java
   javascript
   php
+  puppet
   python
   ruby
   rust
