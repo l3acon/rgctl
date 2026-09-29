@@ -1187,6 +1187,7 @@ fn symbol_type_to_node_type(symbol_type: SymbolType) -> NodeType {
         SymbolType::PuppetResource => NodeType::PuppetResource,
         SymbolType::PuppetVariable => NodeType::PuppetVariable,
         SymbolType::PuppetFact => NodeType::PuppetFact,
+        SymbolType::PuppetNode => NodeType::PuppetNode,
     }
 }
 

@@ -136,6 +136,19 @@ const PROFILES: &[LanguageAnalysisProfile] = &[
         cfg_enabled: true,
         taint_enabled: true,
     },
+    LanguageAnalysisProfile {
+        id: "puppet",
+        aliases: &["pp"],
+        extensions: &["pp"],
+        function_kinds: &[
+            "function_declaration",
+            "class_definition",
+            "defined_resource_type",
+            "node_definition",
+        ],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
 ];
 
 /// Return the profile for a canonical id or alias.
@@ -206,6 +219,7 @@ fn grammar_for(profile: &LanguageAnalysisProfile) -> Result<Language> {
         "typescript" => Ok(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
         "php" => Ok(tree_sitter_php::LANGUAGE_PHP.into()),
         "ruby" => Ok(tree_sitter_ruby::LANGUAGE.into()),
+        "puppet" => Ok(tree_sitter_puppet::LANGUAGE.into()),
         other => Err(Error::UnsupportedLanguage(other.to_string())),
     }
 }
@@ -274,6 +288,14 @@ mod tests {
         let list = cfg_language_list();
         assert!(list.contains("go"));
         assert!(list.contains("java"));
+    }
+
+    #[test]
+    fn puppet_extension_maps_to_puppet() {
+        assert_eq!(
+            cfg_language_id_from_path(Path::new("modules/nginx/manifests/init.pp")),
+            Some("puppet")
+        );
     }
 
     #[test]

@@ -15,6 +15,7 @@ rgctl indexes source through **Tier 1 custom language plugins** (`LanguagePlugin
 | [Java](java.md) | `.java` | `verify-extraction-gql-java.sh` |
 | [JavaScript](javascript.md) | `.js`, `.jsx`, `.mjs` | `verify-extraction-gql-javascript.sh` |
 | [PHP](php.md) | `.php` | `verify-extraction-gql-php.sh` |
+| [Puppet](puppet.md) | `.pp` | (pending `puppet_langfeatures`) |
 | [Python](python.md) | `.py`, `.pyw` | `verify-extraction-gql-python.sh` |
 | [Ruby](ruby.md) | `.rb`, `.rake`, … | `verify-extraction-gql-ruby.sh` |
 | [Rust](rust.md) | `.rs` | `verify-extraction-gql-rust.sh` |
