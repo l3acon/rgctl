@@ -84,7 +84,14 @@ export default function HomePage() {
             </b>
             .
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <TerminalBlock
+            className="mt-8 max-w-3xl"
+            lines={[
+              "rgctl --version",
+              "rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents",
+            ]}
+          />
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <Button size="lg" asChild>
               <Link href="/install/">
                 Install <ArrowRight className="h-4 w-4" />
