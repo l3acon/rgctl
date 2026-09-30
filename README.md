@@ -1,179 +1,153 @@
-# Reachability Graph Control (rgctl)
+# rgctl
 
-**A code knowledge graph built for LLM agents — accurate answers, minimal tokens, maximum speed.**
+**Code knowledge graph for humans and LLM agents.**
 
-> **rgctl** indexes your repository once, then answers reachability and structure questions in compact JSON — so coding agents use fewer tokens and make fewer confident mistakes.
+[![Release](https://img.shields.io/github/v/release/sshaaf/rgctl?style=for-the-badge&logo=github&color=0ea5e9)](https://github.com/sshaaf/rgctl/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/sshaaf/rgctl/total?style=for-the-badge&logo=github&color=22c55e)](https://github.com/sshaaf/rgctl/releases)
+[![Stars](https://img.shields.io/github/stars/sshaaf/rgctl?style=for-the-badge&logo=github)](https://github.com/sshaaf/rgctl/stargazers)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
-AI coding agents default to reading files sequentially. That burns context, misses structure, and produces confident wrong answers about impact and dependencies. **rgctl indexes the whole repository once** into a rich graph with pre-computed **reachability**, then serves **compact, deterministic query results** — so agents (and humans) get the right slice of the codebase without loading it into the prompt.
+[![Docs](https://img.shields.io/badge/docs-shaaf.dev%2Frgctl-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://shaaf.dev/rgctl)
+[![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl/website.yml?branch=main&style=flat-square&label=website)](https://shaaf.dev/rgctl)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
+[![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
+[![JSON-first](https://img.shields.io/badge/-f%20json-agent%20ready-0f766e?style=flat-square)](docs/json-api.md)
+[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](docs/guides/agent-commands.md)
+[![Tier 1](https://img.shields.io/badge/languages-14%20Tier%201-8b5cf6?style=flat-square)](docs/languages/README.md)
 
+[![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=black)](docs/languages/README.md)
+[![C++](https://img.shields.io/badge/C%2B%2B-00599C?style=flat-square&logo=cplusplus&logoColor=white)](docs/languages/README.md)
+[![C#](https://img.shields.io/badge/C%23-512BD4?style=flat-square&logo=csharp&logoColor=white)](docs/languages/README.md)
+[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](docs/languages/README.md)
+[![Groovy](https://img.shields.io/badge/Groovy-4298B8?style=flat-square&logo=apachegroovy&logoColor=white)](docs/languages/README.md)
+[![Java](https://img.shields.io/badge/Java-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](docs/languages/README.md)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](docs/languages/README.md)
+[![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](docs/languages/README.md)
+[![PHP](https://img.shields.io/badge/PHP-777BB4?style=flat-square&logo=php&logoColor=white)](docs/languages/README.md)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)](docs/languages/README.md)
+[![Ruby](https://img.shields.io/badge/Ruby-CC342D?style=flat-square&logo=ruby&logoColor=white)](docs/languages/README.md)
+[![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](docs/languages/README.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](docs/languages/README.md)
+[![Puppet](https://img.shields.io/badge/Puppet-FFAE1A?style=flat-square&logo=puppet&logoColor=black)](docs/languages/README.md)
+[![Markdown](https://img.shields.io/badge/Markdown-000000?style=flat-square&logo=markdown&logoColor=white)](docs/markdown-context.md)
+
+> Index once (`discover`), then ask callers, impact, communities, and slices — compact deterministic JSON for agents, not grepping the tree.
+
+**What the R stands for:** **R**ust · **R**eachability · **R**ich graph (30+ typed relations).
+
+```bash
+rgctl discover .
+rgctl -f json blast-radius MyService
+rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b) RETURN a,b LIMIT 20'
+```
 
 https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
 
-
 ---
 
-## Built for agents
+## Try it (5 minutes)
 
-**Goal:** make LLM-assisted development **more accurate** while **using fewer tokens**. Anyone can use it directly via the CLI, or drop it into an IDE (Cursor, Aider, OpenHands, etc.) to give the model superhuman architectural awareness.
+### 1. Install
 
-| Without rgctl | With rgctl |
-| --- | --- |
-| Agent reads dozens of files to guess dependencies | Agent calls `blast-radius Symbol` → structured impact JSON |
-| “What calls this?” requires search + inference | `gql` returns exact graph matches |
-| Migration planning from partial context | **Migration planner** — package roadmap, dual ordering, tunable scores |
-| Repeated file dumps every turn | One `discover`, then queries via CLI `-f json` or HTTP `serve` |
+**Release binary** (recommended): download `rgctl` for your OS from  
+[GitHub Releases](https://github.com/sshaaf/rgctl/releases/latest), unpack it, put it on your `PATH`.
 
-The LLM reasons on **summaries and facts**, not raw repo grep — fewer tokens, less hallucination, faster turns. Primary agent outputs use `-f json` on `discover`, `gql`, `blast-radius`, `metrics`, `semantic`, and `slice`. See the **[JSON API](docs/json-api.md)**.
+```bash
+rgctl --version
+```
 
----
-
-## Quick Start
-
-**1. Install** from [GitHub Releases](https://github.com/sshaaf/rgctl/releases/latest) (binary **`rgctl`**) or build from source ([Installation docs](docs/installation.md) — glibc / Ubuntu 22.04 caveat, Rust **1.88+**, and `--no-default-features` if ONNX/`ort` link fails):
+**Or build from source** (Rust **1.88+**):
 
 ```bash
 git clone https://github.com/sshaaf/rgctl.git
 cd rgctl
-git lfs pull   # only if you use `semantic index --embedder code-daemon` (~206 MB)
 cargo build --release --bin rgctl
-# If ort-sys fails: cargo build --release --bin rgctl --no-default-features
+# If ort/ONNX link fails: add --no-default-features
+export PATH="$PWD/target/release:$PATH"
 ```
-**2. Discover (Index your repo):**
-Run this once to build the graph and reachability caches. Artifacts land in `{repo}/.rgctl/`.
+
+Details, PATH, and troubleshooting: **[Installation](docs/installation.md)**.
+
+### 2. Index the in-tree demo
 
 ```bash
-cd your-project-repo
-rgctl discover .  # Runs in seconds
-
+cd rgctl-tests/ecommerce-java   # from this repo, or any project you care about
+rgctl discover . --with-cfg
 ```
-For more details on commands and different options, see **[Command reference](docs/user-guide.md)**.
-*(Upgrading from an old daemon install? `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/` into the repo.)*
 
-**3. Query (Ask the graph):**
-Get compact, exact answers instead of file dumps:
+Artifacts land in `{repo}/.rgctl/`. Re-run `discover` after large code changes.
+
+### 3. Ask the graph
 
 ```bash
-# Graph inventory for the agent
+# Inventory
 rgctl -f json gql 'MATCH (n:Function) RETURN n LIMIT 10'
 
-# Impact — critical before the agent edits a symbol
-rgctl -f json blast-radius ShoppingCartService
+# Impact before you edit a symbol
+rgctl -f json blast-radius ProductService
 
-# Advanced: Program slicing / taint analysis (requires `discover --with-cfg`)
-rgctl slice src/Foo.java --line 42 --variable x
-
+# Call edges
+rgctl -f json gql 'MATCH (a)-[:CALLS]->(b) RETURN a,b LIMIT 20'
 ```
 
-**🤖 Using with LLM IDEs?**
-Install the embedded pack: `rgctl install --skill --with-commands --tools cursor,claude,codex,agents` (see **[Agent commands](docs/guides/agent-commands.md)** and the **[Agent skill](skills/rgctl/SKILL.md)** playbook). Optional paste template for *your* repo: **[USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md)**. Contributing to rgctl itself: **[AGENTS.md](AGENTS.md)**.
+Always prefer **`-f json`** for agents and scripts ([JSON API](docs/json-api.md)). Do not scrape stderr.
 
 ---
 
-## Architecture & Speed
+## Use with coding agents
 
-rgctl is **async and parallel by design** — discovery walks the tree, parses languages concurrently, and builds analytics on the graph in parallel using Rust (Rayon + Tokio).
+Install the bundled pack (skills + slash commands) into your IDE tooling:
 
-The tool follows a fast, two-step model: **Index once → Query many times.**
-
-```text
- 1. Indexing (Run Once):
-    Your Repository ──(rgctl discover)──> {repo}/.rgctl/ (Compact Caches)
-
- 2. Querying (Run Many Times):
-    LLM Agent ──(rgctl blast-radius)──> {repo}/.rgctl/ ──(JSON Facts)──> LLM Agent
-                (or HTTP serve for /api/query)
-
+```bash
+rgctl install --skill --with-commands --tools cursor,claude,codex,agents
 ```
 
-**What the R stands for:**
-
-* **Rust:** Memory-safe, predictable performance at scale without blowing the heap.
-* **Reachability:** Pre-computed sparse bitsets keep “what breaks if I change this?” queries sub-second.
-* **Rich graph:** 30+ typed relations (CALLS, IMPORTS, CONTAINS), not just files and folders.
-
-*(Algorithm details: crate READMEs under `crates/rgctl-analysis/` and [CLI I/O sanity QE](docs/cli-io-sanity-qe.md) for automated perf gates.)*
+Then: **discover once → query with `-f json`**. See [Agent commands](docs/guides/agent-commands.md).  
+For *your* application repo, optionally paste [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) as `AGENTS.md`.
 
 ---
 
-## Where most tools stop
+## What it does
 
-Most codebase tools stop at text search or a shallow call graph. rgctl goes further — compiler-grade structure and security analysis, pre-computed at index time.
+| You need… | Command |
+|-----------|---------|
+| Build the graph | `discover` |
+| Exact structure queries | `gql` |
+| “What breaks if I change X?” | `blast-radius` |
+| CFG / data-flow / taint | `slice`, `inspect`, `cpg` (need `discover --with-cfg`) |
+| Hotspots / clusters | `metrics`, `communities` |
+| NL search over functions | `semantic` (opt-in index) |
+| CI gates | `check`, `pr-check` |
+| Snapshot compare | `diff` |
+| Browser UI + HTTP API | `discover --with-dashboard` then `serve` |
 
-| Feature | What it gives you | Design doc |
-| --- | --- | --- |
-| **Semantic search** | **Natural-language search** over functions — vocab, code-daemon, or hash. | [semantic-search-design.md](docs/design/semantic-search-design.md) |
-| **Blast radius** | Pre-computed **reachability** — upstream impact, scores, policy gates. | [blast-radius-design.md](docs/design/blast-radius-design.md) |
-| **Program slicing** | **Backward / forward slice** — statements affecting a line/variable. | [program-slicing-design.md](docs/design/program-slicing-design.md) |
-| **Taint analysis** | **Source → sink** flows (HTTP params → SQL, shell) with sanitizer awareness. | [taint-analysis-design.md](docs/design/taint-analysis-design.md) |
-| **CFG & PDG** | **Control-flow** & **Program dependence graphs** per function. | [cfg-design.md](docs/design/cfg-design.md) / [pdg-design.md](docs/design/pdg-design.md) |
-| **Dominance** | **Dominator trees** — structures compilers use for advanced analysis. | [dominance-design.md](docs/design/dominance-design.md) |
-| **Hybrid CPG** | **Unified façade** over CALL graph + CFG/PDG (`cpg`). | [hybrid-cpg-plan.md](docs/design/hybrid-cpg-plan.md) |
-| **GQL** | **Graph query language** over 30+ relation types. | [gql-design.md](docs/design/gql-design.md) |
-| **Graph metrics** | **PageRank, betweenness, communities** (label propagation). | [graph-metrics-design.md](docs/design/graph-metrics-design.md) |
-| **Migration planner** | **Package-level roadmap** — dependency-aware schedule and priority rank. | [migration-planner-design.md](docs/design/migration-planner-design.md) |
-| **Kantra migration rules** | **Konveyor rule evaluation** — embedded catalog, violations JSON, GQL `VIOLATES`, dashboard Migration Rules tab. | [user guide §4](docs/user-guide.md#kantra-migration-rules---with-kantra) · [rgctl-kantra](crates/rgctl-kantra/README.md) |
-| **CI policy checks** | **`check`** — fail builds on blast-radius violations. | [ci-policy-checks-design.md](docs/design/ci-policy-checks-design.md) |
-
-*(Deep dive → [Introduction](docs/Introduction.md) · [User Guide](docs/user-guide.md) · [Feature designs](docs/design/README.md))*
+Step-by-step feature guides (CoolStore): **[docs/guides](docs/guides/README.md)**.  
+Concepts: **[Introduction](docs/Introduction.md)**. Full CLI walkthrough: **[User Guide](docs/user-guide.md)**.
 
 ---
 
-## Code Migrations & Advanced Analysis
+## Languages
 
-rgctl ships with deep, enterprise-ready features for heavy modernization workloads.
+Tier 1 plugins: **C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript**, plus **markdown**.
 
-* **Migration Planner:** Run `discover --with-cfg --with-security --with-taint --export-migration-hints` to generate a tunable, package-level `.rgctl/migration_plan.json`. This uses PageRank, harmonic centrality, and blast radius to prioritize what to move first. Read more in **[Building a migration plan](docs/building-migration-plan.md)** and the **[Migration planner design](docs/design/migration-planner-design.md)**.
-* **Konveyor Kantra Rules:** For Java migrations, `discover --with-kantra` evaluates ~2.6k embedded migration rules. See [user guide §4](docs/user-guide.md#kantra-migration-rules---with-kantra) and [rgctl-kantra](crates/rgctl-kantra/README.md).
-* **Community Detection:** Analyzes architectural hotspots using label propagation. Read the exact implementation details in **[Graph metrics — community naming](docs/design/graph-metrics-design.md#31-community-detection-naming)**.
-* **Dashboard:** Add `--with-dashboard` during discovery to explore these metrics visually via `rgctl serve`. See the [dashboard user guide](docs/dashboard-user-guide.md).
-
-*(Walkthrough on the in-tree Spring Boot fixture → **[ecommerce-java example](docs/user-guide.md#3-example-project-ecommerce-java)**. Research map for underlying papers → **[Further reading](docs/further-reading.md#research-foundations-in-rgctl)**).*
+Support matrix is generated from `*-ast-coverage.json` — see [Languages](docs/languages/README.md).
 
 ---
 
-## Command Reference
+## Docs
 
-| Command | User Guide Link |
-| --- | --- |
-| `discover` | [§4 Index with discover](docs/user-guide.md#4-index-with-discover) |
-| `gql` | [§6 Query the graph with GQL](docs/user-guide.md#6-query-the-graph-with-gql) |
-| `blast-radius` | [§7 Blast radius](docs/user-guide.md#7-blast-radius-change-impact) |
-| `slice` | [§8 Program slicing and taint](docs/user-guide.md#8-program-slicing-and-taint) |
-| `inspect` | [§9 Inspect CFG / PDG / dominance](docs/user-guide.md#9-inspect-cfg--pdg--dominance) |
-| `metrics` | [§11 Graph metrics](docs/user-guide.md#11-graph-metrics) |
-| `semantic` | [§12 Semantic search](docs/user-guide.md#12-semantic-search) |
-| `communities` | [§6 GQL](docs/user-guide.md#6-query-the-graph-with-gql) · [§11 metrics](docs/user-guide.md#11-graph-metrics) |
-| `cpg` | [§10 Hybrid CPG](docs/user-guide.md#10-hybrid-cpg-cpg) |
-| `export` | [§13 Export](docs/user-guide.md#13-export-graph-projections) |
-| `check` | [§14 CI policy check](docs/user-guide.md#14-ci-policy-check) |
-| `serve` | [§15 HTTP server](docs/user-guide.md#15-http-server-serve--optional) |
-
-**Languages supported:** Ten Tier 1 languages (Rust, Python, Java, Go, TypeScript, JavaScript, C#, C, C++, PHP) plus config/IaC plugins and markdown. See [Languages](docs/languages/README.md) and [Markdown context](docs/markdown-context.md).
-
----
-
-## Documentation Directory
-
-| Document | For |
-| --- | --- |
-| **[Documentation index](docs/README.md)** | Map of all docs by persona |
-| **[Installation](docs/installation.md)** | Install rgctl, CLI / HTTP modes, verify setup |
-| **[v0.4.10 release notes](docs/releases/v0.4.10.md)** | PHP Tier 1 language support (CFG, taint, CPG parity) |
-| **[v0.4.9 release notes](docs/releases/v0.4.9.md)** | Kantra migration rules, CLI-first artifacts, daemon/MCP removed |
-| **[v0.4.8 release notes](docs/releases/v0.4.8.md)** | Agent docs (historical — daemon era) |
-| **[Introduction](docs/Introduction.md)** | Concepts — graph, reachability, capability map |
-| **[User Guide](docs/user-guide.md)** | ecommerce-java fixture, every CLI command |
-| **[Agent skill](skills/rgctl/SKILL.md)** | **Canonical agent playbook** — NL routing + CLI samples |
-| **[USER_AGENTS_TEMPLATE](docs/agents/USER_AGENTS_TEMPLATE.md)** | Paste into *other* repos as `AGENTS.md` (use rgctl) |
-| **[AGENTS.md](AGENTS.md)** | Contributor agent README for this repository |
-| **[Agent recipes](docs/agent-recipes.md)** | Copy-paste automation workflows |
-| **[JSON API](docs/json-api.md)** | Parse `-f json` payloads + field catalogs |
-| **[HTTP API](docs/http-api.md)** | `rgctl serve` → `/api/query` and `/api/semantic/*` |
-| **[Policy format](docs/policy-format.md)** | `check` / blast policy JSON |
-| **[CONTRIBUTING.md](CONTRIBUTING.md)** | Dev setup and PR expectations |
-| **[Releasing](docs/releasing.md)** | Tags and GitHub Releases *(contributors)* |
-
-*(For design docs, QE testing, and advanced implementation details, check the [Where most tools stop](#where-most-tools-stop) section above).*
+| Doc | For |
+|-----|-----|
+| [Installation](docs/installation.md) | Install, verify, PATH |
+| [Introduction](docs/Introduction.md) | What / why / capability map |
+| [Guides](docs/guides/README.md) | Feature how-tos |
+| [User Guide](docs/user-guide.md) | ecommerce-java + every command |
+| [JSON API](docs/json-api.md) | `-f json` shapes |
+| [Docs index](docs/README.md) | Full map |
+| [AGENTS.md](AGENTS.md) | Contributing to *this* repo |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup / PRs |
+| [Latest release](docs/releases/v0.4.16.md) | Changelog |
 
 ---
 

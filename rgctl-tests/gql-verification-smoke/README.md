@@ -4,7 +4,7 @@ Per-language shell scripts that verify extraction-depth GQL probes and core rgct
 
 See [rgctl-tests README — Extraction-depth GQL](../README.md#extraction-depth-gql--rgctl-command-verification) for the full command matrix and example corpora.
 
-Published language guides (implementation + GQL queries): [docs/languages/](../../docs/languages/README.md).
+Published language support matrix (from coverage JSON): [docs/languages/](../../docs/languages/README.md).
 
 ## Usage
 
