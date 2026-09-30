@@ -1,6 +1,4 @@
-# rgctl
-
-**Code knowledge graph for humans and LLM agents.**
+# rgctl - Code knowledge graph for LLM agents.
 
 [![Release](https://img.shields.io/github/v/release/sshaaf/rgctl?style=for-the-badge&logo=github&color=0ea5e9)](https://github.com/sshaaf/rgctl/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/sshaaf/rgctl/total?style=for-the-badge&logo=github&color=22c55e)](https://github.com/sshaaf/rgctl/releases)
@@ -12,9 +10,8 @@
 [![Rust](https://img.shields.io/badge/rust-1.88%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
-[![JSON-first](https://img.shields.io/badge/-f%20json-agent%20ready-0f766e?style=flat-square)](docs/json-api.md)
-[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](docs/guides/agent-commands.md)
-[![Tier 1](https://img.shields.io/badge/languages-14%20Tier%201-8b5cf6?style=flat-square)](docs/languages/README.md)
+[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-commands/)
+[![Tier 1](https://img.shields.io/badge/languages-14%20Tier%201-8b5cf6?style=flat-square)](https://shaaf.dev/rgctl/docs/languages/)
 
 [![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=black)](docs/languages/README.md)
 [![C++](https://img.shields.io/badge/C%2B%2B-00599C?style=flat-square&logo=cplusplus&logoColor=white)](docs/languages/README.md)
@@ -40,6 +37,9 @@
 rgctl discover .
 rgctl -f json blast-radius MyService
 rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b) RETURN a,b LIMIT 20'
+
+# Use with your favorite LLM agent
+rgctl install --skill --with-commands --tools cursor,claude,codex,agents
 ```
 
 https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
