@@ -8,7 +8,7 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 |------|--------|
 | Install rgctl + choose operating mode | **[Installation](installation.md)** |
 | Step-by-step feature how-tos (CoolStore) | **[Guides](guides/README.md)** |
-| Per-language extraction + GQL probes | **[Languages](languages/README.md)** |
+| Per-language AST coverage (website from JSON) | **[Languages](languages/README.md)** · `*-ast-coverage.json` |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) — rules, cold profiles, tests/benches |
 | Use rgctl with LLM IDEs | [Agent commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [Agent recipes](agent-recipes.md) |
 | JSON shapes (`schema_version`, fields) | [JSON API](json-api.md) |
@@ -28,7 +28,7 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 
 | Goal | Doc |
 |------|-----|
-| Supported languages | [Languages](languages/README.md) |
+| Supported languages | [Languages](languages/README.md) (SSOT: coverage JSON) |
 | Markdown / doc context graph | [Guide](guides/markdown-context-graph.md) (step-by-step) · [Reference](markdown-context.md) — `.md` / `.mdx`, GQL, Obsidian export, doc semantic index |
 | FAQ / glossary | [FAQ](faq.md) · [Glossary](glossary.md) |
 | HTTP `serve` query API | [HTTP API](http-api.md) |
@@ -61,7 +61,7 @@ Internals and contribution bars — not the default agent reading path.
 
 | Term | Meaning |
 |------|---------|
-| Tier 1 languages | Ten always-linked plugins (see [languages/README.md](languages/README.md)) |
+| Tier 1 languages | Custom plugins; matrix from `*-ast-coverage.json` ([languages/README.md](languages/README.md)) |
 | `--with-cfg` | CFG/PDG archive (prefer over legacy `--cfg`) |
 | Communities | Label propagation (Raghavan 2007); `louvain_community_id` is historical |
 | Dashboard / migration JSON | Opt-in (`--with-dashboard` / `--export-migration-hints`) |

@@ -16,6 +16,9 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_markdown::register(registry);
     rgctl_lang_php::register(registry);
     rgctl_lang_ruby::register(registry);
+    rgctl_lang_puppet::register(registry);
+    rgctl_lang_kotlin::register(registry);
+    rgctl_lang_groovy::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -71,6 +74,41 @@ mod tests {
             .get_plugin_for_file(Path::new("lib/order.rb"))
             .expect("ruby plugin");
         assert_eq!(plugin.language_id(), "ruby");
+    }
+
+    #[test]
+    fn default_registry_can_process_puppet_files() {
+        let registry = default_registry();
+        assert!(registry.can_process_file(Path::new("modules/nginx/manifests/init.pp")));
+        let plugin = registry
+            .get_plugin_for_file(Path::new("manifests/site.pp"))
+            .expect("puppet plugin");
+        assert_eq!(plugin.language_id(), "puppet");
+    }
+
+    #[test]
+    fn default_registry_can_process_kotlin_files() {
+        let registry = default_registry();
+        assert!(registry.can_process_file(Path::new("src/main/kotlin/App.kt")));
+        let plugin = registry
+            .get_plugin_for_file(Path::new("UserService.kt"))
+            .expect("kotlin plugin");
+        assert_eq!(plugin.language_id(), "kotlin");
+        // Manifest basename wins over `.kts` language extension
+        assert!(registry.is_manifest_file(Path::new("build.gradle.kts")));
+        assert!(registry.get_plugin_for_file(Path::new("build.gradle.kts")).is_err());
+    }
+
+    #[test]
+    fn default_registry_can_process_groovy_files() {
+        let registry = default_registry();
+        assert!(registry.can_process_file(Path::new("src/Deploy.groovy")));
+        let plugin = registry
+            .get_plugin_for_file(Path::new("scripts/Job.groovy"))
+            .expect("groovy plugin");
+        assert_eq!(plugin.language_id(), "groovy");
+        assert!(registry.is_manifest_file(Path::new("build.gradle")));
+        assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
     }
 
     #[test]

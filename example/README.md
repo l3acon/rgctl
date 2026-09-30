@@ -28,6 +28,8 @@ Per-language cold discover gates for extraction-depth work. Fetch via `./scripts
 | Ruby | `discourse/` | discourse/discourse (shallow clone OK) | `-l ruby` | ~26k+ `.rb` in tree; gate indexes Ruby only |
 | Rust | `rust/` | rust-lang/rust (`library/` `compiler/`) | `-l rust` | ~10k+ `.rs` |
 | TypeScript | `vscode/` | microsoft/vscode (`src/`) | `-l typescript` | ~10k+ `.ts` |
+| Kotlin | `kotlin/` | JetBrains/kotlin (sparse `libraries` `plugins` `analysis`) | `-l kotlin` | ~18k `.kt`; gate: `kotlin_cold_discover_within_baseline` (≤ **10 s** +10%) |
+| Groovy | `groovy/` | gradle/gradle (shallow) | `-l groovy` | ~6.7k `.groovy`; gate: `groovy_cold_discover_within_baseline` (≤ **5 s** +10%) |
 
 OpenSpec / contributor policy: root [`AGENTS.md`](../AGENTS.md) (pointer: [`openspec/changes/_shared/starting-context.md`](../openspec/changes/_shared/starting-context.md)).
 
@@ -56,7 +58,13 @@ The fetch script now pulls all large profiling fixtures in one go:
 - `example/magento2`
 - `example/k8s-website` (sparse `content/en`)
 - `example/discourse` (Ruby `-l ruby` cold gate)
+- `example/kotlin` (JetBrains/kotlin sparse `libraries`+`plugins`+`analysis`)
+- `example/groovy` (gradle/gradle — Groovy Gate B)
 
-Override paths with `RGCTL_LINUX_REPO`, `RGCTL_KAFKA_REPO`, `RGCTL_K8S_WEBSITE_REPO`, `RGCTL_MAGENTO2_REPO`, `RGCTL_RUST_REPO`, `RGCTL_HOME_ASSISTANT_REPO`, `RGCTL_DISCOURSE_REPO`, `RGCTL_VSCODE_REPO`, `RGCTL_NODE_REPO`, `RGCTL_ROSLYN_REPO`, `RGCTL_LLVM_REPO`.
+**Kotlin corpus note:** full JetBrains/kotlin is 70k+ `.kt` / multi-GB; the fetch script sparse-checks out `libraries` `plugins` `analysis` (~18k `.kt`). Set `RGCTL_KOTLIN_REPO` to override.
+
+**Groovy corpus note:** Jenkins core has almost no `.groovy`; Gate B uses **gradle/gradle** (~6.7k `.groovy`). Set `RGCTL_GROOVY_REPO` to override.
+
+Override paths with `RGCTL_LINUX_REPO`, `RGCTL_KAFKA_REPO`, `RGCTL_K8S_WEBSITE_REPO`, `RGCTL_MAGENTO2_REPO`, `RGCTL_RUST_REPO`, `RGCTL_HOME_ASSISTANT_REPO`, `RGCTL_DISCOURSE_REPO`, `RGCTL_VSCODE_REPO`, `RGCTL_NODE_REPO`, `RGCTL_ROSLYN_REPO`, `RGCTL_LLVM_REPO`, `RGCTL_KOTLIN_REPO`, `RGCTL_GROOVY_REPO`.
 
 **Cold profile:** gates remove `example/<repo>/.rgctl/` before discover and require `target/release/rgctl` (`cargo build --release --bin rgctl`). Do not profile against a warm or partial cache — numbers will be wrong.

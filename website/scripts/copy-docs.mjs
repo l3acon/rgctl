@@ -10,7 +10,13 @@ const destDocs = join(here, "../content/docs");
 function copyTree(from, to) {
   mkdirSync(to, { recursive: true });
   for (const name of readdirSync(from)) {
-    if (name === "internal" || name === "videos" || name === "images") {
+    if (
+      name === "internal" ||
+      name === "videos" ||
+      name === "images" ||
+      name === "languages"
+    ) {
+      // languages/ is obsolete — site renders from *-ast-coverage.json
       // videos/images handled separately or skipped for v1 text docs
       if (name === "images") {
         const imgFrom = join(from, name);
@@ -43,6 +49,7 @@ cpSync(srcDocs, destDocs, {
     if (!rel) return true;
     if (rel.startsWith("internal")) return false;
     if (rel.startsWith("videos")) return false;
+    if (rel === "languages" || rel.startsWith("languages/")) return false;
     // keep md/txt/images
     if (statSync(src).isDirectory()) return true;
     return (

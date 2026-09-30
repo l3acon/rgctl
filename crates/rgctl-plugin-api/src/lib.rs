@@ -9,8 +9,9 @@ mod registrar;
 
 pub use call_extraction::{
     infer_python_method_target, ruby_call_callee, ruby_call_unresolved, C_CALL_KINDS,
-    CPP_CALL_KINDS, CSHARP_CALL_KINDS, GO_CALL_KINDS, JS_CALL_KINDS, PHP_CALL_KINDS,
-    PYTHON_CALL_KINDS, RUBY_CALL_KINDS, RUST_CALL_KINDS, TS_CALL_KINDS, callee_name,
+    CPP_CALL_KINDS, CSHARP_CALL_KINDS, GO_CALL_KINDS, JS_CALL_KINDS, KOTLIN_CALL_KINDS,
+    PHP_CALL_KINDS, PYTHON_CALL_KINDS, RUBY_CALL_KINDS, RUST_CALL_KINDS, TS_CALL_KINDS,
+    callee_name, kotlin_call_callee,
     containing_function, push_call_relation, walk_calls,
 };
 
@@ -128,6 +129,8 @@ pub enum SymbolType {
     PuppetVariable,
     /// Puppet fact reference
     PuppetFact,
+    /// Puppet node definition (`node { ... }`)
+    PuppetNode,
 }
 
 /// Source code location

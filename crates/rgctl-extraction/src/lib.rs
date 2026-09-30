@@ -4,8 +4,10 @@ pub mod discovery;
 
 pub mod extractor;
 pub mod graph_builder;
+pub mod manifests;
 pub mod usage_detector;
 
 pub use discovery::{DiscoveryConfig, FileDiscoverer};
 pub use extractor::{ExtractionTail, Extractor, FileExtraction};
 pub use graph_builder::GraphBuilder;
+pub use manifests::{DependencyDeclaration, extract_manifest};

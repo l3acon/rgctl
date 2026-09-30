@@ -106,6 +106,20 @@ impl Extractor {
             });
         }
 
+        // Manifests: Dependency extractors (section 3).
+        if self.registry.is_manifest_file(path) {
+            let (symbols, relations) = crate::manifests::extract_manifest(path, &source);
+            return Ok(FileExtraction {
+                path: path.to_path_buf(),
+                symbols,
+                relations,
+                config_keys: Vec::new(),
+                config_usages: Vec::new(),
+                source,
+                content_blobs: HashMap::new(),
+            });
+        }
+
         if let Ok(plugin) = self.registry.get_config_plugin_for_file(path) {
             let config_keys = plugin.extract_config_keys(path, &source)?;
             return Ok(FileExtraction {
@@ -561,5 +575,97 @@ mod tests {
             .populate_pass2_profiled(&[tail], &mut builder)
             .unwrap();
         assert_eq!(pass2.config_usage_resolution, Duration::ZERO);
+    }
+
+    #[test]
+    fn maven_pom_emits_dependency_and_depends_on() {
+        let temp = TempDir::new().unwrap();
+        let pom = temp.path().join("pom.xml");
+        fs::write(
+            &pom,
+            r#"<project>
+  <dependencies>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-core</artifactId>
+      <version>2.16.12.Final</version>
+    </dependency>
+  </dependencies>
+</project>"#,
+        )
+        .unwrap();
+
+        let registry = Arc::new(rgctl_languages::default_registry());
+        let extractor = Extractor::new(registry);
+        let mut extraction = extractor.extract_file(&pom).unwrap();
+        assert!(
+            extraction
+                .symbols
+                .iter()
+                .any(|s| s.name == "io.quarkus:quarkus-core"
+                    && s.symbol_type == rgctl_plugin_api::SymbolType::Dependency)
+        );
+
+        let mut builder = GraphBuilder::new();
+        let tail = extractor
+            .populate_pass1(&mut extraction, &mut builder)
+            .unwrap();
+        builder.build_resolution_indexes();
+        extractor.populate_pass2(&[tail], &mut builder).unwrap();
+
+        let (nodes, edges) = builder.into_graph();
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.node_type == rgctl_graph::schema::NodeType::Dependency
+                    && n.name == "io.quarkus:quarkus-core")
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.edge_type == rgctl_graph::schema::EdgeType::DependsOn)
+        );
+    }
+
+    #[test]
+    fn java_value_links_uses_config_to_properties() {
+        let temp = TempDir::new().unwrap();
+        let props = temp.path().join("application.properties");
+        let java = temp.path().join("App.java");
+        fs::write(&props, "app.jwt.secret=change-me\n").unwrap();
+        fs::write(
+            &java,
+            "class App {\n  @Value(\"${app.jwt.secret}\")\n  String secret;\n}\n",
+        )
+        .unwrap();
+
+        let registry = Arc::new(rgctl_languages::default_registry());
+        let extractor = Extractor::new(registry);
+        let mut props_ex = extractor.extract_file(&props).unwrap();
+        let mut java_ex = extractor.extract_file(&java).unwrap();
+        assert!(
+            java_ex
+                .config_usages
+                .iter()
+                .any(|u| u.key == "app.jwt.secret")
+        );
+
+        let mut builder = GraphBuilder::new();
+        let t1 = extractor
+            .populate_pass1(&mut props_ex, &mut builder)
+            .unwrap();
+        let t2 = extractor
+            .populate_pass1(&mut java_ex, &mut builder)
+            .unwrap();
+        builder.build_resolution_indexes();
+        extractor.populate_pass2(&[t1, t2], &mut builder).unwrap();
+
+        let (_nodes, edges) = builder.into_graph();
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.edge_type == rgctl_graph::schema::EdgeType::UsesConfig),
+            "expected UsesConfig from Java @Value to properties key"
+        );
     }
 }
