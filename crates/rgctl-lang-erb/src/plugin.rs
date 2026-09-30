@@ -393,14 +393,14 @@ impl ErbPlugin {
                     }),
                 });
 
-                let file_from = file_path.to_string();
+                let rel_from = sym_name;
 
                 for var in &at_vars {
                     if var == "facts" {
                         continue;
                     }
                     relations.push(Relation {
-                        from: file_from.clone(),
+                        from: rel_from.clone(),
                         to: format!("${var}"),
                         relation_type: RelationType::UsesVariable,
                         location: Self::loc(node, file_path),
@@ -415,7 +415,7 @@ impl ErbPlugin {
 
                 for fact in &fact_paths {
                     relations.push(Relation {
-                        from: file_from.clone(),
+                        from: rel_from.clone(),
                         to: fact.clone(),
                         relation_type: RelationType::UsesFact,
                         location: Self::loc(node, file_path),
@@ -430,7 +430,7 @@ impl ErbPlugin {
 
                 for scope_ref in &scope_refs {
                     relations.push(Relation {
-                        from: file_from.clone(),
+                        from: rel_from.clone(),
                         to: scope_ref.clone(),
                         relation_type: RelationType::References,
                         location: Self::loc(node, file_path),

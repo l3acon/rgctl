@@ -81,7 +81,7 @@ Fetch: `./scripts/fetch-profile-repos.sh`
 | **PHP** | Magento 2 | `example/magento2` | `-l php` | `RGCTL_MAGENTO2_REPO` |
 | **Python** | Home Assistant | `example/home-assistant` | `-l python` | `RGCTL_HOME_ASSISTANT_REPO` |
 | **Ruby** | Discourse | `example/discourse` | `-l ruby` | — |
-| **Puppet** | theforeman | `example/theforeman` | `-l puppet,erb,ruby -e spec,vendor` | `RGCTL_THEFOREMAN_REPO` |
+| **Puppet** | theforeman | `example/theforeman` | `-l puppet,erb,ruby -e spec,vendor` | `RGCTL_THEFOREMAN_REPO` — smoke corpus (~670 files, not O(10⁴)) |
 | **ERB** | *(included in theforeman)* | `example/theforeman` | `-l erb` | *(same corpus — 122 .erb files, 2114 blocks)* |
 | **Rust** | rustc | `example/rust` | `-l rust` | `RGCTL_RUST_REPO` |
 | **TypeScript** | VS Code | `example/vscode` | `-l typescript` on `src/` | `RGCTL_VSCODE_REPO` |
