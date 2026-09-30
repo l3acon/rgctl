@@ -1,0 +1,21 @@
+[package]
+name = "rgctl-lang-erb"
+version = "0.4.17"
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl language plugin: ERB embedded templates (tree-sitter-embedded-template)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tree-sitter/tree-sitter-embedded-template"
+
+[dependencies]
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+rgctl-plugin-helpers = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-embedded-template = "0.25.0"
+serde_json = "1"
+tracing = "0.1"
+regex = "1"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }

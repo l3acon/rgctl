@@ -17,6 +17,7 @@
 # - llvm-project (C++ via sparse clang/)
 # - kotlin (JetBrains/kotlin sparse libraries+plugins+analysis — Kotlin Gate B)
 # - groovy (gradle/gradle — Groovy Gate B; largest single OSS .groovy tree)
+# - theforeman (12 Puppet modules — Puppet+ERB Gate B; 500 .pp + 122 .erb)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -99,9 +100,37 @@ clone_if_missing "https://github.com/microsoft/vscode.git" "$EXAMPLE_DIR/vscode"
 clone_if_missing "https://github.com/dotnet/roslyn.git" "$EXAMPLE_DIR/roslyn" 1
 clone_sparse_llvm_clang_if_missing "$EXAMPLE_DIR/llvm-project"
 
-# Puppet Gate B (~10⁴ .pp): deferred — no default monorepo yet.
-# Override when baselining: RGCTL_PUPPET_REPO=/path/to/puppet/modules
-# Suggested candidates: OpenStack puppet-* modules or a Forge module bundle under example/puppet.
+# Puppet + ERB Gate B: theforeman ecosystem (12 modules, 500 .pp + 122 .erb + 64 .rb)
+# Override root with RGCTL_THEFOREMAN_REPO.
+clone_theforeman_if_missing() {
+  local dest="$1"
+  if [[ -d "$dest/puppet-foreman" ]]; then
+    echo "Already present: $dest (theforeman)"
+    return 0
+  fi
+  mkdir -p "$dest"
+  local repos=(
+    theforeman/puppet-foreman
+    theforeman/puppet-foreman_proxy
+    theforeman/puppet-puppet
+    theforeman/puppet-dhcp
+    theforeman/puppet-dns
+    theforeman/puppet-tftp
+    theforeman/puppet-candlepin
+    theforeman/puppet-pulpcore
+    theforeman/puppet-puppetserver_foreman
+    puppetlabs/puppetlabs-apache
+    puppetlabs/puppetlabs-postgresql
+    voxpupuli/puppet-redis
+  )
+  for repo in "${repos[@]}"; do
+    local name
+    name=$(basename "$repo")
+    clone_if_missing "https://github.com/${repo}.git" "$dest/$name" 1
+  done
+}
+
+clone_theforeman_if_missing "${RGCTL_THEFOREMAN_REPO:-$EXAMPLE_DIR/theforeman}"
 
 clone_sparse_node_test_if_missing() {
   local dest="$1"

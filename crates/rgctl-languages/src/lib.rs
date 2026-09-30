@@ -17,6 +17,7 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_php::register(registry);
     rgctl_lang_ruby::register(registry);
     rgctl_lang_puppet::register(registry);
+    rgctl_lang_erb::register(registry);
     rgctl_lang_kotlin::register(registry);
     rgctl_lang_groovy::register(registry);
 }
@@ -84,6 +85,16 @@ mod tests {
             .get_plugin_for_file(Path::new("manifests/site.pp"))
             .expect("puppet plugin");
         assert_eq!(plugin.language_id(), "puppet");
+    }
+
+    #[test]
+    fn default_registry_can_process_erb_files() {
+        let registry = default_registry();
+        assert!(registry.can_process_file(Path::new("modules/nginx/templates/nginx.conf.erb")));
+        let plugin = registry
+            .get_plugin_for_file(Path::new("templates/index.html.erb"))
+            .expect("erb plugin");
+        assert_eq!(plugin.language_id(), "erb");
     }
 
     #[test]
