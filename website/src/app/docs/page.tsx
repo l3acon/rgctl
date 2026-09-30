@@ -85,11 +85,6 @@ const primary = [
     href: "/docs/AGENTS/",
   },
   {
-    title: "Agent recipes",
-    blurb: "Copy-paste multi-step workflows.",
-    href: "/docs/agent-recipes/",
-  },
-  {
     title: "JSON API",
     blurb: "schema_version and field catalogs for scripts.",
     href: "/docs/json-api/",
@@ -110,11 +105,6 @@ const secondary = [
   { title: "FAQ", href: "/docs/faq/", blurb: "Flags, embedders, exit codes." },
   { title: "Glossary", href: "/docs/glossary/", blurb: "Blast, CPG, communities, …" },
   { title: "HTTP API", href: "/docs/http-api/", blurb: "serve /api/query." },
-  {
-    title: "Migration how-to",
-    href: "/docs/building-migration-plan/",
-    blurb: "CLI-oriented migration phases.",
-  },
 ];
 
 export default function DocsPage() {
@@ -155,7 +145,7 @@ export default function DocsPage() {
 
       <h2 className="mt-12 text-lg font-medium text-[var(--ink)]">Languages</h2>
       <p className="mt-2 max-w-2xl text-sm text-[var(--body)]">
-        Built on the fly from each{" "}
+        This section is generated from each{" "}
         <code className="text-sm">crates/rgctl-lang-*/{"{id}"}-ast-coverage.json</code>
         . Full matrix on the{" "}
         <Link href="/docs/languages/" className="underline">

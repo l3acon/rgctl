@@ -19,7 +19,6 @@ export const footerLearn = [
 export const footerAgents = [
   { href: "/agents/", label: "Agent overview" },
   { href: "/docs/AGENTS/", label: "AGENTS.md" },
-  { href: "/docs/agent-recipes/", label: "Recipes" },
   { href: "/docs/json-api/", label: "JSON API" },
 ] as const;
 
