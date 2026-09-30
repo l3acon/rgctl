@@ -1277,6 +1277,8 @@ fn relation_allows_external_stub(relation_type: RelationType) -> bool {
             | RelationType::Extends
             | RelationType::Implements
             | RelationType::Permits
+            | RelationType::UsesVariable
+            | RelationType::UsesFact
     )
 }
 
@@ -1290,6 +1292,10 @@ fn stub_node_type_for_target(relation: &Relation) -> NodeType {
             "function" | "method" => return NodeType::Function,
             "class" | "struct" => return NodeType::Class,
             "dependency" => return NodeType::Dependency,
+            "puppetvariable" => return NodeType::PuppetVariable,
+            "puppetfact" => return NodeType::PuppetFact,
+            "puppetresource" => return NodeType::PuppetResource,
+            "puppetclass" => return NodeType::PuppetClass,
             _ => {}
         }
     }
