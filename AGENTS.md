@@ -81,7 +81,8 @@ Fetch: `./scripts/fetch-profile-repos.sh`
 | **PHP** | Magento 2 | `example/magento2` | `-l php` | `RGCTL_MAGENTO2_REPO` |
 | **Python** | Home Assistant | `example/home-assistant` | `-l python` | `RGCTL_HOME_ASSISTANT_REPO` |
 | **Ruby** | Discourse | `example/discourse` | `-l ruby` | — |
-| **Puppet** | *(deferred)* | `RGCTL_PUPPET_REPO` | `-l puppet` | `RGCTL_PUPPET_REPO` — no default ~10k corpus yet |
+| **Puppet** | theforeman | `example/theforeman` | `-l puppet,erb,ruby -e spec,vendor` | `RGCTL_THEFOREMAN_REPO` |
+| **ERB** | *(included in theforeman)* | `example/theforeman` | `-l erb` | *(same corpus — 122 .erb files, 2114 blocks)* |
 | **Rust** | rustc | `example/rust` | `-l rust` | `RGCTL_RUST_REPO` |
 | **TypeScript** | VS Code | `example/vscode` | `-l typescript` on `src/` | `RGCTL_VSCODE_REPO` |
 | **Kotlin** | JetBrains/kotlin | `example/kotlin` | `-l kotlin` (sparse `libraries` `plugins` `analysis`) | `RGCTL_KOTLIN_REPO` |
