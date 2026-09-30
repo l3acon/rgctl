@@ -350,6 +350,8 @@ impl ErbPlugin {
             "output_directive" => Some(BlockKind::Output),
             "directive" => Some(BlockKind::Code),
             "comment_directive" => Some(BlockKind::Comment),
+            // graphql_directive: <%graphql %> blocks are intentionally skipped.
+            // Coverage gap documented in erb-ast-coverage.json. Future: dedicated handler.
             _ => None,
         };
 
@@ -642,5 +644,26 @@ mod tests {
         assert_eq!(p.language_id(), "erb");
         assert!(p.file_extensions().contains(&"erb"));
         assert!(p.grammar().is_some());
+    }
+
+    #[test]
+    fn honesty_regex_gaps() {
+        // @facts.dig(...) and @facts.get('os') are NOT captured by the bracket regex.
+        let facts_dig = ErbPlugin::extract_fact_paths("@facts.dig('os', 'family')");
+        assert!(facts_dig.is_empty(), "dig() should not match: {facts_dig:?}");
+
+        let facts_get = ErbPlugin::extract_fact_paths("@facts.get('os')");
+        assert!(facts_get.is_empty(), "get() should not match: {facts_get:?}");
+
+        // Non-@ locals produce no variable references.
+        let locals = ErbPlugin::extract_at_variables("item['name']");
+        assert!(locals.is_empty(), "non-@ locals should not match: {locals:?}");
+    }
+
+    #[test]
+    fn epp_files_not_handled() {
+        let p = plugin();
+        assert!(!p.file_extensions().contains(&"epp"));
+        assert!(!p.can_handle(Path::new("templates/config.epp")));
     }
 }

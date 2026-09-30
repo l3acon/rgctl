@@ -12,6 +12,17 @@
 //!
 //! Block metadata includes a `translation_tier` (1–4) and, for tiers 1–3,
 //! a `jinja2_pattern` hint for downstream ERB→Jinja2 translation.
+//!
+//! ## Honesty limits (Layer A extraction)
+//!
+//! - Ruby inside `<% %>` blocks is parsed with regex, not `tree-sitter-ruby`.
+//!   Method calls like `@facts.dig(...)` / `@facts.get('os')` are not captured.
+//!   Non-`@` local variables and `require` statements produce no graph edges.
+//! - `<%graphql %>` directives are skipped (no symbols/relations emitted).
+//! - `.epp` (Puppet EPP) templates are out of scope; a future `rgctl-lang-epp`
+//!   would cover those.
+//! - `content` nodes (HTML/text between tags) are skipped; no layout structure.
+//! - No CFG/taint/Layer F analysis — `enable_complexity = false` in `languages.toml`.
 
 use rgctl_registry::LanguageRegistry;
 use std::sync::Arc;
