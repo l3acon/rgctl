@@ -8,6 +8,7 @@ Tier 1 plugin for Java source including JPMS modules, annotations, generics, lam
 |---|---|
 | **Plugin crate** | `crates/rgctl-lang-java` (`JavaPlugin`) |
 | **Grammar** | `tree-sitter-java` |
+| **AST coverage** | `java-ast-coverage.json` (CI: `java_ast_coverage_manifest_matches_grammar`) |
 | **Extensions** | `.java` |
 | **Discover** | `rgctl discover . -l java -e target,data --with-cfg` |
 | **CFG / taint** | Enabled; Kantra rules with `--with-kantra` |

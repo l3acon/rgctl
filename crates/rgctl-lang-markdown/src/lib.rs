@@ -1,5 +1,7 @@
 //! Markdown language support via tree-sitter-md.
 
+#[cfg(test)]
+mod ast_coverage;
 mod extract;
 mod parse;
 mod plugin;

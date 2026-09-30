@@ -227,10 +227,12 @@ pub fn register(registry: &mut LanguageRegistry) {
 }
 ```
 
-5. Add to **workspace root** `Cargo.toml`:
+5. Add `{id}-ast-coverage.json` (every named grammar kind → `Symbol` / `Relation` / `CfgStatement` / `AstSkeleton` / `Literal` / intentional `Skip`) plus `src/ast_coverage.rs` with `*_ast_coverage_manifest_matches_grammar` (see `rgctl-lang-ruby` / `rgctl-lang-java`). Update the JSON when bumping the grammar pin. Register the language in `rgctl-ast-coverage::bundled_specs` so `cargo check -p rgctl-languages` warns on drift (`RGCTL_AST_COVERAGE_STRICT=1` fails the build).
+
+6. Add to **workspace root** `Cargo.toml`:
    - `members` list
    - `[workspace.dependencies] rgctl-lang-{id} = { path = "...", version = "0.1.0" }`
-6. Register in `crates/rgctl-languages/src/lib.rs`.
+7. Register in `crates/rgctl-languages/src/lib.rs`.
 
 ### Step 2 — `languages.toml`
 
@@ -413,6 +415,7 @@ Copy into your PR description:
 - [ ] **Layer F:** golden `{id}_cfg_captures_field_write_and_query` in `field_write` tests
 - [ ] `taint.rs` `detect_{id}_patterns`
 - [ ] `extract_relations` emits `Calls` (and inheritance if applicable)
+- [ ] `{id}-ast-coverage.json` + `ast_coverage` test (`*_ast_coverage_manifest_matches_grammar`)
 - [ ] Integration test + dashboard gate (or documented fixture path)
 - [ ] `discover --with-cfg --with-security --with-taint` smoke on fixture repo documented in test
 - [ ] No new CDN / online-only dashboard dependencies
