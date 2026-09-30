@@ -112,6 +112,13 @@ pub fn bundled_specs() -> &'static [CoverageSpec] {
             language: || tree_sitter_puppet::LANGUAGE.into(),
         },
         CoverageSpec {
+            id: "erb",
+            crate_dir: "rgctl-lang-erb",
+            manifest_file: "erb-ast-coverage.json",
+            grammar_prefix: "tree-sitter-embedded-template@",
+            language: || tree_sitter_embedded_template::LANGUAGE.into(),
+        },
+        CoverageSpec {
             id: "python",
             crate_dir: "rgctl-lang-python",
             manifest_file: "python-ast-coverage.json",

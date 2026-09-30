@@ -37,6 +37,7 @@ members = [
     "crates/rgctl-lang-php",
     "crates/rgctl-lang-ruby",
     "crates/rgctl-lang-puppet",
+    "crates/rgctl-lang-erb",
     "crates/rgctl-lang-kotlin",
     "crates/rgctl-lang-groovy",
     "crates/rgctl-ast-coverage",
@@ -88,6 +89,7 @@ rgctl-lang-markdown = { path = "crates/rgctl-lang-markdown", version = "0.4.16" 
 rgctl-lang-php = { path = "crates/rgctl-lang-php", version = "0.4.16" }
 rgctl-lang-ruby = { path = "crates/rgctl-lang-ruby", version = "0.4.16" }
 rgctl-lang-puppet = { path = "crates/rgctl-lang-puppet", version = "0.4.16" }
+rgctl-lang-erb = { path = "crates/rgctl-lang-erb", version = "0.4.16" }
 rgctl-lang-kotlin = { path = "crates/rgctl-lang-kotlin", version = "0.4.16" }
 rgctl-lang-groovy = { path = "crates/rgctl-lang-groovy", version = "0.4.16" }
 rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.16" }
