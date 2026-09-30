@@ -1,0 +1,13 @@
+{
+  "grammar": "tree-sitter-embedded-template@0.25.0",
+  "handlers": {
+    "code": "Symbol",
+    "comment": "Skip",
+    "comment_directive": "Symbol",
+    "content": "Skip",
+    "directive": "Symbol",
+    "graphql_directive": "Skip",
+    "output_directive": "Symbol",
+    "template": "Skip"
+  }
+}
