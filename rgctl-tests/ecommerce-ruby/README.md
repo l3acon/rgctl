@@ -20,4 +20,4 @@ cd rgctl-tests/ecommerce-ruby
 | CFG discover | `cargo test --test ruby_cfg_analysis` |
 | Dashboard bundle | `cargo test --test dashboard_ecommerce_ruby` (needs embedded dashboard dist) |
 
-Language guide: [docs/languages/ruby.md](../../docs/languages/ruby.md) · honesty limits: [docs/ruby-extract-honesty.md](../../docs/ruby-extract-honesty.md).
+Language coverage SSOT: [docs/languages/README.md](../../docs/languages/README.md) · honesty limits: [docs/ruby-extract-honesty.md](../../docs/ruby-extract-honesty.md).

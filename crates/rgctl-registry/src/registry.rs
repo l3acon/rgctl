@@ -2,6 +2,7 @@
 //!
 //! Manages all available language plugins and routes files to the appropriate plugin.
 
+use crate::ingest_route::{IngestRoute, classify_ingest_path};
 use rgctl_error::{Error, Result};
 use rgctl_plugin_api::{ConfigFormatPlugin, ConfigFormatRegistrar, LanguagePlugin};
 use std::collections::HashMap;
@@ -118,8 +119,19 @@ impl LanguageRegistry {
         self.config_plugins.get(format_id).cloned()
     }
 
-    /// Get a language plugin for a file path
+    /// Get a language plugin for a file path.
+    ///
+    /// Manifest ingest routes never resolve to a language plugin so basenames
+    /// like `build.gradle.kts` stay exclusive to Dependency extractors even when
+    /// a Kotlin/Groovy plugin registers `.kts` / `.gradle`. Ordinary sources that
+    /// fall through to [`IngestRoute::Ignore`] (e.g. `.kt`) still use language plugins.
     pub fn get_plugin_for_file(&self, file_path: &Path) -> Result<Arc<dyn LanguagePlugin>> {
+        if classify_ingest_path(file_path) == IngestRoute::Manifest {
+            return Err(Error::UnsupportedLanguage(
+                file_path.to_string_lossy().to_string(),
+            ));
+        }
+
         let path_str = file_path.to_string_lossy().replace('\\', "/");
 
         if let Some(plugin) = self.language_plugin_for_path(&path_str) {
@@ -128,30 +140,6 @@ impl LanguageRegistry {
 
         if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
             self.extension_map
-                .get(ext)
-                .cloned()
-                .ok_or_else(|| Error::UnsupportedLanguage(ext.to_string()))
-        } else {
-            Err(Error::UnsupportedLanguage(
-                file_path.to_string_lossy().to_string(),
-            ))
-        }
-    }
-
-    /// Get a config plugin for a file path
-    pub fn get_config_plugin_for_file(
-        &self,
-        file_path: &Path,
-    ) -> Result<Arc<dyn ConfigFormatPlugin>> {
-        let path_str = file_path.to_string_lossy().replace('\\', "/");
-        if self.language_plugin_for_path(&path_str).is_some() {
-            return Err(Error::UnsupportedLanguage(
-                file_path.to_string_lossy().to_string(),
-            ));
-        }
-
-        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-            self.config_extension_map
                 .get(ext)
                 .cloned()
                 .ok_or_else(|| Error::UnsupportedLanguage(ext.to_string()))
@@ -181,12 +169,59 @@ impl LanguageRegistry {
             .cloned()
     }
 
-    /// Check if a file can be processed (either as code or config)
+    /// Get a config plugin for a file path
+    pub fn get_config_plugin_for_file(
+        &self,
+        file_path: &Path,
+    ) -> Result<Arc<dyn ConfigFormatPlugin>> {
+        let path_str = file_path.to_string_lossy().replace('\\', "/");
+        if self.language_plugin_for_path(&path_str).is_some() {
+            return Err(Error::UnsupportedLanguage(
+                file_path.to_string_lossy().to_string(),
+            ));
+        }
+
+        match classify_ingest_path(file_path) {
+            IngestRoute::Manifest | IngestRoute::Ignore => {
+                return Err(Error::UnsupportedLanguage(
+                    file_path.to_string_lossy().to_string(),
+                ));
+            }
+            // Workflow uses YAML config extractors until Job/BuildStep emitters land.
+            IngestRoute::Config | IngestRoute::Workflow => {}
+        }
+
+        if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+            self.config_extension_map
+                .get(ext)
+                .cloned()
+                .ok_or_else(|| Error::UnsupportedLanguage(ext.to_string()))
+        } else {
+            Err(Error::UnsupportedLanguage(
+                file_path.to_string_lossy().to_string(),
+            ))
+        }
+    }
+
+    /// True when the path is a build manifest (Dependency extract route).
+    pub fn is_manifest_file(&self, file_path: &Path) -> bool {
+        classify_ingest_path(file_path) == IngestRoute::Manifest
+    }
+
+    /// Check if a file can be processed (code, config/workflow, or manifest).
     pub fn can_process_file(&self, file_path: &Path) -> bool {
+        if classify_ingest_path(file_path) == IngestRoute::Manifest {
+            return true;
+        }
         if self.get_plugin_for_file(file_path).is_ok() {
             return true;
         }
-        self.get_config_plugin_for_file(file_path).is_ok()
+        match classify_ingest_path(file_path) {
+            IngestRoute::Config | IngestRoute::Workflow => {
+                self.get_config_plugin_for_file(file_path).is_ok()
+            }
+            IngestRoute::Ignore | IngestRoute::Manifest => false,
+        }
     }
 
     /// List all supported language IDs
@@ -264,7 +299,7 @@ mod tests {
         let registry = LanguageRegistry::with_config_formats();
         let stats = registry.stats();
         assert_eq!(stats.language_plugins, 0);
-        assert_eq!(stats.config_plugins, 4);
+        assert_eq!(stats.config_plugins, 5);
     }
 
     #[test]
@@ -282,5 +317,34 @@ mod tests {
         assert!(registry.can_process_file(Path::new("config.yml")));
         assert!(registry.can_process_file(Path::new("config.json")));
         assert!(registry.can_process_file(Path::new("config.toml")));
+    }
+
+    #[test]
+    fn test_manifest_routing_excludes_config_plugin() {
+        let registry = LanguageRegistry::with_config_formats();
+        assert!(registry.can_process_file(Path::new("pom.xml")));
+        assert!(registry.is_manifest_file(Path::new("pom.xml")));
+        assert!(registry.get_config_plugin_for_file(Path::new("pom.xml")).is_err());
+
+        assert!(registry.can_process_file(Path::new("Cargo.toml")));
+        assert!(registry.is_manifest_file(Path::new("Cargo.toml")));
+        assert!(registry.get_config_plugin_for_file(Path::new("Cargo.toml")).is_err());
+
+        assert!(registry.can_process_file(Path::new("package.json")));
+        assert!(registry.is_manifest_file(Path::new("package.json")));
+        assert!(registry.get_config_plugin_for_file(Path::new("package.json")).is_err());
+
+        // Gradle Kotlin DSL build script stays Manifest even if a future
+        // language plugin registers `.kts` (language lookup is blocked).
+        assert!(registry.is_manifest_file(Path::new("app/build.gradle.kts")));
+        assert!(registry.get_plugin_for_file(Path::new("app/build.gradle.kts")).is_err());
+        assert!(registry.is_manifest_file(Path::new("build.gradle")));
+        assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
+    }
+
+    #[test]
+    fn test_random_xml_not_processed() {
+        let registry = LanguageRegistry::with_config_formats();
+        assert!(!registry.can_process_file(Path::new("docs/foo.xml")));
     }
 }

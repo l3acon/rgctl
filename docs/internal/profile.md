@@ -72,6 +72,8 @@ cargo test --release --test cold_profile_gates -- --ignored --nocapture --test-t
 | `node_javascript_cold_discover_with_cfg_within_baseline` | `example/node/test` | `-l javascript --with-cfg` | **7 s** |
 | `home_assistant_python_cold_discover_within_baseline` | `example/home-assistant` | `-l python` | **20 s** |
 | `discourse_cold_discover_within_baseline` | `example/discourse` | `-l ruby` | env `RGCTL_DISCOURSE_RUBY_COLD_BASELINE_SECS` (default **120 s**; see measured run below) |
+| `kotlin_cold_discover_within_baseline` | `example/kotlin` | `-l kotlin` | **10 s** (JetBrains/kotlin sparse; 2026-09-29) |
+| `groovy_cold_discover_within_baseline` | `example/groovy` | `-l groovy` | **5 s** (gradle/gradle; 2026-09-29) |
 | `pr_check_rgctl_graph_slice_within_baseline` | `crates/rgctl-graph` | delta `pr-check` (base cache only) | **1.0 s** |
 | `linux_cold_diff_within_baseline` | `example/linux/.rgctl-diff` | `diff` (prep script; not discover) | **30 s** provisional |
 
@@ -250,6 +252,34 @@ Top stages (% of wall): `index_extract` **~6.4 s** (30%), `index_graph_build` **
 | `index_graph_build` | **~0.6 s** |
 
 Fixture-scale checks: `rgctl-tests/ecommerce-ruby` (`tests/ruby_langfeatures.rs`, `tests/ruby_cfg_analysis.rs`, `tests/dashboard_ecommerce_ruby.rs`).
+
+### Kotlin (`example/kotlin`) — `-l kotlin`
+
+| Metric | Value |
+|--------|-------|
+| **Gate baseline** | **10 s** (pass ≤ 11 s; override `RGCTL_KOTLIN_COLD_BASELINE_SECS`) |
+| Corpus | [JetBrains/kotlin](https://github.com/JetBrains/kotlin) sparse `libraries`+`plugins`+`analysis` (`./scripts/fetch-profile-repos.sh` → `example/kotlin`) |
+| Discover | `discover . -v -l kotlin` from repo root |
+| Wall (reference, 2026-09-29) | **~8.9 s** |
+| Nodes / functions | **178,238** / **64,386** |
+| `index_graph_build` | **~1.5 s** |
+| `.kt` sources (approx.) | **~18k** |
+
+Fixture-scale: `rgctl-tests/ecommerce-kotlin`, `tests/dashboard_ecommerce_kotlin.rs`.
+
+### Groovy (`example/groovy`) — `-l groovy`
+
+| Metric | Value |
+|--------|-------|
+| **Gate baseline** | **5 s** (pass ≤ 5.5 s; override `RGCTL_GROOVY_COLD_BASELINE_SECS`) |
+| Corpus | [gradle/gradle](https://github.com/gradle/gradle) (`./scripts/fetch-profile-repos.sh` → `example/groovy`; Jenkins core is not dense enough in `.groovy`) |
+| Discover | `discover . -v -l groovy` from repo root |
+| Wall (reference, 2026-09-29) | **~4.3 s** |
+| Nodes / functions | **67,507** / **16,552** |
+| `index_graph_build` | **~0.31 s** |
+| `.groovy` sources (approx.) | **~6.7k** |
+
+Fixture-scale: `rgctl-tests/ecommerce-groovy`, `tests/dashboard_ecommerce_groovy.rs`.
 
 ### CFG on large C++ corpora (`--with-cfg`)
 

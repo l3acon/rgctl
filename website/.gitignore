@@ -23,6 +23,9 @@ public/demos/
 # copied from docs/ at build/dev time
 content/docs/
 
+# generated from crates/rgctl-lang-*/ *-ast-coverage.json
+content/languages/
+
 # production
 build/
 dist/

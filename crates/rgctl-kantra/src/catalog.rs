@@ -238,10 +238,10 @@ pub fn rule_matches_target(rule: &KantraRule, target: &str) -> bool {
 pub fn rule_konveyor_targets(rule: &KantraRule) -> Vec<String> {
     let mut out = Vec::new();
     for label in &rule.labels {
-        if let Some(target) = label.strip_prefix("konveyor.io/target=") {
-            if !out.iter().any(|t| t == target) {
-                out.push(target.to_string());
-            }
+        if let Some(target) = label.strip_prefix("konveyor.io/target=")
+            && !out.iter().any(|t| t == target)
+        {
+            out.push(target.to_string());
         }
     }
     out

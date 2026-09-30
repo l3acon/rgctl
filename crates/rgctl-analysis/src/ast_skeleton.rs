@@ -178,6 +178,7 @@ fn find_function<'a>(
             "javascript" | "js" | "typescript" | "ts" => {
                 ecmascript_function_symbol_name(node, source)
             }
+            "puppet" => puppet_callable_name(node, source),
             _ => extract_name_from_node(node, source).ok().flatten(),
         };
         if resolved.as_deref() == Some(name) {
@@ -191,6 +192,26 @@ fn find_function<'a>(
         }
     }
     None
+}
+
+/// Match CFG / Function symbol naming for Puppet class/define/node/function hosts.
+fn puppet_callable_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if matches!(
+            child.kind(),
+            "class_identifier" | "identifier" | "node_name" | "string"
+        ) {
+            if let Ok(t) = child.utf8_text(source) {
+                let name = t.trim_matches('\'').trim_matches('"');
+                if node.kind() == "node_definition" {
+                    return Some(format!("node:{name}"));
+                }
+                return Some(name.to_string());
+            }
+        }
+    }
+    extract_name_from_node(node, source).ok().flatten()
 }
 
 fn walk_skeleton(
@@ -236,9 +257,11 @@ fn walk_skeleton(
 fn classify(kind: &str) -> Option<AstSkeletonKind> {
     Some(match kind {
         "block" | "compound_statement" | "statement_block" | "body" => AstSkeletonKind::Block,
-        "if_statement" | "if_expression" | "if" | "unless" => AstSkeletonKind::If,
+        "if_statement" | "if_expression" | "if" | "unless" | "unless_statement"
+        | "when_expression" => AstSkeletonKind::If,
         "while_statement" | "while_expression" | "for_statement" | "for_expression"
-        | "loop_expression" | "do_statement" | "foreach_statement" | "while" | "until" | "for" => {
+        | "loop_expression" | "do_statement" | "do_while_statement" | "foreach_statement"
+        | "while" | "until" | "for" | "iterator_statement" | "case_statement" => {
             AstSkeletonKind::Loop
         }
         "call_expression" | "method_invocation" | "invocation_expression" | "function_call"
@@ -255,6 +278,7 @@ fn classify(kind: &str) -> Option<AstSkeletonKind> {
         | "local_variable_declaration"
         | "variable_declaration"
         | "short_var_declaration"
+        | "property_declaration"
         | "declaration" => AstSkeletonKind::Decl,
         _ => return None,
     })

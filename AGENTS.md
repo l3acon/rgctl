@@ -20,6 +20,7 @@
 - **Artifacts:** Session data lives in `{repo}/.rgctl/`. Warm caches invalidate wall-time claims.
 - **Features:** Default semantic embedder is compiled **vocab**. Do not require ONNX / Python ML unless behind an explicit feature (e.g. `semantic-onnx` / code-daemon + Git LFS).
 - **OpenSpec language work:** Still cite [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) (pointer here); follow the sections below.
+- **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The website `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`.
 
 ---
 
@@ -28,7 +29,7 @@
 - **Discover** walks the tree, runs language plugins (tree-sitter), builds the graph, writes compact caches to `.rgctl/`.
 - **Query** paths are read-oriented and return versioned JSON (`schema_version` on stdout — never scrape stderr).
 - **Analysis** (`rgctl-analysis`) projects CSR / callgraph / centrality / blast-radius / CFG–PDG; see [docs/analysis-architecture.md](docs/analysis-architecture.md).
-- **Languages:** `crates/rgctl-lang-*` + `rgctl-plugin-api`; register in `languages.toml`.
+- **Languages:** `crates/rgctl-lang-*` + `rgctl-plugin-api`; register in `languages.toml`. See **Grammar bumps** under Must-follow for AST coverage manifests.
 
 ---
 
@@ -80,8 +81,11 @@ Fetch: `./scripts/fetch-profile-repos.sh`
 | **PHP** | Magento 2 | `example/magento2` | `-l php` | `RGCTL_MAGENTO2_REPO` |
 | **Python** | Home Assistant | `example/home-assistant` | `-l python` | `RGCTL_HOME_ASSISTANT_REPO` |
 | **Ruby** | Discourse | `example/discourse` | `-l ruby` | — |
+| **Puppet** | *(deferred)* | `RGCTL_PUPPET_REPO` | `-l puppet` | `RGCTL_PUPPET_REPO` — no default ~10k corpus yet |
 | **Rust** | rustc | `example/rust` | `-l rust` | `RGCTL_RUST_REPO` |
 | **TypeScript** | VS Code | `example/vscode` | `-l typescript` on `src/` | `RGCTL_VSCODE_REPO` |
+| **Kotlin** | JetBrains/kotlin | `example/kotlin` | `-l kotlin` (sparse `libraries` `plugins` `analysis`) | `RGCTL_KOTLIN_REPO` |
+| **Groovy** | Gradle | `example/groovy` | `-l groovy` | `RGCTL_GROOVY_REPO` |
 
 File counts are approximate (goal **O(10⁴)** sources). Exclude `vendor/`, `node_modules/`, `target/`, `third_party/`.
 

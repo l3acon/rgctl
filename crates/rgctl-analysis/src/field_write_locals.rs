@@ -59,6 +59,9 @@ fn language_visit(language: &str) -> Option<(tree_sitter::Language, VisitFn)> {
         "cpp" => (tree_sitter_cpp::LANGUAGE.into(), visit_c_family),
         "php" => (tree_sitter_php::LANGUAGE_PHP.into(), visit_php),
         "ruby" => (tree_sitter_ruby::LANGUAGE.into(), visit_ruby),
+        "puppet" => (tree_sitter_puppet::LANGUAGE.into(), visit_puppet),
+        "kotlin" | "kt" => (tree_sitter_kotlin_ng::LANGUAGE.into(), visit_kotlin),
+        "groovy" => (tree_sitter_groovy::LANGUAGE.into(), visit_groovy),
         _ => return None,
     })
 }
@@ -199,6 +202,8 @@ pub fn language_from_path(path: &str) -> String {
             "cpp" | "cc" | "cxx" | "hpp" | "hh" => "cpp",
             "php" => "php",
             "rb" => "ruby",
+            "kt" | "kts" => "kotlin",
+            "groovy" | "gradle" => "groovy",
             _ => "unknown",
         })
         .unwrap_or("unknown")
@@ -679,6 +684,284 @@ fn visit_ruby(
     );
 }
 
+fn visit_kotlin(
+    node: Node,
+    source: &[u8],
+    function_name: &str,
+    env: &mut HashMap<String, String>,
+    in_target: bool,
+) {
+    let kind = node.kind();
+    let mut now_in = in_target;
+    if matches!(
+        kind,
+        "function_declaration" | "primary_constructor" | "secondary_constructor" | "anonymous_function"
+    ) {
+        let name = if matches!(kind, "primary_constructor" | "secondary_constructor") {
+            find_ancestor_name(node, source, "class_declaration")
+                .or_else(|| find_ancestor_name(node, source, "object_declaration"))
+                .unwrap_or_default()
+        } else {
+            node.child_by_field_name("name")
+                .and_then(|n| text_of(n, source))
+                .or_else(|| {
+                    let mut c = node.walk();
+                    node.children(&mut c).find_map(|ch| {
+                        if matches!(ch.kind(), "identifier" | "simple_identifier") {
+                            text_of(ch, source)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .unwrap_or_default()
+        };
+        now_in = name == function_name;
+    }
+    if now_in && matches!(kind, "parameter" | "class_parameter") {
+        collect_kotlin_param(node, source, env);
+    }
+    if now_in && kind == "property_declaration" {
+        collect_kotlin_property_local(node, source, env);
+    }
+    walk_children(
+        node,
+        source,
+        function_name,
+        env,
+        now_in,
+        visit_kotlin,
+        &[
+            "function_declaration",
+            "primary_constructor",
+            "secondary_constructor",
+            "anonymous_function",
+        ],
+    );
+}
+
+fn collect_kotlin_param(node: Node, source: &[u8], env: &mut HashMap<String, String>) {
+    let mut name = node
+        .child_by_field_name("name")
+        .and_then(|n| text_of(n, source));
+    let mut ty = node
+        .child_by_field_name("type")
+        .and_then(|n| text_of(n, source));
+    if name.is_none() || ty.is_none() {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if name.is_none() && matches!(child.kind(), "identifier" | "simple_identifier") {
+                name = text_of(child, source);
+            }
+            if ty.is_none()
+                && matches!(
+                    child.kind(),
+                    "user_type"
+                        | "nullable_type"
+                        | "type_identifier"
+                        | "function_type"
+                        | "parenthesized_type"
+                )
+            {
+                ty = text_of(child, source);
+            }
+        }
+    }
+    if let (Some(n), Some(t)) = (name, ty) {
+        insert_ty(env, &n, &t);
+    }
+}
+
+fn collect_kotlin_property_local(node: Node, source: &[u8], env: &mut HashMap<String, String>) {
+    let mut name = node
+        .child_by_field_name("name")
+        .and_then(|n| text_of(n, source));
+    let mut ty = node
+        .child_by_field_name("type")
+        .and_then(|n| text_of(n, source));
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "variable_declaration" {
+            let mut c2 = child.walk();
+            for g in child.children(&mut c2) {
+                if name.is_none() && matches!(g.kind(), "identifier" | "simple_identifier") {
+                    name = text_of(g, source);
+                }
+                if ty.is_none()
+                    && matches!(
+                        g.kind(),
+                        "user_type" | "nullable_type" | "type_identifier" | "parenthesized_type"
+                    )
+                {
+                    ty = text_of(g, source);
+                }
+            }
+        }
+        if name.is_none() && matches!(child.kind(), "identifier" | "simple_identifier") {
+            name = text_of(child, source);
+        }
+        if ty.is_none()
+            && matches!(
+                child.kind(),
+                "user_type" | "nullable_type" | "type_identifier" | "parenthesized_type"
+            )
+        {
+            ty = text_of(child, source);
+        }
+    }
+    if let (Some(n), Some(t)) = (name, ty) {
+        insert_ty(env, &n, &t);
+    }
+}
+
+/// Groovy: Java-shaped methods / constructors / typed locals.
+fn visit_groovy(
+    node: Node,
+    source: &[u8],
+    function_name: &str,
+    env: &mut HashMap<String, String>,
+    in_target: bool,
+) {
+    let kind = node.kind();
+    let mut now_in = in_target;
+    if matches!(
+        kind,
+        "method_declaration"
+            | "function_definition"
+            | "constructor_declaration"
+            | "compact_constructor_declaration"
+    ) {
+        let name = if matches!(
+            kind,
+            "constructor_declaration" | "compact_constructor_declaration"
+        ) {
+            find_ancestor_name(node, source, "class_declaration")
+                .or_else(|| find_ancestor_name(node, source, "enum_declaration"))
+                .unwrap_or_default()
+        } else {
+            node.child_by_field_name("name")
+                .and_then(|n| text_of(n, source))
+                .unwrap_or_default()
+        };
+        now_in = name == function_name;
+    }
+    if now_in && kind == "local_variable_declaration" {
+        collect_java_style_local(node, source, env);
+    }
+    if now_in && kind == "formal_parameter" {
+        if let (Some(name), Some(ty)) = (
+            node.child_by_field_name("name")
+                .and_then(|n| text_of(n, source)),
+            node.child_by_field_name("type")
+                .and_then(|n| text_of(n, source)),
+        ) {
+            insert_ty(env, &name, &ty);
+        }
+    }
+    walk_children(
+        node,
+        source,
+        function_name,
+        env,
+        now_in,
+        visit_groovy,
+        &[
+            "method_declaration",
+            "function_definition",
+            "constructor_declaration",
+            "compact_constructor_declaration",
+        ],
+    );
+}
+
+/// Puppet: merge typed parameters from class / define / function hosts into `env`.
+fn visit_puppet(
+    node: Node,
+    source: &[u8],
+    function_name: &str,
+    env: &mut HashMap<String, String>,
+    in_target: bool,
+) {
+    let kind = node.kind();
+    let mut now_in = in_target;
+    if matches!(
+        kind,
+        "class_definition" | "defined_resource_type" | "function_declaration" | "node_definition"
+    ) {
+        let mut name = None;
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if matches!(
+                child.kind(),
+                "class_identifier" | "identifier" | "node_name" | "string"
+            ) {
+                name = text_of(child, source).map(|s| {
+                    let t = s.trim_matches('\'').trim_matches('"').to_string();
+                    if kind == "node_definition" {
+                        format!("node:{t}")
+                    } else {
+                        t
+                    }
+                });
+                break;
+            }
+        }
+        now_in = name.as_deref() == Some(function_name);
+        if now_in {
+            let mut c = node.walk();
+            for child in node.children(&mut c) {
+                if child.kind() != "parameter_list" {
+                    continue;
+                }
+                let mut pc = child.walk();
+                for param in child.children(&mut pc) {
+                    if param.kind() != "parameter" {
+                        continue;
+                    }
+                    let mut pname = None;
+                    let mut pty = None;
+                    let mut pp = param.walk();
+                    for part in param.children(&mut pp) {
+                        match part.kind() {
+                            "variable" => {
+                                pname = text_of(part, source)
+                                    .map(|s| s.trim_start_matches('$').to_string());
+                            }
+                            "type"
+                            | "builtin_type"
+                            | "array_type"
+                            | "composite_type"
+                            | "attribute_type" => {
+                                if pty.is_none() {
+                                    pty = text_of(part, source);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    if let Some(n) = pname {
+                        insert_ty(env, &n, pty.as_deref().unwrap_or("Any"));
+                    }
+                }
+            }
+        }
+    }
+    walk_children(
+        node,
+        source,
+        function_name,
+        env,
+        now_in,
+        visit_puppet,
+        &[
+            "class_definition",
+            "defined_resource_type",
+            "function_declaration",
+            "node_definition",
+        ],
+    );
+}
+
 fn visit_javascript(
     node: Node,
     source: &[u8],
@@ -934,6 +1217,40 @@ public class OrderProcessor {
 "#;
         let mut env = HashMap::new();
         merge_local_types("java", source, "process", &mut env);
+        assert_eq!(env.get("order").map(String::as_str), Some("OrderDTO"));
+        assert_eq!(env.get("other").map(String::as_str), Some("OrderDTO"));
+    }
+
+    #[test]
+    fn kotlin_locals_merge() {
+        let source = r#"
+class OrderProcessor {
+    fun process(order: OrderDTO): OrderDTO {
+        val other: OrderDTO = order
+        other.status = "X"
+        return other
+    }
+}
+"#;
+        let mut env = HashMap::new();
+        merge_local_types("kotlin", source, "process", &mut env);
+        assert_eq!(env.get("order").map(String::as_str), Some("OrderDTO"));
+        assert_eq!(env.get("other").map(String::as_str), Some("OrderDTO"));
+    }
+
+    #[test]
+    fn groovy_locals_merge() {
+        let source = r#"
+class OrderProcessor {
+  OrderDTO process(OrderDTO order) {
+    OrderDTO other = order
+    other.status = "X"
+    return other
+  }
+}
+"#;
+        let mut env = HashMap::new();
+        merge_local_types("groovy", source, "process", &mut env);
         assert_eq!(env.get("order").map(String::as_str), Some("OrderDTO"));
         assert_eq!(env.get("other").map(String::as_str), Some("OrderDTO"));
     }

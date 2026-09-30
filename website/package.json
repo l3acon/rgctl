@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/copy-demos.mjs && node scripts/copy-docs.mjs",
-    "prebuild": "node scripts/copy-demos.mjs && node scripts/copy-docs.mjs",
+    "predev": "node scripts/copy-demos.mjs && node scripts/copy-docs.mjs && node scripts/copy-lang-coverage.mjs",
+    "prebuild": "node scripts/copy-demos.mjs && node scripts/copy-docs.mjs && node scripts/copy-lang-coverage.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -12,6 +12,7 @@
     "export": "next build",
     "copy-demos": "node scripts/copy-demos.mjs",
     "copy-docs": "node scripts/copy-docs.mjs",
+    "copy-lang-coverage": "node scripts/copy-lang-coverage.mjs",
     "test:firefox-hero": "node scripts/firefox-hero-graph.mjs"
   },
   "dependencies": {

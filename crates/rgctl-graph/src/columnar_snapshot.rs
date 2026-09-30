@@ -928,6 +928,7 @@ fn node_type_to_u16(t: NodeType) -> u16 {
         NodeType::Annotation => 35,
         NodeType::KantraRuleset => 36,
         NodeType::KantraRule => 37,
+        NodeType::PuppetNode => 38,
     }
 }
 
@@ -971,6 +972,7 @@ pub(crate) fn node_type_from_u16(v: u16) -> Result<NodeType> {
         35 => NodeType::Annotation,
         36 => NodeType::KantraRuleset,
         37 => NodeType::KantraRule,
+        38 => NodeType::PuppetNode,
         _ => return Err(Error::SerdeError(format!("unknown node type code {v}"))),
     })
 }

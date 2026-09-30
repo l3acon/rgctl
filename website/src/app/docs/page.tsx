@@ -9,32 +9,32 @@ export const metadata: Metadata = {
 const languages = [
   {
     title: "All languages",
-    blurb: "Tier 1 plugins, extraction coverage, and GQL verification queries.",
+    blurb: "Live matrix from *-ast-coverage.json (grammar handlers + extensions).",
     href: "/docs/languages/",
   },
   {
     title: "Python",
-    blurb: "Imports, heritage, decorators, instantiation, calls.",
+    blurb: "AST coverage handlers for tree-sitter-python.",
     href: "/docs/languages/python/",
   },
   {
     title: "Java",
-    blurb: "JPMS, annotations, lambdas, generics, qualified names.",
+    blurb: "AST coverage handlers for tree-sitter-java.",
     href: "/docs/languages/java/",
   },
   {
     title: "Go",
-    blurb: "Structs, interfaces, embedding, generics, imports.",
+    blurb: "AST coverage handlers for tree-sitter-go.",
     href: "/docs/languages/go/",
   },
   {
     title: "Rust",
-    blurb: "Traits, attributes, use graph, instantiation.",
+    blurb: "AST coverage handlers for tree-sitter-rust.",
     href: "/docs/languages/rust/",
   },
   {
     title: "TypeScript",
-    blurb: "Interfaces, implements, decorators, module graph.",
+    blurb: "AST coverage handlers for tree-sitter-typescript.",
     href: "/docs/languages/typescript/",
   },
 ];
@@ -155,8 +155,9 @@ export default function DocsPage() {
 
       <h2 className="mt-12 text-lg font-medium text-[var(--ink)]">Languages</h2>
       <p className="mt-2 max-w-2xl text-sm text-[var(--body)]">
-        Per-language extraction depth, plugin details, and GQL probes from{" "}
-        <code className="text-sm">gql-verification-smoke</code>. Full list on the{" "}
+        Built on the fly from each{" "}
+        <code className="text-sm">crates/rgctl-lang-*/{"{id}"}-ast-coverage.json</code>
+        . Full matrix on the{" "}
         <Link href="/docs/languages/" className="underline">
           languages index
         </Link>

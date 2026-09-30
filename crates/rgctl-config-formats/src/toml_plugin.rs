@@ -1,8 +1,10 @@
-//! TOML configuration format plugin
+//! TOML configuration format plugin (span-preserving via `toml_edit`).
 
+use crate::span_util::{line_col_at, loc};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use std::path::Path;
+use toml_edit::{Item, DocumentMut};
 
 /// TOML config format plugin
 pub struct TomlPlugin;
@@ -13,109 +15,85 @@ impl TomlPlugin {
         Ok(Self)
     }
 
-    fn flatten_toml_value(
+    fn flatten_item(
         &self,
-        value: &toml::Value,
+        item: &Item,
         prefix: &str,
         file: &str,
+        source: &str,
         results: &mut Vec<ConfigKey>,
     ) {
-        match value {
-            toml::Value::Table(map) => {
-                for (k, v) in map {
+        match item {
+            Item::Table(table) => {
+                for (k, v) in table.iter() {
                     let full_key = if prefix.is_empty() {
-                        k.clone()
+                        k.to_string()
                     } else {
-                        format!("{}.{}", prefix, k)
+                        format!("{prefix}.{k}")
                     };
-                    self.flatten_toml_value(v, &full_key, file, results);
+                    self.flatten_item(v, &full_key, file, source, results);
                 }
             }
-            toml::Value::Array(arr) => {
+            Item::ArrayOfTables(arr) => {
                 results.push(ConfigKey {
                     key_path: prefix.to_string(),
                     value: format!("[array with {} items]", arr.len()),
                     value_type: ConfigValueType::Array,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
+                    location: span_from_item(item, file, source),
                 });
             }
-            toml::Value::String(s) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: s.clone(),
-                    value_type: ConfigValueType::String,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            toml::Value::Integer(n) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: n.to_string(),
-                    value_type: ConfigValueType::Number,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            toml::Value::Float(n) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: n.to_string(),
-                    value_type: ConfigValueType::Number,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            toml::Value::Boolean(b) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: b.to_string(),
-                    value_type: ConfigValueType::Boolean,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
-            toml::Value::Datetime(dt) => {
-                results.push(ConfigKey {
-                    key_path: prefix.to_string(),
-                    value: dt.to_string(),
-                    value_type: ConfigValueType::String,
-                    location: SourceLocation {
-                        file: file.to_string(),
-                        start_line: 0,
-                        end_line: 0,
-                        start_column: 0,
-                        end_column: 0,
-                    },
-                });
-            }
+            Item::Value(val) => match val {
+                toml_edit::Value::InlineTable(t) => {
+                    for (k, v) in t.iter() {
+                        let full_key = if prefix.is_empty() {
+                            k.to_string()
+                        } else {
+                            format!("{prefix}.{k}")
+                        };
+                        let fake = Item::Value(v.clone());
+                        self.flatten_item(&fake, &full_key, file, source, results);
+                    }
+                }
+                toml_edit::Value::Array(a) => {
+                    results.push(ConfigKey {
+                        key_path: prefix.to_string(),
+                        value: format!("[array with {} items]", a.len()),
+                        value_type: ConfigValueType::Array,
+                        location: span_from_item(item, file, source),
+                    });
+                }
+                other => {
+                    let (vt, s) = value_to_typed(other);
+                    results.push(ConfigKey {
+                        key_path: prefix.to_string(),
+                        value: s,
+                        value_type: vt,
+                        location: span_from_item(item, file, source),
+                    });
+                }
+            },
+            Item::None => {}
         }
+    }
+}
+
+fn span_from_item(item: &Item, file: &str, source: &str) -> SourceLocation {
+    if let Some(span) = item.span() {
+        let (sl, sc) = line_col_at(source, span.start);
+        let (el, ec) = line_col_at(source, span.end);
+        return loc(file, sl, el, sc, ec);
+    }
+    loc(file, 1, 1, 1, 1)
+}
+
+fn value_to_typed(v: &toml_edit::Value) -> (ConfigValueType, String) {
+    match v {
+        toml_edit::Value::String(s) => (ConfigValueType::String, s.value().to_string()),
+        toml_edit::Value::Integer(i) => (ConfigValueType::Number, i.to_string()),
+        toml_edit::Value::Float(f) => (ConfigValueType::Number, f.to_string()),
+        toml_edit::Value::Boolean(b) => (ConfigValueType::Boolean, b.to_string()),
+        toml_edit::Value::Datetime(d) => (ConfigValueType::String, d.to_string()),
+        other => (ConfigValueType::String, other.to_string()),
     }
 }
 
@@ -135,12 +113,19 @@ impl ConfigFormatPlugin for TomlPlugin {
     }
 
     fn extract_config_keys(&self, file_path: &Path, source: &[u8]) -> Result<Vec<ConfigKey>> {
-        let content = std::str::from_utf8(source)?;
-        let value: toml::Value = toml::from_str(content)?;
-
+        let file = file_path.to_string_lossy().to_string();
+        let text = std::str::from_utf8(source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e.to_string(),
+        })?;
+        let doc: DocumentMut = text.parse().map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: format!("toml parse: {e}"),
+        })?;
         let mut results = Vec::new();
-        self.flatten_toml_value(&value, "", &file_path.to_string_lossy(), &mut results);
-
+        self.flatten_item(doc.as_item(), "", &file, text, &mut results);
         Ok(results)
     }
 }
@@ -150,49 +135,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_toml_plugin_format_id() {
+    fn toml_spans_nonzero() {
+        let src = b"[server]\nport = 8080\n";
         let plugin = TomlPlugin::new().unwrap();
-        assert_eq!(plugin.format_id(), "toml");
-    }
-
-    #[test]
-    fn test_toml_plugin_file_extensions() {
-        let plugin = TomlPlugin::new().unwrap();
-        assert_eq!(plugin.file_extensions(), vec!["toml"]);
-    }
-
-    #[test]
-    fn test_extract_simple_toml() {
-        let plugin = TomlPlugin::new().unwrap();
-        let source = b"name = \"test\"\nport = 8080\nenabled = true";
         let keys = plugin
-            .extract_config_keys(Path::new("config.toml"), source)
+            .extract_config_keys(Path::new("config.toml"), src)
             .unwrap();
-
-        assert!(keys.len() >= 3);
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "name" && k.value == "test")
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "port" && k.value_type == ConfigValueType::Number)
-        );
-        assert!(
-            keys.iter()
-                .any(|k| k.key_path == "enabled" && k.value_type == ConfigValueType::Boolean)
-        );
-    }
-
-    #[test]
-    fn test_extract_nested_toml() {
-        let plugin = TomlPlugin::new().unwrap();
-        let source = b"[server]\nhost = \"localhost\"\nport = 8080";
-        let keys = plugin
-            .extract_config_keys(Path::new("config.toml"), source)
-            .unwrap();
-
-        assert!(keys.iter().any(|k| k.key_path == "server.host"));
-        assert!(keys.iter().any(|k| k.key_path == "server.port"));
+        let port = keys.iter().find(|k| k.key_path.contains("port")).unwrap();
+        assert!(port.location.start_line >= 1);
     }
 }

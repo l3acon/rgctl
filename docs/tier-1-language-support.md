@@ -18,7 +18,7 @@ rgctl uses a **hybrid tiering** model:
 | **Tier 2** | Generic tree-sitter | `rgctl-lang-{id}/` + `config.rs` | Kinds from `LanguageConfig` | Optional | Usually none | Not required |
 | **Tier 3** | Regex | `rgctl-lang-{id}/` + regex patterns | Pattern-based symbols | No | No | No |
 
-**Tier 1 custom plugins today:** Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++ — see `languages.toml` (`handler = "custom"`).
+**Tier 1 custom plugins today:** Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++, Puppet, Kotlin, Groovy — see `languages.toml` (`handler = "custom"`).
 
 **Markdown** is a separate **custom markup plugin** (`rgctl-lang-markdown`): documentation context graph only — not Tier 1 and not generic Tier 2. See [markdown-context.md](markdown-context.md).
 
@@ -227,10 +227,12 @@ pub fn register(registry: &mut LanguageRegistry) {
 }
 ```
 
-5. Add to **workspace root** `Cargo.toml`:
+5. Add `{id}-ast-coverage.json` (every named grammar kind → `Symbol` / `Relation` / `CfgStatement` / `AstSkeleton` / `Literal` / intentional `Skip`) plus `src/ast_coverage.rs` with `*_ast_coverage_manifest_matches_grammar` (see `rgctl-lang-ruby` / `rgctl-lang-java`). Update the JSON when bumping the grammar pin. Register the language in `rgctl-ast-coverage::bundled_specs` so `cargo check -p rgctl-languages` warns on drift (`RGCTL_AST_COVERAGE_STRICT=1` fails the build).
+
+6. Add to **workspace root** `Cargo.toml`:
    - `members` list
    - `[workspace.dependencies] rgctl-lang-{id} = { path = "...", version = "0.1.0" }`
-6. Register in `crates/rgctl-languages/src/lib.rs`.
+7. Register in `crates/rgctl-languages/src/lib.rs`.
 
 ### Step 2 — `languages.toml`
 
@@ -413,6 +415,7 @@ Copy into your PR description:
 - [ ] **Layer F:** golden `{id}_cfg_captures_field_write_and_query` in `field_write` tests
 - [ ] `taint.rs` `detect_{id}_patterns`
 - [ ] `extract_relations` emits `Calls` (and inheritance if applicable)
+- [ ] `{id}-ast-coverage.json` + `ast_coverage` test (`*_ast_coverage_manifest_matches_grammar`)
 - [ ] Integration test + dashboard gate (or documented fixture path)
 - [ ] `discover --with-cfg --with-security --with-taint` smoke on fixture repo documented in test
 - [ ] No new CDN / online-only dashboard dependencies
@@ -433,6 +436,9 @@ Copy into your PR description:
 | JS / TS | 1 custom | ✅ Import/Extends/FQN/Instantiates (+ decorators TS); shared `rgctl-plugin-helpers::ecmascript` | ✅ | ✅ rich | `dashboard_ecommerce_javascript`, `javascript_langfeatures`, `typescript_langfeatures` | ✅ F1–F6 (JS weaker types) |
 | PHP | 1 custom | ✅ + Uses (traits), Import, attributes, anonymous classes | ✅ | ✅ + `$_FILES`, `filter_input`, `prepare` | `dashboard_ecommerce_php` | ✅ F1–F6 |
 | Ruby | 1 custom | ✅ Import, mixin Extends/Uses, Instantiates, unresolved dynamic calls | ✅ rescue/begin | ✅ Rack-ish patterns | `dashboard_ecommerce_ruby`, `ruby_langfeatures` | ✅ F1–F6 |
+| Puppet | 1 custom | ✅ IncludesClass/InheritsClass/RequiresResource/DependsOnModule/Calls | ✅ if/unless/case | ✅ lookup/exec patterns | pending `dashboard_ecommerce_puppet` | ✅ F1/F3; F2 N/A; **F6 waived** (honesty) |
+| Kotlin | 1 custom | ✅ Calls/Extends/Implements; `tree-sitter-kotlin-ng` | ✅ if/when/loops | ✅ JVM patterns | ✅ `dashboard_ecommerce_kotlin`, langfeatures, verify script | ✅ Layer F (`navigation_expression`) |
+| Groovy | 1 custom | ✅ best-effort Calls; dynamic honesty | ✅ if/loops (Java-shaped AST) | ✅ script sinks | ✅ `dashboard_ecommerce_groovy`, langfeatures, verify script | ✅ Layer F (`field_access`) |
 
 Layer F golden coverage lives in `crates/rgctl-analysis/src/field_write.rs` (`*_cfg_captures_field_write_and_query`). Update this table when promoting a language or when F tests regress.
 

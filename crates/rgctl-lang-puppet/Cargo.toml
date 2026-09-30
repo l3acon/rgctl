@@ -1,0 +1,20 @@
+[package]
+name = "rgctl-lang-puppet"
+version = "0.4.16"
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl language plugin: puppet (tree-sitter-puppet)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tree-sitter-grammars/tree-sitter-puppet"
+
+[dependencies]
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+rgctl-plugin-helpers = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-puppet = "1.3.0"
+serde_json = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
