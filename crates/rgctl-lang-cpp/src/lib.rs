@@ -13,6 +13,8 @@
 use rgctl_registry::LanguageRegistry;
 use std::sync::Arc;
 
+#[cfg(test)]
+mod ast_coverage;
 mod plugin;
 pub use plugin::CppPlugin;
 

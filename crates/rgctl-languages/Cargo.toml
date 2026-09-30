@@ -24,3 +24,6 @@ rgctl-lang-ruby = { workspace = true }
 rgctl-lang-puppet = { workspace = true }
 rgctl-lang-kotlin = { workspace = true }
 rgctl-lang-groovy = { workspace = true }
+
+[build-dependencies]
+rgctl-ast-coverage = { workspace = true }

@@ -59,6 +59,7 @@ Copy-paste **PR checklist** block: [tier-1 §7](tier-1-language-support.md#7-pr-
 
 | Gate | Layer | Command / location |
 |------|-------|-------------------|
+| AST coverage (build) | A | `cargo check -p rgctl-languages` warns on grammar/`*-ast-coverage.json` drift; `RGCTL_AST_COVERAGE_STRICT=1` fails |
 | E1 Plugin symbols + `Calls` | E | `cargo test -p rgctl-lang-{id}` |
 | E2 CFG branching + loop | E | `cargo test -p rgctl-analysis cfg_builder` |
 | E3 Taint source→sink | E | `cargo test --test taint_analysis` or `tests/{lang}_taint.rs` |

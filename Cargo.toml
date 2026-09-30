@@ -39,6 +39,7 @@ members = [
     "crates/rgctl-lang-puppet",
     "crates/rgctl-lang-kotlin",
     "crates/rgctl-lang-groovy",
+    "crates/rgctl-ast-coverage",
     "crates/rgctl-languages",
     "crates/rgctl-agent-pack-codegen",
 ]
@@ -89,6 +90,7 @@ rgctl-lang-ruby = { path = "crates/rgctl-lang-ruby", version = "0.4.16" }
 rgctl-lang-puppet = { path = "crates/rgctl-lang-puppet", version = "0.4.16" }
 rgctl-lang-kotlin = { path = "crates/rgctl-lang-kotlin", version = "0.4.16" }
 rgctl-lang-groovy = { path = "crates/rgctl-lang-groovy", version = "0.4.16" }
+rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.16" }
 rgctl-languages = { path = "crates/rgctl-languages", version = "0.4.16" }
 tree-sitter = "0.25"
 
