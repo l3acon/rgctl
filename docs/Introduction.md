@@ -120,6 +120,6 @@ Current Tier 1 ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP
 | Language support matrix | [languages/README.md](languages/README.md) (JSON SSOT → website) |
 | JSON fields / `schema_version` | [json-api.md](json-api.md) |
 | HTTP `serve` API | [http-api.md](http-api.md) |
-| Latest release notes | [v0.4.16](releases/v0.4.16.md) |
+| Latest release notes | [v0.4.17](releases/v0.4.17.md) |
 | Contribute / cold profiles | [AGENTS.md](../AGENTS.md) · [docs hub — For contributors](README.md#for-contributors) |
 | Research map | [further-reading.md](further-reading.md) |

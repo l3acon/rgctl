@@ -1,6 +1,6 @@
 [package]
 name = "rgctl-lang-puppet"
-version = "0.4.16"
+version = "0.4.17"
 edition.workspace = true
 rust-version.workspace = true
 description = "rgctl language plugin: puppet (tree-sitter-puppet)"
