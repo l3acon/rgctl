@@ -25,7 +25,7 @@ This doc **does not replace** the deep guides it links to. Use it to pick a path
 | Path | When | Deep guide |
 |------|------|------------|
 | **Tier 1 language** | Custom `LanguagePlugin`, full CFG/PDG/taint + Layer F CPG | [tier-1-language-support.md](tier-1-language-support.md) |
-| **Tier 2 language** | Generic tree-sitter + `LanguageConfig` | [languages/README.md](languages/README.md) · scaffold in [tier-1 §3–4](tier-1-language-support.md#3-repository-layout) (Tier 2 uses `config.rs`) |
+| **Tier 2 language** | Generic tree-sitter + `LanguageConfig` | [languages/README.md](languages/README.md) (coverage JSON + website) · scaffold in [tier-1 §3–4](tier-1-language-support.md#3-repository-layout) (Tier 2 uses `config.rs`) |
 | **Tier 3 language** | Regex patterns only | [languages/README.md](languages/README.md) |
 | **Config formats** | JSON, YAML, TOML, properties, … | `crates/rgctl-config-formats` |
 | **Markup (Markdown)** | Doc context graph (not Tier 1/2) | [markdown-context.md](markdown-context.md) |
@@ -67,7 +67,7 @@ Copy-paste **PR checklist** block: [tier-1 §7](tier-1-language-support.md#7-pr-
 | E5 Dashboard bundle | E | `cargo test --release --test dashboard_ecommerce_{lang}` + shared [dashboard_harness.rs](../tests/dashboard_harness.rs) |
 | E6 Workspace clean | E | [§5 standard test workflow](#5-standard-test-workflow) |
 | F6 Field-write golden | F | `crates/rgctl-analysis/src/field_write.rs` — `{id}_cfg_captures_field_write_and_query` |
-| Langfeature GQL probes | E/F | `cargo test --test java_langfeatures` · `cargo test --test go_langfeatures` · `cargo test --test ruby_langfeatures` (see [go-language-coverage.md](design/go-language-coverage.md), [languages/ruby.md](languages/ruby.md)) |
+| Langfeature GQL probes | E/F | `cargo test --test java_langfeatures` · `cargo test --test go_langfeatures` · `cargo test --test ruby_langfeatures` (see [go-language-coverage.md](design/go-language-coverage.md), [ruby-extract-honesty.md](ruby-extract-honesty.md)) |
 
 **Dashboard gates by language** (release mode; external fixture repos — set `RGCTL_*_REPO` if needed):
 
@@ -96,7 +96,7 @@ Parity snapshot: [tier-1 §8](tier-1-language-support.md#8-current-parity-snapsh
 ### Config format plugins
 
 - Code: `crates/rgctl-config-formats`
-- Tier table: [languages/README.md](languages/README.md) (config formats do not run CFG/PDG)
+- Tier table / coverage SSOT: [languages/README.md](languages/README.md) (config formats do not run CFG/PDG)
 
 Run workspace tests touching the format crate; add fixture tests if you change extraction behavior.
 
@@ -190,7 +190,7 @@ CLI I/O layer reference: [cli-io-sanity-qe.md](cli-io-sanity-qe.md). Workflow mi
 | User CLI | [user-guide.md](user-guide.md) · validate with `cargo test --test user_guide_scenarios` |
 | Contribute (agent README) | [AGENTS.md](../AGENTS.md) |
 | Use rgctl / JSON | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [json-api.md](json-api.md) · [agent-recipes.md](agent-recipes.md) · [agent-commands](guides/agent-commands.md) |
-| Languages list | [languages/README.md](languages/README.md) |
+| Languages (coverage JSON → website) | [languages/README.md](languages/README.md) |
 | Dashboard UX | [dashboard-user-guide.md](dashboard-user-guide.md) |
 | New capability | Matching doc in [design/](design/README.md) |
 

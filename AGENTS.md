@@ -20,7 +20,7 @@
 - **Artifacts:** Session data lives in `{repo}/.rgctl/`. Warm caches invalidate wall-time claims.
 - **Features:** Default semantic embedder is compiled **vocab**. Do not require ONNX / Python ML unless behind an explicit feature (e.g. `semantic-onnx` / code-daemon + Git LFS).
 - **OpenSpec language work:** Still cite [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) (pointer here); follow the sections below.
-- **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails).
+- **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The website `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`.
 
 ---
 
