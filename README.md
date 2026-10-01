@@ -7,7 +7,7 @@
 
 [![Docs](https://img.shields.io/badge/docs-shaaf.dev%2Frgctl-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://shaaf.dev/rgctl)
 [![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl/website.yml?branch=main&style=flat-square&label=website)](https://shaaf.dev/rgctl)
-[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.99%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
 [![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-commands/)
@@ -57,7 +57,7 @@ https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
 rgctl --version
 ```
 
-**Or build from source** (Rust **1.88+**):
+**Or build from source** (Rust **1.99+**):
 
 ```bash
 git clone https://github.com/sshaaf/rgctl.git

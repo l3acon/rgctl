@@ -8,14 +8,15 @@ use rgctl_error::Result;
 use rgctl_extraction::discovery::{DiscoveryConfig, FileDiscoverer};
 use rgctl_extraction::{Extractor, GraphBuilder};
 use rgctl_graph::code_graph::CodeGraph;
-use rgctl_graph::code_index::CodeIndex;
 use rgctl_graph::content_store::ContentStore;
 use rgctl_graph::schema::{Edge, Node};
 use rgctl_graph::write_columnar_from_spill;
 use rgctl_registry::LanguageRegistry;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 /// Options for the processing pipeline.
 #[derive(Debug, Clone)]
@@ -62,10 +63,24 @@ pub struct PipelineStats {
     pub edges_created: usize,
     /// Total processing duration
     pub duration: Duration,
-    /// Time spent in parallel file extraction (tree-sitter)
+    /// Wall time for parallel extract + sequential pass-1 (`stream_into_graph`)
     pub extract_duration: Duration,
-    /// Time spent merging extractions into the graph
+    /// Sum of `fs::read` across extract workers (may exceed [`Self::extract_duration`])
+    pub extract_read_cpu: Duration,
+    /// Sum of plugin parse/extract across workers (may exceed [`Self::extract_duration`])
+    pub extract_parse_cpu: Duration,
+    /// Sequential pass-1 merge wall inside extract
+    pub extract_pass1_wall: Duration,
+    /// Time spent merging extractions into the graph (indexes + pass-2 + spill/columnar)
     pub graph_build_duration: Duration,
+    /// Build symbol resolution indexes (subset of [`Self::graph_build_duration`])
+    pub graph_resolution_index: Duration,
+    /// Pass-2 relation / config-usage resolution
+    pub graph_pass2: Duration,
+    /// Spill finish + columnar snapshot compile (snapshot path only)
+    pub graph_spill_columnar: Duration,
+    /// Path → node ids collected during extract (skips full mmap scan in save_tracker)
+    pub node_path_mapping: HashMap<String, Vec<Uuid>>,
 }
 
 /// End-to-end repository processing pipeline.
@@ -131,7 +146,8 @@ impl ProcessingPipeline {
         std::fs::create_dir_all(&spill_dir)?;
         let mut builder = GraphBuilder::with_spill(&spill_dir)?;
         builder.set_materialize_fields(self.config.materialize_fields);
-        builder.set_code_index(CodeIndex::load(CodeIndex::default_cache_path(store))?);
+        // Default discover: do not load/store CodeIndex bodies (multi-GB on linux).
+        // Nodes still get `code_hash` via worker-precomputed prep / `hash_code`.
         builder.set_content_store(ContentStore::load(ContentStore::default_path(store))?);
 
         let progress_for_stream = progress.clone();
@@ -156,6 +172,7 @@ impl ProcessingPipeline {
 
         let files_processed = stream_stats.files_processed;
         let files_failed = stream_stats.extraction_failures.len();
+        let extract_phases = stream_stats.extract_phases;
 
         let graph_start = Instant::now();
         let index_start = Instant::now();
@@ -168,7 +185,7 @@ impl ProcessingPipeline {
         let nodes_created = builder.node_count();
         let edges_created = builder.edge_count();
         let content_store = builder.take_content_store();
-        let code_index = builder.take_code_index();
+        let node_path_mapping = builder.take_tracker_mapping();
         let spill_start = Instant::now();
         let finished = builder.finish_spill()?;
         let digest = write_columnar_from_spill(finished, snapshot_path)?;
@@ -177,13 +194,13 @@ impl ProcessingPipeline {
             resolution_index_secs = index_elapsed.as_secs_f64(),
             pass2_relation_resolution_secs = pass2_elapsed.as_secs_f64(),
             spill_and_columnar_secs = spill_elapsed.as_secs_f64(),
+            extract_read_cpu_secs = extract_phases.read_cpu.as_secs_f64(),
+            extract_parse_cpu_secs = extract_phases.parse_cpu.as_secs_f64(),
+            extract_pass1_wall_secs = extract_phases.pass1_wall.as_secs_f64(),
             "graph build sub-phase timings"
         );
         if let Some(store) = content_store {
             store.save()?;
-        }
-        if let Some(index) = code_index {
-            index.save()?;
         }
         let graph_build_duration = graph_start.elapsed();
 
@@ -196,7 +213,14 @@ impl ProcessingPipeline {
                 edges_created,
                 duration: start.elapsed(),
                 extract_duration,
+                extract_read_cpu: extract_phases.read_cpu,
+                extract_parse_cpu: extract_phases.parse_cpu,
+                extract_pass1_wall: extract_phases.pass1_wall,
                 graph_build_duration,
+                graph_resolution_index: index_elapsed,
+                graph_pass2: pass2_elapsed,
+                graph_spill_columnar: spill_elapsed,
+                node_path_mapping,
             },
             digest,
         ))
@@ -231,7 +255,6 @@ impl ProcessingPipeline {
         let extract_start = Instant::now();
         let mut builder = GraphBuilder::new();
         builder.set_materialize_fields(self.config.materialize_fields);
-        builder.set_code_index(CodeIndex::load(CodeIndex::default_cache_path(root))?);
         builder.set_content_store(ContentStore::load(ContentStore::default_path(root))?);
         let progress_for_stream = progress.clone();
         let (stream_stats, tails) = stream_into_graph(
@@ -255,16 +278,19 @@ impl ProcessingPipeline {
 
         let files_processed = stream_stats.files_processed;
         let files_failed = stream_stats.extraction_failures.len();
+        let extract_phases = stream_stats.extract_phases;
 
         let graph_start = Instant::now();
+        let index_start = Instant::now();
         builder.build_resolution_indexes();
+        let index_elapsed = index_start.elapsed();
+        let pass2_start = Instant::now();
         extractor.populate_pass2(&tails, &mut builder)?;
+        let pass2_elapsed = pass2_start.elapsed();
         if let Some(store) = builder.take_content_store() {
             store.save()?;
         }
-        if let Some(index) = builder.take_code_index() {
-            index.save()?;
-        }
+        let node_path_mapping = builder.take_tracker_mapping();
         let (nodes, edges): (Vec<Node>, Vec<Edge>) = builder.into_graph();
         let graph_build_duration = graph_start.elapsed();
 
@@ -281,7 +307,14 @@ impl ProcessingPipeline {
                 edges_created,
                 duration: start.elapsed(),
                 extract_duration,
+                extract_read_cpu: extract_phases.read_cpu,
+                extract_parse_cpu: extract_phases.parse_cpu,
+                extract_pass1_wall: extract_phases.pass1_wall,
                 graph_build_duration,
+                graph_resolution_index: index_elapsed,
+                graph_pass2: pass2_elapsed,
+                graph_spill_columnar: Duration::ZERO,
+                node_path_mapping,
             },
         ))
     }

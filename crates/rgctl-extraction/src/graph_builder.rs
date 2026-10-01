@@ -1,5 +1,6 @@
 //! Maps extracted symbols and relations into graph nodes and edges.
 
+use crate::extractor::SymbolPass1Prep;
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::{CodeIndex, hash_code};
 use rgctl_graph::content_store::{ContentStore, INLINE_BODY_MAX_BYTES, hash_bytes};
@@ -59,6 +60,8 @@ pub struct GraphBuilder {
     suffix_resolve_cache: HashMap<String, Uuid>,
     /// When false (default discover), `Symbol.fields` stay on symbols only — no Variable nodes.
     materialize_fields: bool,
+    /// Path → node ids accumulated during commit (feeds FileTracker without a full mmap scan).
+    tracker_mapping: HashMap<String, Vec<Uuid>>,
 }
 
 #[derive(Debug, Default)]
@@ -196,6 +199,7 @@ impl GraphBuilder {
 
     fn commit_node(&mut self, node: Node) {
         self.record_line_span(&node);
+        self.record_tracker_mapping(&node);
         if let Some(spill) = self.spill.as_mut() {
             if let Err(e) = spill.append_node(&node) {
                 self.spill_error = Some(e.to_string());
@@ -205,6 +209,21 @@ impl GraphBuilder {
         } else {
             self.nodes.push(node);
         }
+    }
+
+    fn record_tracker_mapping(&mut self, node: &Node) {
+        let path = node.file_path.as_deref().or_else(|| {
+            if matches!(node.node_type, NodeType::File) {
+                Some(node.name.as_str())
+            } else {
+                None
+            }
+        });
+        let Some(path) = path else {
+            return;
+        };
+        let key = normalize_path_str(path).into_owned();
+        self.tracker_mapping.entry(key).or_default().push(node.id);
     }
 
     fn commit_edge(&mut self, edge: Edge) {
@@ -288,9 +307,14 @@ impl GraphBuilder {
         self.code_index.take()
     }
 
+    /// Take the path → node-id mapping accumulated during commit (for FileTracker).
+    pub fn take_tracker_mapping(&mut self) -> HashMap<String, Vec<Uuid>> {
+        std::mem::take(&mut self.tracker_mapping)
+    }
+
     /// Add a symbol node linked to its file.
     pub fn add_symbol(&mut self, symbol: &Symbol, file_id: Uuid) -> Uuid {
-        self.add_symbol_with_body(symbol, file_id, None)
+        self.add_symbol_with_prep(symbol, file_id, None, None)
     }
 
     /// Add a symbol node and optionally hash its body for change detection.
@@ -299,6 +323,17 @@ impl GraphBuilder {
         symbol: &Symbol,
         file_id: Uuid,
         body: Option<&str>,
+    ) -> Uuid {
+        self.add_symbol_with_prep(symbol, file_id, body, None)
+    }
+
+    /// Add a symbol, preferring worker-precomputed hash/bloom when `prep` is set.
+    pub fn add_symbol_with_prep(
+        &mut self,
+        symbol: &Symbol,
+        file_id: Uuid,
+        body: Option<&str>,
+        prep: Option<&SymbolPass1Prep>,
     ) -> Uuid {
         let mut key = symbol_key(
             &symbol.location.file,
@@ -350,16 +385,25 @@ impl GraphBuilder {
                     .collect(),
             );
         }
-        if let Some(body) = body {
-            let code_hash = if let Some(index) = self.code_index.as_mut() {
-                index.add_code(body, &symbol.location)
-            } else {
-                hash_code(body)
-            };
+
+        let code_hash = prep
+            .and_then(|p| p.code_hash.clone())
+            .or_else(|| {
+                body.map(|b| {
+                    if let Some(index) = self.code_index.as_mut() {
+                        index.add_code(b, &symbol.location)
+                    } else {
+                        hash_code(b)
+                    }
+                })
+            });
+        if let Some(code_hash) = code_hash {
             node = node.with_code_hash(code_hash);
         }
 
-        if should_sketch_symbol(symbol.symbol_type) {
+        if let Some(bloom) = prep.and_then(|p| p.token_bloom) {
+            node = node.with_token_bloom(bloom);
+        } else if should_sketch_symbol(symbol.symbol_type) {
             let bloom = build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),

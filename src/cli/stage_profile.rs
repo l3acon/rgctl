@@ -14,7 +14,19 @@ pub struct DiscoverStageReport {
     pub wall_total: StageTiming,
     pub index_pipeline: StageTiming,
     pub index_extract: StageTiming,
+    /// Sequential pass-1 merge wall (subset of `index_extract`).
+    pub extract_pass1: StageTiming,
+    /// Sum of file-read CPU across extract workers (may exceed wall).
+    pub extract_read_cpu: StageTiming,
+    /// Sum of plugin parse CPU across extract workers (may exceed wall).
+    pub extract_parse_cpu: StageTiming,
     pub index_graph_build: StageTiming,
+    /// Resolution-index build (subset of `index_graph_build`).
+    pub graph_resolution_index: StageTiming,
+    /// Pass-2 relation resolution (subset of `index_graph_build`).
+    pub graph_pass2: StageTiming,
+    /// Spill + columnar compile (subset of `index_graph_build`).
+    pub graph_spill_columnar: StageTiming,
     pub topology: StageTiming,
     pub community: StageTiming,
     pub complexity: StageTiming,
@@ -83,7 +95,11 @@ impl DiscoverStageReport {
 
         let stages: &[(&str, f64)] = &[
             ("index_extract", self.index_extract.secs),
+            ("extract_pass1", self.extract_pass1.secs),
             ("index_graph_build", self.index_graph_build.secs),
+            ("graph_resolution_index", self.graph_resolution_index.secs),
+            ("graph_pass2", self.graph_pass2.secs),
+            ("graph_spill_columnar", self.graph_spill_columnar.secs),
             ("topology", self.topology.secs),
             ("community", self.community.secs),
             ("complexity", self.complexity.secs),
@@ -142,6 +158,22 @@ impl DiscoverStageReport {
                 secs,
                 pct_wall = pct,
                 "[profile] stage"
+            );
+        }
+
+        for (name, secs) in [
+            ("extract_read", self.extract_read_cpu.secs),
+            ("extract_parse", self.extract_parse_cpu.secs),
+        ] {
+            if secs <= 0.0 {
+                continue;
+            }
+            tracing::info!(
+                target: "profile",
+                stage = name,
+                cpu_secs = secs,
+                extract_wall_secs = self.index_extract.secs,
+                "[profile] extract cpu stage (sum across workers; may exceed index_extract wall)"
             );
         }
 

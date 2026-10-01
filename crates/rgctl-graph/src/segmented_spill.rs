@@ -22,8 +22,11 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// Default run size for external merge-sort (~64 MiB of record payload).
-pub const DEFAULT_SORT_RUN_BYTES: usize = 64 * 1024 * 1024;
+/// Default run size for external merge-sort (~256 MiB of record payload).
+///
+/// Larger runs cut multi-way merge I/O on kernel-scale spills (nodes/edges
+/// segs are hundreds of MiB). Peak RSS during sort grows by one run buffer.
+pub const DEFAULT_SORT_RUN_BYTES: usize = 256 * 1024 * 1024;
 
 const NODE_KEY_LEN: usize = 16;
 const EDGE_KEY_LEN: usize = 16 + 16 + 8; // from + to + type/pad
