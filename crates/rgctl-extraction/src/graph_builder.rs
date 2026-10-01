@@ -64,6 +64,8 @@ pub struct GraphBuilder {
     tracker_mapping: HashMap<String, Vec<Uuid>>,
     /// Normalized path for the current pass-1 file (avoids re-normalize + re-hash per symbol).
     active_tracker_key: Option<String>,
+    /// Node ids for the active file batch — flushed once in [`Self::end_file_batch`].
+    active_tracker_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Default)]
@@ -129,13 +131,24 @@ impl GraphBuilder {
 
     /// Pin tracker mapping key for the duration of one file's pass-1 insert.
     pub fn begin_file_batch(&mut self, path: &Path) {
+        if self.active_tracker_key.is_some() {
+            self.end_file_batch();
+        }
         let key = normalize_path_str(&path.to_string_lossy()).into_owned();
         self.active_tracker_key = Some(key);
+        self.active_tracker_ids.clear();
     }
 
-    /// Clear the active pass-1 file key.
+    /// Flush active file node ids into `tracker_mapping` (once per file, not per symbol).
     pub fn end_file_batch(&mut self) {
-        self.active_tracker_key = None;
+        if let Some(key) = self.active_tracker_key.take() {
+            if !self.active_tracker_ids.is_empty() {
+                let ids = std::mem::take(&mut self.active_tracker_ids);
+                self.tracker_mapping.entry(key).or_default().extend(ids);
+            }
+        } else {
+            self.active_tracker_ids.clear();
+        }
     }
 
     fn record_line_span(&mut self, node: &Node) {
@@ -202,13 +215,33 @@ impl GraphBuilder {
                 .or_default()
                 .push(node.id);
         }
-        let parts: Vec<&str> = key.split("::").collect();
-        for i in 1..parts.len() {
-            let suffix = parts[i..].join("::");
-            self.symbols_by_suffix
-                .entry(suffix)
-                .or_default()
-                .push(node.id);
+        // `symbol_key` is `file::name` or `file::a::b::…` / `file::Qualified.Name`.
+        // For unqualified `file::name` the bare-name insert above already covers
+        // resolution — skip to avoid a duplicate push + alloc per C-like symbol.
+        match key.matches("::").count() {
+            0 => {}
+            1 => {
+                if let Some((_, tail)) = key.split_once("::") {
+                    let duplicate_bare =
+                        node.qualified_name.is_none() && tail == node.name.as_str();
+                    if !duplicate_bare {
+                        self.symbols_by_suffix
+                            .entry(tail.to_string())
+                            .or_default()
+                            .push(node.id);
+                    }
+                }
+            }
+            _ => {
+                let parts: Vec<&str> = key.split("::").collect();
+                for i in 1..parts.len() {
+                    let suffix = parts[i..].join("::");
+                    self.symbols_by_suffix
+                        .entry(suffix)
+                        .or_default()
+                        .push(node.id);
+                }
+            }
         }
     }
 
@@ -227,13 +260,8 @@ impl GraphBuilder {
     }
 
     fn record_tracker_mapping(&mut self, node: &Node) {
-        if let Some(key) = self.active_tracker_key.as_ref() {
-            if let Some(ids) = self.tracker_mapping.get_mut(key) {
-                ids.push(node.id);
-            } else {
-                let key = key.clone();
-                self.tracker_mapping.insert(key, vec![node.id]);
-            }
+        if self.active_tracker_key.is_some() {
+            self.active_tracker_ids.push(node.id);
             return;
         }
         let path = node.file_path.as_deref().or_else(|| {
@@ -333,6 +361,7 @@ impl GraphBuilder {
 
     /// Take the path → node-id mapping accumulated during commit (for FileTracker).
     pub fn take_tracker_mapping(&mut self) -> HashMap<String, Vec<Uuid>> {
+        self.end_file_batch();
         std::mem::take(&mut self.tracker_mapping)
     }
 
