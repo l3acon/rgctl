@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+# Build release `rgctl` and smoke-test `--with-limits` against a mounted Linux tree.
+#
+# Host (from repo root):
+#   ./scripts/run-container-with-limits-smoke.sh
+#
+# Manual:
+#   podman build -f tests/Containerfile -t rgctl-with-limits-smoke .
+#   podman run --rm --memory=4g \
+#     -v "$PWD/example/linux:/corpus:Z" \
+#     -e SMOKE_SCOPE=scripts \
+#     rgctl-with-limits-smoke
+
+# Deb bookworm + rustup so we can pin rustc >= workspace rust-version (1.99).
+FROM docker.io/library/debian:bookworm-slim AS builder
+
+ARG RUST_VERSION=1.99.0
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl build-essential pkg-config libssl-dev git \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --default-toolchain "${RUST_VERSION}" --profile minimal \
+    && rustc --version
+
+WORKDIR /src
+# Context is filtered by repo-root `.dockerignore` (no example/, target/, …).
+COPY . .
+# Vocab-only binary: skip `semantic-onnx` (ort prebuilts need newer glibc than bookworm).
+RUN cargo build --release --bin rgctl --no-default-features \
+    && strip target/release/rgctl
+
+FROM docker.io/library/debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/rgctl /usr/local/bin/rgctl
+COPY --chmod=755 tests/container_with_limits_smoke.sh /usr/local/bin/container_with_limits_smoke.sh
+
+ENV RUST_LOG=info,profile=info
+WORKDIR /corpus
+VOLUME ["/corpus"]
+
+ENTRYPOINT ["/usr/local/bin/container_with_limits_smoke.sh"]

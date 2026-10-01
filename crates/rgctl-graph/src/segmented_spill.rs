@@ -20,6 +20,7 @@ use std::collections::{BinaryHeap, HashMap};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use uuid::Uuid;
 
 /// Default run size for external merge-sort (~256 MiB of record payload).
@@ -27,6 +28,24 @@ use uuid::Uuid;
 /// Larger runs cut multi-way merge I/O on kernel-scale spills (nodes/edges
 /// segs are hundreds of MiB). Peak RSS during sort grows by one run buffer.
 pub const DEFAULT_SORT_RUN_BYTES: usize = 256 * 1024 * 1024;
+
+/// Process-wide sort-run override (`0` = use [`DEFAULT_SORT_RUN_BYTES`]).
+/// Set by discover `--with-limits` for constrained containers; leave unset on desktop.
+static SORT_RUN_BYTES_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
+
+/// Cap external-sort run buffers for this process (discover `--with-limits`).
+pub fn set_sort_run_bytes_override(bytes: Option<usize>) {
+    SORT_RUN_BYTES_OVERRIDE.store(bytes.unwrap_or(0), AtomicOrdering::Relaxed);
+}
+
+fn effective_sort_run_bytes() -> usize {
+    let o = SORT_RUN_BYTES_OVERRIDE.load(AtomicOrdering::Relaxed);
+    if o == 0 {
+        DEFAULT_SORT_RUN_BYTES
+    } else {
+        o
+    }
+}
 
 const NODE_KEY_LEN: usize = 16;
 const EDGE_KEY_LEN: usize = 16 + 16 + 8; // from + to + type/pad
@@ -169,7 +188,7 @@ pub fn materialize_sorted_graph(spill: &FinishedSpill) -> Result<(Vec<Node>, Vec
                 &nodes_unsorted,
                 &nodes_sorted,
                 NODE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 spill.node_count,
             )
         });
@@ -178,7 +197,7 @@ pub fn materialize_sorted_graph(spill: &FinishedSpill) -> Result<(Vec<Node>, Vec
                 &edges_unsorted,
                 &edges_sorted,
                 EDGE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 spill.edge_count,
             )
         });
@@ -244,7 +263,7 @@ pub fn write_columnar_from_spill(spill: FinishedSpill, path: &Path) -> Result<St
                 &nodes_unsorted,
                 &nodes_sorted,
                 NODE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 node_count,
             )
         });
@@ -253,7 +272,7 @@ pub fn write_columnar_from_spill(spill: FinishedSpill, path: &Path) -> Result<St
                 &edges_unsorted,
                 &edges_sorted,
                 EDGE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 edge_count,
             )
         });

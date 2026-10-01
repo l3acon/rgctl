@@ -14,6 +14,7 @@ mod diff;
 mod discover;
 mod discover_cfg;
 mod discover_impl;
+mod discover_limits;
 mod kantra_discover;
 pub mod discover_output;
 mod export;
@@ -176,6 +177,17 @@ pub enum Commands {
         /// harmonic, then semantic index. Prints a plan first; does not imply taint/security.
         #[arg(long = "full")]
         full: bool,
+
+        /// Constrain resource use for containers / small machines.
+        /// Spec: `max-mem-mb=4096,threads=1` (comma-separated). Flag alone enables limits
+        /// mode with no overrides. Env: `RGCTL_WITH_LIMITS`.
+        #[arg(
+            long = "with-limits",
+            value_name = "SPEC",
+            num_args = 0..=1,
+            default_missing_value = ""
+        )]
+        with_limits: Option<String>,
 
         /// Strategy preset for migration plan export.
         #[arg(
@@ -784,6 +796,7 @@ impl Cli {
                 kantra_target,
                 kantra_index_only,
                 mut full,
+                with_limits,
                 migration_preset,
                 migration_order,
                 files,
@@ -814,6 +827,7 @@ impl Cli {
                         kantra_target,
                         kantra_index_only,
                         full,
+                        with_limits,
                         migration_preset,
                         migration_order,
                         artifact_root: None,
