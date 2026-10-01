@@ -5,6 +5,7 @@ use crate::graph_builder::GraphBuilder;
 use crate::usage_detector::{ConfigUsage, ConfigUsageDetector};
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::hash_code;
+use rgctl_graph::content_store::hash_bytes;
 use rgctl_graph::structural_sketch::{TokenBloom, build_token_bloom};
 use rgctl_plugin_api::{ConfigKey, Relation, Symbol, SymbolType};
 use rgctl_registry::LanguageRegistry;
@@ -32,6 +33,8 @@ pub struct SymbolPass1Prep {
 pub struct FileExtraction {
     /// Path to the source file
     pub path: PathBuf,
+    /// BLAKE3 hex of `source` (computed once on the extract worker).
+    pub file_hash: Option<String>,
     /// Extracted code symbols
     pub symbols: Vec<Symbol>,
     /// Parallel to [`Self::symbols`]: hash/bloom precomputed on the worker.
@@ -105,12 +108,14 @@ impl Extractor {
     /// recorded on the returned symbols and relations, but it does not have to
     /// exist on disk.
     pub fn extract_file_with_source(&self, path: &Path, source: Vec<u8>) -> Result<FileExtraction> {
+        let file_hash = Some(hash_bytes(&source));
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
             let extracted = plugin.extract_all(path, &source)?;
             let config_usages = ConfigUsageDetector::detect(plugin.language_id(), &source, path);
             let symbol_preps = prepare_symbol_pass1(&source, &extracted.symbols);
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
+                file_hash,
                 symbols: extracted.symbols,
                 symbol_preps,
                 relations: extracted.relations,
@@ -127,6 +132,7 @@ impl Extractor {
             let symbol_preps = prepare_symbol_pass1(&source, &symbols);
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
+                file_hash,
                 symbols,
                 symbol_preps,
                 relations,
@@ -141,6 +147,7 @@ impl Extractor {
             let config_keys = config_plugin.extract_config_keys(path, &source)?;
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
+                file_hash,
                 symbols: Vec::new(),
                 symbol_preps: Vec::new(),
                 relations: Vec::new(),
@@ -174,6 +181,7 @@ impl Extractor {
         use std::time::Instant;
 
         let mut profile = Pass1Profile::default();
+        builder.begin_file_batch(&extraction.path);
         let file_id = builder.ensure_file_node_with_source(
             &extraction.path,
             (!extraction.source.is_empty()).then_some(extraction.source.as_slice()),
@@ -216,6 +224,7 @@ impl Extractor {
         extraction.symbols.clear();
         extraction.symbol_preps.clear();
         extraction.config_keys.clear();
+        builder.end_file_batch();
 
         Ok((
             ExtractionTail {

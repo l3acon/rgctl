@@ -1060,7 +1060,11 @@ pub(crate) fn run_full_analysis(
         }
         crate::incremental::group_sorted_node_paths(node_path_pairs)
     };
-    file_tracker.index_files_with_mapping(&files, node_mapping)?;
+    file_tracker.index_files_with_mapping(
+        &files,
+        node_mapping,
+        Some(&index_stats.file_hashes),
+    )?;
     file_tracker.save()?;
     profile.save_tracker.secs = secs(save_tracker_start.elapsed());
 

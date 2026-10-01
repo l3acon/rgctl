@@ -96,17 +96,25 @@ impl FileTracker {
     }
 
     /// Index files using a precomputed node→file mapping (cold discover path).
+    ///
+    /// When `precomputed_hashes` is provided, keys are absolute path strings (as from
+    /// extract workers). Missing entries fall back to reading/hashing the file.
     pub fn index_files_with_mapping(
         &mut self,
         files: &[PathBuf],
         node_mapping: HashMap<String, Vec<Uuid>>,
+        precomputed_hashes: Option<&HashMap<String, String>>,
     ) -> Result<()> {
         self.metadata.files.clear();
         self.metadata.node_mapping = node_mapping;
 
         for file in files {
             let rel = relative_path(&self.repo_root, file)?;
-            self.metadata.files.insert(rel, Self::hash_file(file)?);
+            let hash = precomputed_hashes
+                .and_then(|m| m.get(file.to_string_lossy().as_ref()).cloned())
+                .map(Ok)
+                .unwrap_or_else(|| Self::hash_file(file))?;
+            self.metadata.files.insert(rel, hash);
         }
 
         self.metadata.indexed_at = chrono_lite_now();
@@ -117,6 +125,22 @@ impl FileTracker {
 
     /// Compare current file hashes against stored metadata.
     pub fn detect_changes(&self, files: &[PathBuf]) -> Result<ChangeSet> {
+        // Cold / empty tracker: treat every file as added without hashing.
+        // Returning a non-empty ChangeSet prevents false snapshot reuse when
+        // `file_hashes.json` is missing but a stale snapshot file remains.
+        if self.metadata.files.is_empty() {
+            let added: Vec<String> = files
+                .iter()
+                .filter_map(|path| relative_path(&self.repo_root, path).ok())
+                .collect();
+            return Ok(ChangeSet {
+                added,
+                changed: Vec::new(),
+                deleted: Vec::new(),
+                renamed: Vec::new(),
+            });
+        }
+
         let current: HashMap<String, String> = files
             .iter()
             .filter_map(|path| {
@@ -447,6 +471,37 @@ mod tests {
     use rgctl_graph::schema::{Node, NodeType};
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_detect_changes_skips_hash_when_tracker_empty() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("main.rs");
+        fs::write(&file, "fn main() {}\n").unwrap();
+
+        let tracker = FileTracker::new(temp.path());
+        let changes = tracker.detect_changes(&[file]).unwrap();
+        assert_eq!(changes.added.len(), 1);
+        assert!(changes.changed.is_empty());
+        assert!(changes.deleted.is_empty());
+    }
+
+    #[test]
+    fn test_index_files_with_precomputed_hashes() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("lib.rs");
+        fs::write(&file, "fn hello() {}\n").unwrap();
+        let expected = FileTracker::hash_file(&file).unwrap();
+
+        let mut precomputed = HashMap::new();
+        precomputed.insert(file.to_string_lossy().into_owned(), expected.clone());
+
+        let mut tracker = FileTracker::new(temp.path());
+        tracker
+            .index_files_with_mapping(&[file.clone()], HashMap::new(), Some(&precomputed))
+            .unwrap();
+
+        assert_eq!(tracker.file_hashes().get("lib.rs"), Some(&expected));
+    }
 
     #[test]
     fn test_file_change_detection() {
