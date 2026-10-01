@@ -48,6 +48,8 @@ pub struct DiscoverArgs {
     pub kantra_index_only: bool,
     /// Staged full pipeline (`--full`).
     pub full: bool,
+    /// Resource limits (`--with-limits SPEC` / `RGCTL_WITH_LIMITS`).
+    pub with_limits: Option<String>,
     /// Preset strategy for `--export-migration-hints` (default: hybrid_default).
     pub migration_preset: String,
     /// Roadmap row order: `scheduled` (deps) or `priority` (score rank).
@@ -84,6 +86,7 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
         &args.kantra_rules,
         &args.kantra_catalog,
     )?;
+    let limits = super::discover_limits::DiscoverLimits::from_cli(args.with_limits.as_deref())?;
     let path = resolve_session_root(ctx, args.path.as_deref());
 
     if let Some(files) = &args.files {
@@ -91,7 +94,11 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
     }
 
     if args.full {
-        run_full_pipeline(ctx, &path, FullPipelineArgs::from_discover(&args))?;
+        run_full_pipeline(
+            ctx,
+            &path,
+            FullPipelineArgs::from_discover(&args, limits.clone()),
+        )?;
         return Ok(());
     }
 
@@ -122,6 +129,7 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
             force_reindex: false,
             emit_cli_summary: true,
             artifact_root: args.artifact_root.as_deref(),
+            limits,
         },
     )?;
     Ok(())

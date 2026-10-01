@@ -240,6 +240,17 @@ rgctl discover . --full
 
 Status is written to `.rgctl/pipeline_status.json`. A second `--full` on unchanged sources skips fresh stages.
 
+### Constrained discover (`--with-limits`)
+
+Opt-in for containers / small machines. Default discover is unchanged.
+
+```bash
+rgctl discover . --with-limits max-mem-mb=4096,threads=1
+# or: RGCTL_WITH_LIMITS=max-mem-mb=4096,threads=1 rgctl discover .
+```
+
+Caps pipeline/CFG Rayon workers, shrinks the extract stream channel and spill sort-run buffers from `max-mem-mb`, and aborts with a clear error if peak RSS approaches ~95% of the budget (warn at ~90%).
+
 ### Fast index (default)
 
 ```bash

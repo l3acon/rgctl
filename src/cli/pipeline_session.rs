@@ -33,10 +33,14 @@ pub struct FullPipelineArgs {
     pub migration_preset: String,
     pub migration_order: String,
     pub artifact_root: Option<PathBuf>,
+    pub limits: Option<super::discover_limits::DiscoverLimits>,
 }
 
 impl FullPipelineArgs {
-    pub fn from_discover(args: &DiscoverArgs) -> Self {
+    pub fn from_discover(
+        args: &DiscoverArgs,
+        limits: Option<super::discover_limits::DiscoverLimits>,
+    ) -> Self {
         Self {
             languages: args.languages.clone(),
             exclude: args.exclude.clone(),
@@ -49,6 +53,7 @@ impl FullPipelineArgs {
             migration_preset: args.migration_preset.clone(),
             migration_order: args.migration_order.clone(),
             artifact_root: args.artifact_root.clone(),
+            limits,
         }
     }
 
@@ -65,6 +70,7 @@ impl FullPipelineArgs {
             migration_preset: "hybrid_default".into(),
             migration_order: "scheduled".into(),
             artifact_root: None,
+            limits: None,
         }
     }
 }
@@ -286,6 +292,7 @@ fn analysis_opts<'a>(
         force_reindex,
         emit_cli_summary: false,
         artifact_root: extras.artifact_root.as_deref(),
+        limits: extras.limits.clone(),
     }
 }
 

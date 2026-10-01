@@ -92,6 +92,7 @@ Reference symbols from [ecommerce-java README](../../rgctl-tests/ecommerce-java/
 | `tests/discover_full_serve.rs` | `--full` pipeline + foreground serve |
 | `tests/cold_profile_gates.rs` | kafka, k8s-website markdown, obsidian export gates |
 | Dashboard `tests/dashboard_ecommerce_*.rs` | Per-language dashboard bundles |
+| `tests/Containerfile` + `scripts/run-container-with-limits-smoke.sh` | Podman/Docker `--with-limits` smoke with `example/linux` mounted (`SMOKE_SCOPE=scripts` default) |
 
 ---
 

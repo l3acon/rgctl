@@ -57,7 +57,8 @@ pub use graph_compactor::{
 pub use migration::{migrate_snapshot, migrate_v1_to_v2};
 pub use schema::{AccessType, CallType, GRAPH_SCHEMA_VERSION, GraphParameter, SharedStr};
 pub use segmented_spill::{
-    DEFAULT_SORT_RUN_BYTES, FinishedSpill, SegmentedSpill, write_columnar_from_spill,
+    DEFAULT_SORT_RUN_BYTES, FinishedSpill, SegmentedSpill, set_sort_run_bytes_override,
+    write_columnar_from_spill,
 };
 pub use snapshot::{
     MmappedGraphSnapshot, PreparedGraphSnapshot, PreparedIndexes, SNAPSHOT_FILE, SnapshotNodeStore,

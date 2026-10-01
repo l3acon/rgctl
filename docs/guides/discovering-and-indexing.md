@@ -56,6 +56,14 @@ rgctl -r example/coolstore discover --full
 
 This prints a plan, finishes a basic (queryable) index, then runs CFG + dashboard + harmonic centrality and a vocab semantic index. `--full` does not enable taint or secret scanning.
 
+### Constrained / container discover
+
+```bash
+rgctl discover . --with-limits max-mem-mb=4096,threads=1
+```
+
+Or set `RGCTL_WITH_LIMITS=max-mem-mb=4096,threads=1`. Soft RSS budget (~95% abort), thread cap, and smaller spill buffers — default discover stays unconstrained.
+
 **Output:**
 
 ```

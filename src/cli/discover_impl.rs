@@ -6,6 +6,7 @@ use rgctl_pipeline::with_large_pool;
 use super::discover_cfg::{
     CfgAnalysisOptions, FileSourceCache, preload_file_sources, run_cfg_analysis_batch,
 };
+use super::discover_limits::{check_memory_budget, DiscoverLimits};
 use super::discover_output::build_discover_response;
 use super::stage_profile::{DiscoverStageReport, secs};
 use crate::analysis::graph_utils::PetGraphView;
@@ -59,6 +60,8 @@ pub(crate) struct AnalysisOptions<'a> {
     pub emit_cli_summary: bool,
     /// Persist snapshots under this root (defaults to the scanned `path`).
     pub artifact_root: Option<&'a Path>,
+    /// Opt-in resource limits (`--with-limits`).
+    pub limits: Option<DiscoverLimits>,
 }
 
 /// Result of one `run_full_analysis` pass.
@@ -99,6 +102,7 @@ pub(crate) fn run_full_analysis(
         force_reindex,
         emit_cli_summary,
         artifact_root,
+        limits,
     } = opts;
 
     let verbose = ctx.verbose;
@@ -111,6 +115,28 @@ pub(crate) fn run_full_analysis(
     let materialize_fields = run_cfg_pass || force_materialize_fields;
     profile.cfg_enabled = run_cfg_pass;
     profile.security_enabled = with_security;
+
+    if let Some(ref lim) = limits {
+        lim.log_active();
+        if let Some(bytes) = lim.sort_run_bytes() {
+            rgctl_graph::set_sort_run_bytes_override(Some(bytes));
+        }
+        if let Some(n) = lim.threads {
+            // Help any code paths that still use the global Rayon pool.
+            if std::env::var_os("RAYON_NUM_THREADS").is_none() {
+                // SAFETY: single-threaded init before worker pools start.
+                unsafe { std::env::set_var("RAYON_NUM_THREADS", n.to_string()) };
+            }
+        }
+    }
+    // Clear spill sort-run override even on early return / error.
+    struct ClearSortRunOverride;
+    impl Drop for ClearSortRunOverride {
+        fn drop(&mut self) {
+            rgctl_graph::set_sort_run_bytes_override(None);
+        }
+    }
+    let _clear_sort_run = ClearSortRunOverride;
 
     let root = Path::new(path);
     // Source tree scanned for files; `.rgctl/` artifacts live under `store`.
@@ -163,6 +189,11 @@ pub(crate) fn run_full_analysis(
             discovery,
             show_progress: human_output,
             materialize_fields,
+            thread_count: limits.as_ref().and_then(|l| l.threads),
+            stream_channel_capacity: limits
+                .as_ref()
+                .and_then(|l| l.stream_channel_capacity())
+                .unwrap_or_else(|| PipelineConfig::default().stream_channel_capacity),
             ..PipelineConfig::default()
         },
     );
@@ -344,6 +375,9 @@ pub(crate) fn run_full_analysis(
     profile.functions = functions.len();
     // Seal ingest phase: absolute peak stays; analysis phase peak resets to current RSS.
     profile.ingest_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
+    if let Some(limit) = limits.as_ref().and_then(|l| l.max_mem_mb) {
+        check_memory_budget(profile.ingest_peak_rss_mb, limit)?;
+    }
     debug!(
         ingest_peak_mb = profile.ingest_peak_rss_mb,
         "{}",
@@ -564,7 +598,11 @@ pub(crate) fn run_full_analysis(
         }
 
         let file_sources: Option<FileSourceCache> = if with_ast_skeleton || with_cfg {
-            Some(preload_file_sources(&functions, root, None))
+            Some(preload_file_sources(
+                &functions,
+                root,
+                limits.as_ref().and_then(|l| l.threads),
+            ))
         } else {
             None
         };
@@ -575,7 +613,7 @@ pub(crate) fn run_full_analysis(
             root,
             CfgAnalysisOptions {
                 verbose,
-                thread_count: None,
+                thread_count: limits.as_ref().and_then(|l| l.threads),
                 enable_taint: with_taint,
                 dfg_loops: with_dfg_loops,
             },
@@ -1204,6 +1242,9 @@ pub(crate) fn run_full_analysis(
     let analysis_size = std::fs::metadata(&analysis_path)?.len() as f64 / (1024.0 * 1024.0);
     mem_monitor.stop_periodic_sampling();
     profile.analysis_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
+    if let Some(limit) = limits.as_ref().and_then(|l| l.max_mem_mb) {
+        check_memory_budget(profile.analysis_peak_rss_mb.max(profile.ingest_peak_rss_mb), limit)?;
+    }
     let snapshot = mem_monitor.snapshot()?;
     profile.wall_total.secs = secs(run_start.elapsed());
     profile.peak_rss_mb = snapshot.peak_mb;
