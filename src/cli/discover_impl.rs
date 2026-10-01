@@ -180,7 +180,7 @@ pub(crate) fn run_full_analysis(
     let index_start = Instant::now();
     let graph_from_snapshot = !force_reindex && file_changes.is_empty() && snapshot_path.is_file();
     let mut cold_reused: Option<crate::analysis::ColdMetadataDb> = None;
-    let (index_stats, graph_digest) = if graph_from_snapshot {
+    let (mut index_stats, graph_digest) = if graph_from_snapshot {
         let load_start = Instant::now();
         let cold = crate::analysis::ColdMetadataDb::open(&snapshot_path)?;
         let digest = cold.store().content_digest()?.to_string();
@@ -202,6 +202,7 @@ pub(crate) fn run_full_analysis(
             duration: load_elapsed,
             extract_duration: Duration::default(),
             graph_build_duration: load_elapsed,
+            ..Default::default()
         };
         cold_reused = Some(cold);
         (stats, digest)
@@ -218,7 +219,13 @@ pub(crate) fn run_full_analysis(
     };
     profile.index_pipeline.secs = secs(index_start.elapsed());
     profile.index_extract.secs = secs(index_stats.extract_duration);
+    profile.extract_pass1.secs = secs(index_stats.extract_pass1_wall);
+    profile.extract_read_cpu.secs = secs(index_stats.extract_read_cpu);
+    profile.extract_parse_cpu.secs = secs(index_stats.extract_parse_cpu);
     profile.index_graph_build.secs = secs(index_stats.graph_build_duration);
+    profile.graph_resolution_index.secs = secs(index_stats.graph_resolution_index);
+    profile.graph_pass2.secs = secs(index_stats.graph_pass2);
+    profile.graph_spill_columnar.secs = secs(index_stats.graph_spill_columnar);
     profile.nodes = index_stats.nodes_created;
     // Snapshot write is folded into index_graph_build (Lever 1: no separate backend rewrite).
     profile.save_snapshot.secs = 0.0;
@@ -1028,26 +1035,31 @@ pub(crate) fn run_full_analysis(
 
     // Save graph topology (no analysis properties!)
     let save_tracker_start = Instant::now();
-    let mut node_path_pairs: Vec<(String, uuid::Uuid)> = Vec::with_capacity(cold.node_count());
-    cold.for_each_node(&mut |node| {
-        let raw_path = node.file_path.as_deref().or_else(|| {
-            if matches!(node.node_type, NodeType::File) {
-                Some(node.name.as_str())
-            } else {
-                None
-            }
-        });
-        if let Some(path) = raw_path {
-            node_path_pairs.push((crate::incremental::normalize_path_str(path), node.id));
-        }
-    })?;
-    const PAR_SORT_NODE_PATHS_MIN: usize = 32_768;
-    if node_path_pairs.len() >= PAR_SORT_NODE_PATHS_MIN {
-        node_path_pairs.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let node_mapping = if !index_stats.node_path_mapping.is_empty() {
+        std::mem::take(&mut index_stats.node_path_mapping)
     } else {
-        node_path_pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    }
-    let node_mapping = crate::incremental::group_sorted_node_paths(node_path_pairs);
+        let mut node_path_pairs: Vec<(String, uuid::Uuid)> =
+            Vec::with_capacity(cold.node_count());
+        cold.for_each_node(&mut |node| {
+            let raw_path = node.file_path.as_deref().or_else(|| {
+                if matches!(node.node_type, NodeType::File) {
+                    Some(node.name.as_str())
+                } else {
+                    None
+                }
+            });
+            if let Some(path) = raw_path {
+                node_path_pairs.push((crate::incremental::normalize_path_str(path), node.id));
+            }
+        })?;
+        const PAR_SORT_NODE_PATHS_MIN: usize = 32_768;
+        if node_path_pairs.len() >= PAR_SORT_NODE_PATHS_MIN {
+            node_path_pairs.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        } else {
+            node_path_pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        }
+        crate::incremental::group_sorted_node_paths(node_path_pairs)
+    };
     file_tracker.index_files_with_mapping(&files, node_mapping)?;
     file_tracker.save()?;
     profile.save_tracker.secs = secs(save_tracker_start.elapsed());

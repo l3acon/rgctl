@@ -127,10 +127,24 @@ rm -rf .rgctl
 | Line | Meaning |
 |------|---------|
 | `[profile] discover summary` | Wall time, `index_secs`, `post_index_secs`, peak RSS (`peak_rss_mb`, `ingest_peak_rss_mb`, `analysis_peak_rss_mb`), node/function counts |
-| `[profile] stage` | Per-stage wall seconds and `%` of discover wall (`index_extract`, `index_graph_build`, `centrality`, `cfg_total`, `save_dashboard`, `kantra_eval`, `kantra_index`, …) |
+| `[profile] stage` | Per-stage wall seconds and `%` of discover wall (`index_extract`, `extract_pass1`, `index_graph_build`, `graph_resolution_index`, `graph_pass2`, `graph_spill_columnar`, `centrality`, …) |
+| `[profile] extract cpu stage` | CPU-sum across extract workers (`extract_read`, `extract_parse`); may exceed `index_extract` wall |
 | `[profile] centrality breakdown` | PageRank / betweenness / harmonic sub-times |
 | `[profile] save_dashboard stage` | Dashboard export substeps (e.g. `export_cfg_slice`) |
 | `[profile] cfg cpu stage` | CFG thread CPU sums (can exceed wall on parallel passes) |
+
+`index_extract` wall = parallel file extract + sequential pass-1 merge. Sub-breakdown:
+
+| Stage | Kind | Meaning |
+|-------|------|---------|
+| `extract_read` | CPU sum | `fs::read` across workers |
+| `extract_parse` | CPU sum | plugin `extract_all` / tree-sitter across workers |
+| `extract_pass1` | Wall | sequential symbol/config commit on the merge thread |
+| `graph_resolution_index` | Wall | build resolution indexes |
+| `graph_pass2` | Wall | relation / config-usage resolution |
+| `graph_spill_columnar` | Wall | spill finish + columnar snapshot compile (`DEFAULT_SORT_RUN_BYTES` = 256 MiB) |
+
+Default discover does **not** attach a body-storing `CodeIndex` (avoids multi-GB `code_index.json` / RAM). Nodes still receive `code_hash` from worker-precomputed prep.
 
 Harmonic runs only when `--with-harmonic` or **`discover --full`** (deep stage). Default linux discover skips harmonic and dashboard export.
 

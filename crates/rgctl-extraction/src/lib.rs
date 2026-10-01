@@ -8,6 +8,6 @@ pub mod manifests;
 pub mod usage_detector;
 
 pub use discovery::{DiscoveryConfig, FileDiscoverer};
-pub use extractor::{ExtractionTail, Extractor, FileExtraction};
+pub use extractor::{ExtractionTail, Extractor, FileExtraction, SymbolPass1Prep};
 pub use graph_builder::GraphBuilder;
 pub use manifests::{DependencyDeclaration, extract_manifest};

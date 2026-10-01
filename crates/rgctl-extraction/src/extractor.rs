@@ -4,7 +4,9 @@ use crate::discovery::{DiscoveryConfig, FileDiscoverer};
 use crate::graph_builder::GraphBuilder;
 use crate::usage_detector::{ConfigUsage, ConfigUsageDetector};
 use rgctl_error::{Error, Result};
-use rgctl_plugin_api::{ConfigKey, Relation, Symbol};
+use rgctl_graph::code_index::hash_code;
+use rgctl_graph::structural_sketch::{TokenBloom, build_token_bloom};
+use rgctl_plugin_api::{ConfigKey, Relation, Symbol, SymbolType};
 use rgctl_registry::LanguageRegistry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,6 +18,15 @@ pub struct Extractor {
     registry: Arc<LanguageRegistry>,
 }
 
+/// Precomputed pass-1 work for one symbol (filled on extract workers).
+#[derive(Debug, Clone, Default)]
+pub struct SymbolPass1Prep {
+    /// BLAKE3 hex digest of the symbol body when present.
+    pub code_hash: Option<String>,
+    /// Token bloom for functions (when sketched).
+    pub token_bloom: Option<TokenBloom>,
+}
+
 /// Result of extracting a single file.
 #[derive(Debug, Default, Clone)]
 pub struct FileExtraction {
@@ -23,6 +34,8 @@ pub struct FileExtraction {
     pub path: PathBuf,
     /// Extracted code symbols
     pub symbols: Vec<Symbol>,
+    /// Parallel to [`Self::symbols`]: hash/bloom precomputed on the worker.
+    pub symbol_preps: Vec<SymbolPass1Prep>,
     /// Extracted symbol relations
     pub relations: Vec<Relation>,
     /// Extracted configuration keys
@@ -95,9 +108,11 @@ impl Extractor {
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
             let extracted = plugin.extract_all(path, &source)?;
             let config_usages = ConfigUsageDetector::detect(plugin.language_id(), &source, path);
+            let symbol_preps = prepare_symbol_pass1(&source, &extracted.symbols);
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
                 symbols: extracted.symbols,
+                symbol_preps,
                 relations: extracted.relations,
                 config_keys: Vec::new(),
                 config_usages,
@@ -109,9 +124,11 @@ impl Extractor {
         // Manifests: Dependency extractors (section 3).
         if self.registry.is_manifest_file(path) {
             let (symbols, relations) = crate::manifests::extract_manifest(path, &source);
+            let symbol_preps = prepare_symbol_pass1(&source, &symbols);
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
                 symbols,
+                symbol_preps,
                 relations,
                 config_keys: Vec::new(),
                 config_usages: Vec::new(),
@@ -120,11 +137,12 @@ impl Extractor {
             });
         }
 
-        if let Ok(plugin) = self.registry.get_config_plugin_for_file(path) {
-            let config_keys = plugin.extract_config_keys(path, &source)?;
+        if let Ok(config_plugin) = self.registry.get_config_plugin_for_file(path) {
+            let config_keys = config_plugin.extract_config_keys(path, &source)?;
             return Ok(FileExtraction {
                 path: path.to_path_buf(),
                 symbols: Vec::new(),
+                symbol_preps: Vec::new(),
                 relations: Vec::new(),
                 config_keys,
                 config_usages: Vec::new(),
@@ -161,20 +179,25 @@ impl Extractor {
             (!extraction.source.is_empty()).then_some(extraction.source.as_slice()),
         );
         builder.merge_content_blobs(&extraction.content_blobs);
-        let source = (!extraction.source.is_empty()).then_some(extraction.source.as_slice());
-        let line_offsets = source.map(line_start_offsets);
 
         if !extraction.symbols.is_empty() {
             let symbol_start = Instant::now();
-            for symbol in &extraction.symbols {
-                let body = source.and_then(|bytes| {
-                    let offsets = line_offsets.as_ref()?;
-                    symbol_body_from_source(bytes, offsets, symbol)
-                });
-                if let Some(body) = body.as_deref() {
-                    builder.add_symbol_with_body(symbol, file_id, Some(body));
-                } else {
-                    builder.add_symbol(symbol, file_id);
+            let use_preps = extraction.symbol_preps.len() == extraction.symbols.len();
+            if use_preps {
+                for (symbol, prep) in extraction.symbols.iter().zip(extraction.symbol_preps.iter())
+                {
+                    builder.add_symbol_with_prep(symbol, file_id, None, Some(prep));
+                }
+            } else {
+                let source =
+                    (!extraction.source.is_empty()).then_some(extraction.source.as_slice());
+                let line_offsets = source.map(line_start_offsets);
+                for symbol in &extraction.symbols {
+                    let body = source.and_then(|bytes| {
+                        let offsets = line_offsets.as_ref()?;
+                        symbol_body_from_source(bytes, offsets, symbol)
+                    });
+                    builder.add_symbol_with_prep(symbol, file_id, body, None);
                 }
             }
             profile.symbol_processing += symbol_start.elapsed();
@@ -191,6 +214,7 @@ impl Extractor {
         extraction.content_blobs.clear();
         extraction.source.clear();
         extraction.symbols.clear();
+        extraction.symbol_preps.clear();
         extraction.config_keys.clear();
 
         Ok((
@@ -319,11 +343,11 @@ fn line_start_offsets(source: &[u8]) -> Vec<usize> {
     offsets
 }
 
-fn symbol_body_from_source(
-    source: &[u8],
+fn symbol_body_from_source<'a>(
+    source: &'a [u8],
     line_offsets: &[usize],
     symbol: &Symbol,
-) -> Option<String> {
+) -> Option<&'a str> {
     let start = symbol.location.start_line.saturating_sub(1);
     let end_line = symbol.location.end_line.max(symbol.location.start_line);
     if start >= line_offsets.len() {
@@ -340,8 +364,35 @@ fn symbol_body_from_source(
     if text.is_empty() {
         None
     } else {
-        Some(text.to_string())
+        Some(text)
     }
+}
+
+fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Prep> {
+    if symbols.is_empty() {
+        return Vec::new();
+    }
+    let offsets = line_start_offsets(source);
+    let mut preps = Vec::with_capacity(symbols.len());
+    for symbol in symbols {
+        let body = symbol_body_from_source(source, &offsets, symbol);
+        let code_hash = body.map(hash_code);
+        let token_bloom = if matches!(symbol.symbol_type, SymbolType::Function) {
+            Some(build_token_bloom(
+                &symbol.name,
+                symbol.qualified_name.as_deref(),
+                symbol.signature.as_deref(),
+                body,
+            ))
+        } else {
+            None
+        };
+        preps.push(SymbolPass1Prep {
+            code_hash,
+            token_bloom,
+        });
+    }
+    preps
 }
 
 #[cfg(test)]

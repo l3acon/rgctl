@@ -48,7 +48,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.99"
 
 [workspace.dependencies]
 rgctl-plugin-api = { path = "crates/rgctl-plugin-api", version = "0.4.17" }
