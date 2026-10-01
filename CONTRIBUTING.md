@@ -89,6 +89,13 @@ Full map: [docs/Code_structure.md](docs/Code_structure.md)
 
 ---
 
+## Releasing (version bump)
+
+Lockstep workspace version via `[workspace.package]` + `version.workspace = true`.
+See **[docs/releasing.md](docs/releasing.md)** for `./scripts/bump-version.sh` and `cargo release`.
+
+---
+
 ## Adding or improving a language / feature
 
 Use the hub checklist for path choice, test matrices, and pre-PR commands:
