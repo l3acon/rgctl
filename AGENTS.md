@@ -22,7 +22,7 @@
 - **Features:** Default semantic embedder is compiled **vocab**. Do not require ONNX / Python ML unless behind an explicit feature (e.g. `semantic-onnx` / code-daemon + Git LFS).
 - **OpenSpec language work:** Still cite [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) (pointer here); follow the sections below.
 - **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The website `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`.
-
+- **Releases:** Follow **Releases** below (and [docs/releasing.md](docs/releasing.md)). Do not hand-edit dozens of crate `version =` lines.
 ---
 
 ## Context & architecture
@@ -158,7 +158,24 @@ Baselines and notes: [docs/internal/profile.md](docs/internal/profile.md#snapsho
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, tests, PR norms |
 | [docs/contributor-checklist.md](docs/contributor-checklist.md) | Language / feature checklist |
 | [docs/guides/semantic-search.md](docs/guides/semantic-search.md) | Embedders (if touching semantic) |
+| [docs/releasing.md](docs/releasing.md) | Version bump + GitHub Release tags |
 | [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) | OpenSpec pointer (canonical policy is this file) |
+
+---
+
+## Releases
+
+When asked to cut or bump a release, use the lockstep tooling — full detail: [docs/releasing.md](docs/releasing.md).
+
+| Rule | Detail |
+|------|--------|
+| **One version** | SSOT is `[workspace.package] version` in root `Cargo.toml`. Crates use `version.workspace = true`. Do **not** sed/`version =` across every crate by hand. |
+| **Bump TOMLs only** | `./scripts/bump-version.sh patch` (or `minor` / `major` / `X.Y.Z`). Syncs workspace version, `[workspace.dependencies]` path pins, and README release links. |
+| **Bump + tag + push** | `cargo release patch --workspace` (dry-run), then `--execute` when the user wants commit/tag/push. Config: [`release.toml`](release.toml) (`shared-version`, `publish = false`, tag `v{{version}}`). Needs a **clean** git tree. |
+| **Tools** | `cargo install cargo-edit cargo-release --locked` if missing. |
+| **GitHub Release** | Pushing `v*` runs [`.github/workflows/release.yml`](.github/workflows/release.yml) (binaries). Add `docs/releases/vX.Y.Z.md` for curated notes. |
+| **No crates.io** | `publish = false` — do not `cargo publish` unless the user explicitly asks to enable it. |
+| **Commits / tags / push** | Only when the user explicitly requests them (same standing rule as other git ops). Prefer preparing the bump + release notes and stopping for the user to commit/sign/tag if they GPG-sign locally. |
 
 ---
 

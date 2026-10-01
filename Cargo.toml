@@ -49,6 +49,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.99"
+version = "0.4.17"
 
 [workspace.dependencies]
 rgctl-plugin-api = { path = "crates/rgctl-plugin-api", version = "0.4.17" }
@@ -124,7 +125,7 @@ expect_used = "warn"
 
 [package]
 name = "rgctl"
-version = "0.4.17"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors = ["rgctl Contributors"]

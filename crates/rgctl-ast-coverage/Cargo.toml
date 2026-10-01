@@ -1,6 +1,6 @@
 [package]
 name = "rgctl-ast-coverage"
-version = "0.4.17"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "AST coverage manifest checks vs pinned tree-sitter grammars"
