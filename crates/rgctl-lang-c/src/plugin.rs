@@ -1,8 +1,9 @@
 //! C language plugin using Tree-sitter.
 
 use rgctl_plugin_api::*;
+use rgctl_plugin_helpers::parse_source;
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// File-scoped qualified name: `{file_stem}::{symbol}`.
 ///
@@ -40,30 +41,21 @@ fn include_path_from_node(node: Node, source: &[u8]) -> Result<String> {
 }
 
 /// C language plugin.
-pub struct CPlugin {
-    _parser: Parser,
-}
+pub struct CPlugin;
 
 impl CPlugin {
     /// Create a new C plugin.
     pub fn new() -> Result<Self> {
-        let mut parser = Parser::new();
+        // Validate grammar at registration; per-file parse reuses a thread-local parser.
+        let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&tree_sitter_c::LANGUAGE.into())
             .map_err(|e| Error::PluginError(format!("Failed to set C grammar: {e}")))?;
-        Ok(Self { _parser: parser })
+        Ok(Self)
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_c::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set C grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse C source".to_string(),
-        })
+        parse_source(source, file_path, tree_sitter_c::LANGUAGE.into())
     }
 
     fn extract_function(
