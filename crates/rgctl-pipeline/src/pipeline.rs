@@ -81,6 +81,8 @@ pub struct PipelineStats {
     pub graph_spill_columnar: Duration,
     /// Path → node ids collected during extract (skips full mmap scan in save_tracker)
     pub node_path_mapping: HashMap<String, Vec<Uuid>>,
+    /// Absolute path → BLAKE3 hex from extract workers (skips re-hash in save_tracker)
+    pub file_hashes: HashMap<String, String>,
 }
 
 /// End-to-end repository processing pipeline.
@@ -173,6 +175,7 @@ impl ProcessingPipeline {
         let files_processed = stream_stats.files_processed;
         let files_failed = stream_stats.extraction_failures.len();
         let extract_phases = stream_stats.extract_phases;
+        let file_hashes = stream_stats.file_hashes;
 
         let graph_start = Instant::now();
         let index_start = Instant::now();
@@ -221,6 +224,7 @@ impl ProcessingPipeline {
                 graph_pass2: pass2_elapsed,
                 graph_spill_columnar: spill_elapsed,
                 node_path_mapping,
+                file_hashes,
             },
             digest,
         ))
@@ -279,6 +283,7 @@ impl ProcessingPipeline {
         let files_processed = stream_stats.files_processed;
         let files_failed = stream_stats.extraction_failures.len();
         let extract_phases = stream_stats.extract_phases;
+        let file_hashes = stream_stats.file_hashes;
 
         let graph_start = Instant::now();
         let index_start = Instant::now();
@@ -315,6 +320,7 @@ impl ProcessingPipeline {
                 graph_pass2: pass2_elapsed,
                 graph_spill_columnar: Duration::ZERO,
                 node_path_mapping,
+                file_hashes,
             },
         ))
     }

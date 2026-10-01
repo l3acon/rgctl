@@ -6,6 +6,7 @@ use rayon::prelude::*;
 use rgctl_error::Result;
 use rgctl_extraction::{ExtractionTail, Extractor, FileExtraction, GraphBuilder};
 use rgctl_registry::LanguageRegistry;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -36,6 +37,8 @@ pub struct StreamStats {
     pub files_processed: usize,
     pub extraction_failures: Vec<ExtractionFailure>,
     pub extract_phases: ExtractPhaseTimings,
+    /// Absolute path string → BLAKE3 hex from extract workers (feeds FileTracker).
+    pub file_hashes: HashMap<String, String>,
 }
 
 /// Run parallel extractors into a bounded channel while the caller consumes on the main thread.
@@ -116,10 +119,16 @@ pub fn stream_into_graph(
 
     let mut tails = Vec::with_capacity(file_count);
     let mut stats = StreamStats::default();
+    stats.file_hashes.reserve(file_count);
     let mut pass1_wall = Duration::ZERO;
     while let Ok(result) = rx.recv() {
         match result {
             Ok(mut extraction) => {
+                if let Some(hash) = extraction.file_hash.take() {
+                    stats
+                        .file_hashes
+                        .insert(extraction.path.to_string_lossy().into_owned(), hash);
+                }
                 let pass1_start = Instant::now();
                 tails.push(extractor.populate_pass1(&mut extraction, builder)?);
                 pass1_wall += pass1_start.elapsed();

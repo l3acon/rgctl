@@ -62,6 +62,8 @@ pub struct GraphBuilder {
     materialize_fields: bool,
     /// Path → node ids accumulated during commit (feeds FileTracker without a full mmap scan).
     tracker_mapping: HashMap<String, Vec<Uuid>>,
+    /// Normalized path for the current pass-1 file (avoids re-normalize + re-hash per symbol).
+    active_tracker_key: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -125,6 +127,17 @@ impl GraphBuilder {
         }
     }
 
+    /// Pin tracker mapping key for the duration of one file's pass-1 insert.
+    pub fn begin_file_batch(&mut self, path: &Path) {
+        let key = normalize_path_str(&path.to_string_lossy()).into_owned();
+        self.active_tracker_key = Some(key);
+    }
+
+    /// Clear the active pass-1 file key.
+    pub fn end_file_batch(&mut self) {
+        self.active_tracker_key = None;
+    }
+
     fn record_line_span(&mut self, node: &Node) {
         let Some(file) = node.file_path.as_deref() else {
             return;
@@ -133,14 +146,16 @@ impl GraphBuilder {
             return;
         };
         let end = node.end_line.unwrap_or(start);
-        self.file_line_spans
-            .entry(file.to_string())
-            .or_default()
-            .push(LineSpan {
-                start,
-                end,
-                id: node.id,
-            });
+        let span = LineSpan {
+            start,
+            end,
+            id: node.id,
+        };
+        if let Some(spans) = self.file_line_spans.get_mut(file) {
+            spans.push(span);
+        } else {
+            self.file_line_spans.insert(file.to_string(), vec![span]);
+        }
     }
 
     fn index_symbol_resolution(&mut self, key: &str, node: &Node) {
@@ -212,6 +227,15 @@ impl GraphBuilder {
     }
 
     fn record_tracker_mapping(&mut self, node: &Node) {
+        if let Some(key) = self.active_tracker_key.as_ref() {
+            if let Some(ids) = self.tracker_mapping.get_mut(key) {
+                ids.push(node.id);
+            } else {
+                let key = key.clone();
+                self.tracker_mapping.insert(key, vec![node.id]);
+            }
+            return;
+        }
         let path = node.file_path.as_deref().or_else(|| {
             if matches!(node.node_type, NodeType::File) {
                 Some(node.name.as_str())
