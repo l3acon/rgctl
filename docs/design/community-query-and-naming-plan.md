@@ -107,7 +107,7 @@ Both work after normal `discover` (analysis present). Snapshot size / content di
 1. **Docs**
    - [structured-query.md](../guides/structured-query.md) + [user-guide.md](../user-guide.md) §6: `communities list`, `inventory --by community`, scoped `find`
    - [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md): dashboard + semantic HTTP; structural queries stay on CLI
-2. **Skills** — workflow skills call `communities` / `find`, not graph pattern languages.
+2. **Skills** — the `rgctl` skill calls `communities` / `find`, not graph pattern languages.
 
 ### Acceptance
 Agent recipe copy-paste works on ecommerce-java; JSON schema_version stable.

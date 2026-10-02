@@ -100,10 +100,7 @@ rgctl -r /path/to/repo install --skill
 rgctl install --list-agents
 ```
 
-That writes:
-
-- **Meta skill** `rgctl` (router + references)
-- **Seven workflow skills** — `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`
+That writes **one skill** named `rgctl` (plus `references/` with command encyclopedia and workflow playbooks). Older packs that installed separate `rgctl-discover` / `rgctl-impact` / … folders are obsolete — delete those directories if present.
 
 **Default (no `--tools`):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. Use **`--tools all`** for the full registry.
 
@@ -1220,7 +1217,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `metrics` | PageRank, betweenness, communities summary |
 | `export` | Serialize graph (json, graphml, dot, mermaid, obsidian vault, okf) |
 | `check` | CI policy gateway |
-| `install` | Copy the bundled agent pack (meta + workflow skills) into adapter dirs |
+| `install` | Copy the bundled agent pack (single skill `rgctl`) into adapter dirs |
 | `semantic` | Opt-in semantic index + query (`--scope community`, `docs`, `all`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/status` (auto full pipeline); `--no-pipeline` fail-fast |
 

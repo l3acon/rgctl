@@ -8,6 +8,7 @@ description: >-
   impact of changing a symbol, where data flows, migration rule violations,
   Konveyor/quarkus/spring targets, repo structure/hotspots, or when `.rgctl/`
   exists — treat natural-language codebase questions as rgctl queries first.
+rgctl-managed: true
 ---
 
 # rgctl
@@ -238,20 +239,4 @@ rgctl -r "$REPO" -f json <command> …
 rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …) and meta-skill `rgctl` for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-commands.md](../../docs/guides/agent-commands.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.
-
-
-## Workflow skills (generated)
-
-| Intent | Skill |
-|--------|-------|
-| Index and discover | `rgctl-discover` |
-| Blast radius and impact | `rgctl-impact` |
-| Data flow and slices | `rgctl-flow` |
-| Semantic and structural search | `rgctl-search` |
-| Migration roadmap | `rgctl-migrate` |
-| Konveyor Kantra rules | `rgctl-kantra` |
-| CI and policy gates | `rgctl-gate` |
-
-**Migrate** (roadmap / `migration_plan.json`) and **Kantra** (rules / `kantra_findings.json`) are separate workflows — do not conflate.
-rgctl-managed router note generatedBy rgctl 0.0.0-dev
+Installs the single skill `rgctl` (with `references/`) for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-skill.md](../../docs/guides/agent-skill.md). Scenario prose lives under `workflows/` and is assembled into `references/workflows.md` (`cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`).

@@ -4,9 +4,9 @@ A skill for answering structural questions about codebases using the rgctl CLI g
 
 ## Quick Stats
 
-- **Main skill:** router + structured verb tables
+- **One skill:** `rgctl` (router + structured verb tables + references)
 - **Reference files:** command encyclopedia, workflows (assembled), communities & policy
-- **Workflow families:** discover, impact, flow, search, migrate, kantra, gate
+- **Workflow families (docs only):** discover, impact, flow, search, migrate, kantra, gate
 - **Agent query path:** `find` / `callers` / `callees` / `relations` / `inventory` / `status` (no Cypher)
 
 ## Structure
@@ -15,12 +15,14 @@ A skill for answering structural questions about codebases using the rgctl CLI g
 skills/rgctl/
 ├── SKILL.md                              # Main skill
 ├── README.md                             # This file
-├── workflows/                            # Source for workflow skills + references/workflows.md (assembled at build)
+├── workflows/                            # Fragments assembled into references/workflows.md at build
 └── references/
     ├── command-encyclopedia.md           # All commands with JSON samples
     ├── workflows.md                      # Generated from workflows/ at build (do not edit by hand)
     └── communities-and-policy.md         # Community detection + CI policy
 ```
+
+`rgctl install --skill` writes **only** this skill tree (e.g. `.cursor/skills/rgctl/`). It does **not** create separate `rgctl-discover` / `rgctl-impact` / … skill directories.
 
 ## What's Covered
 
@@ -71,7 +73,9 @@ From a target repository (not the rgctl source tree unless you are dogfooding):
 rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs meta skill `rgctl`, workflow skills (`rgctl-discover`, …). See [Agent pack walkthrough](../../docs/guides/agent-skill.md).
+Installs a single skill named `rgctl`. See [Agent pack walkthrough](../../docs/guides/agent-skill.md).
+
+If an older pack left `rgctl-discover` / `rgctl-impact` / … directories behind, delete them manually — install no longer writes those folders.
 
 **Maintainers:** edit workflow bodies under `workflows/`; regenerate `references/workflows.md` with `assemble_workflows_reference` (see `rgctl-agent-pack-codegen` test `workflows_reference_matches_fragments`).
 

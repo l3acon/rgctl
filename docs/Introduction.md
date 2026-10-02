@@ -48,7 +48,7 @@ You do not need graph theory to use the CLI: **indexing builds the map; commands
 
 1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](guides/discovering-and-indexing.md) for `-r` vs `.` pitfalls.  
 2. **Many times:** query commands read `{repo}/.rgctl/`. Prefer **`-f json`** and never scrape stderr ([JSON API](json-api.md)).  
-3. **Agents:** install the pack (`rgctl install --skill --tools …`) — meta skill + workflow skills ([agent-skill](guides/agent-skill.md)).  
+3. **Agents:** install the pack (`rgctl install --skill --tools …`) — single skill `rgctl` ([agent-skill](guides/agent-skill.md)).  
 4. **Dashboard:** optional UI after `discover --with-dashboard` + `serve` — not required for structural answers.
 
 Capability designs for contributors: [design/](design/README.md).

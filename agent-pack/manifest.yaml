@@ -17,4 +17,4 @@ workflows:
     title: CI and policy gates
 meta_skills:
   - id: rgctl
-    title: rgctl router
+    title: rgctl

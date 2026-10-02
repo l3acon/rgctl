@@ -654,7 +654,7 @@ pub enum Commands {
 
     /// Install bundled agent pack (skills, optional policy)
     Install {
-        /// Install workflow skills and meta-skill `rgctl`
+        /// Install the `rgctl` skill (references include workflow playbooks)
         #[arg(long = "skill")]
         skill: bool,
 
