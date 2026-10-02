@@ -13,7 +13,7 @@ const steps = [
   {
     n: "1",
     title: "Install the pack",
-    body: "Meta skill rgctl, eight workflow skills, and slash commands via install --skill --with-commands.",
+    body: "Meta skill rgctl and seven workflow skills via install --skill.",
   },
   {
     n: "2",
@@ -23,24 +23,23 @@ const steps = [
   {
     n: "3",
     title: "Route the question",
-    body: "Chat /rgctl-impact or /rgctl-gql, or the matching workflow skill — agents spawn rgctl -f json.",
+    body: "Load rgctl-impact / rgctl-search / … — agents spawn rgctl -f json structured verbs.",
   },
   {
     n: "4",
     title: "Reason + edit",
-    body: "schema_version JSON on stdout — blast, GQL, CPG, semantic — then verify with check / pr-check.",
+    body: "schema_version JSON on stdout — find, callers, blast, CPG, semantic — then verify with check / pr-check.",
   },
 ];
 
 const workflows = [
-  { chat: "/rgctl-discover", cli: "discover" },
-  { chat: "/rgctl-impact", cli: "blast-radius" },
-  { chat: "/rgctl-flow", cli: "slice · cpg" },
-  { chat: "/rgctl-search", cli: "semantic query" },
-  { chat: "/rgctl-gql", cli: "gql" },
-  { chat: "/rgctl-migrate", cli: "migration_plan.json" },
-  { chat: "/rgctl-kantra", cli: "discover --with-kantra" },
-  { chat: "/rgctl-gate", cli: "check · pr-check" },
+  { skill: "rgctl-discover", cli: "discover" },
+  { skill: "rgctl-impact", cli: "blast-radius" },
+  { skill: "rgctl-flow", cli: "slice · cpg" },
+  { skill: "rgctl-search", cli: "find · semantic query" },
+  { skill: "rgctl-migrate", cli: "migration_plan.json" },
+  { skill: "rgctl-kantra", cli: "discover --with-kantra" },
+  { skill: "rgctl-gate", cli: "check · pr-check" },
 ];
 
 export default function AgentsPage() {
@@ -52,12 +51,10 @@ export default function AgentsPage() {
       </h1>
       <p className="mt-3 text-[var(--body)]">
         The agent pack is not one skill — it installs a{" "}
-        <strong className="font-medium text-[var(--ink)]">router</strong>,{" "}
+        <strong className="font-medium text-[var(--ink)]">router</strong> and{" "}
         <strong className="font-medium text-[var(--ink)]">
-          eight workflow skills
-        </strong>
-        , and matching{" "}
-        <strong className="font-medium text-[var(--ink)]">slash commands</strong>{" "}
+          seven workflow skills
+        </strong>{" "}
         so agents pick the right <code className="font-mono">rgctl -f json</code>{" "}
         path instead of dumping files into context.
       </p>
@@ -67,15 +64,15 @@ export default function AgentsPage() {
         <TerminalBlock
           lines={[
             "cd /path/to/your-app",
-            "rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents",
+            "rgctl install --skill --tools cursor,claude,codex,antigravity,agents",
             "rgctl discover .",
           ]}
         />
         <p className="text-sm text-[var(--mute)]">
           Writes meta skill{" "}
-          <code className="font-mono">rgctl</code>, workflows like{" "}
-          <code className="font-mono">rgctl-gql</code>, and commands such as{" "}
-          <code className="font-mono">.cursor/commands/rgctl-gql.md</code>. See{" "}
+          <code className="font-mono">rgctl</code> and workflows like{" "}
+          <code className="font-mono">rgctl-search</code> under{" "}
+          <code className="font-mono">.cursor/skills/</code>. See{" "}
           <Link href="/docs/guides/agent-commands/" className="underline">
             agent commands
           </Link>
@@ -101,16 +98,14 @@ export default function AgentsPage() {
       <section className="mt-12 space-y-3">
         <h2 className="text-lg text-[var(--ink)]">Workflow ↔ CLI</h2>
         <p className="text-sm text-[var(--body)]">
-          Slash commands steer the agent; the engine remains the terminal CLI.
-          Claude uses colon style (<code className="font-mono">/rgctl:gql</code>
-          ).
+          Workflow skills steer the agent; the engine remains the terminal CLI.
         </p>
         <div className="overflow-x-auto rounded-[4px] border border-[var(--hairline)]">
           <table className="w-full min-w-[28rem] text-left text-sm">
             <thead className="border-b border-[var(--hairline)] bg-[var(--surface)]">
               <tr>
                 <th className="px-3 py-2 font-medium text-[var(--ink)]">
-                  Chat (Cursor)
+                  Skill
                 </th>
                 <th className="px-3 py-2 font-medium text-[var(--ink)]">
                   Primary CLI
@@ -120,11 +115,11 @@ export default function AgentsPage() {
             <tbody>
               {workflows.map((w) => (
                 <tr
-                  key={w.chat}
+                  key={w.skill}
                   className="border-b border-[var(--hairline)] last:border-0"
                 >
                   <td className="px-3 py-2 font-mono text-[13px] text-[var(--body-strong)]">
-                    {w.chat}
+                    {w.skill}
                   </td>
                   <td className="px-3 py-2 font-mono text-[13px] text-[var(--body)]">
                     {w.cli}
@@ -142,7 +137,7 @@ export default function AgentsPage() {
           lines={[
             'export REPO=/path/to/repo',
             'cd "$REPO" && rgctl discover .   # or: rgctl -r "$REPO" discover',
-            "rgctl -r \"$REPO\" -f json gql --macro-name all_functions unused | jq '.count'",
+            "rgctl -r \"$REPO\" -f json find --type function --count-only | jq '.total'",
             'rgctl -r "$REPO" -f json blast-radius "ShoppingCartService" --depth 3 \\',
             "  | jq '{score: .metrics.score, callers: .metrics.direct_callers_count}'",
           ]}

@@ -95,16 +95,15 @@ All **Tier 1** languages registered in [`languages.toml`](../languages.toml) (in
 After `rgctl` is on your `PATH`, install the **agent pack** into the **target repository** (the same root you pass to `discover` via `-r` / `--repo`, or the current directory):
 
 ```bash
-rgctl install --skill --with-commands
-rgctl -r /path/to/repo install --skill --with-commands
+rgctl install --skill
+rgctl -r /path/to/repo install --skill
 rgctl install --list-agents
 ```
 
 That writes:
 
 - **Meta skill** `rgctl` (router + references)
-- **Eight workflow skills** — `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-gql`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`
-- **Eight slash / prompt commands** (with `--with-commands`) — e.g. Cursor `/rgctl-gql`, Claude `/rgctl:gql`
+- **Seven workflow skills** — `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`
 
 **Default (no `--tools`):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. Use **`--tools all`** for the full registry.
 
@@ -1259,7 +1258,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `metrics` | PageRank, betweenness, communities summary |
 | `export` | Serialize graph (json, graphml, dot, mermaid, obsidian vault, okf) |
 | `check` | CI policy gateway |
-| `install` | Copy the bundled agent pack (meta + workflow skills; optional slash commands) into adapter dirs |
+| `install` | Copy the bundled agent pack (meta + workflow skills) into adapter dirs |
 | `semantic` | Opt-in semantic index + query (`--scope community`, `docs`, `all`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/status` (auto full pipeline); `--no-pipeline` fail-fast |
 

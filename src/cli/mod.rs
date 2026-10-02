@@ -652,15 +652,11 @@ pub enum Commands {
         head: std::path::PathBuf,
     },
 
-    /// Install bundled agent pack (skills, optional commands, optional policy)
+    /// Install bundled agent pack (skills, optional policy)
     Install {
         /// Install workflow skills and meta-skill `rgctl`
         #[arg(long = "skill")]
         skill: bool,
-
-        /// Install slash-command / prompt files per agent adapter
-        #[arg(long = "with-commands")]
-        with_commands: bool,
 
         /// Install structural policy snippet (Cursor rules; best-effort)
         #[arg(long = "with-policy")]
@@ -1730,7 +1726,6 @@ impl Cli {
             ),
             Commands::Install {
                 skill,
-                with_commands,
                 with_policy,
                 list_agents,
                 global_install,
@@ -1741,7 +1736,6 @@ impl Cli {
                 &ctx,
                 install::InstallArgs {
                     skill,
-                    with_commands,
                     with_policy,
                     list_agents,
                     global_install,

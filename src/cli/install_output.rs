@@ -3,9 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 /// Current install JSON schema version.
-pub const INSTALL_SCHEMA_VERSION: u32 = 2;
+pub const INSTALL_SCHEMA_VERSION: u32 = 3;
 
-/// Legacy host ids (schema v1); prefer `agent` string in v2.
+/// Legacy host ids (schema v1); prefer `agent` string in v2+.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum InstallWriteHost {
@@ -19,7 +19,6 @@ pub enum InstallWriteHost {
 #[serde(rename_all = "lowercase")]
 pub enum InstallWriteKind {
     Skill,
-    Command,
     Policy,
     Meta,
 }
@@ -39,7 +38,7 @@ pub enum InstallWriteStatus {
 pub struct InstallWrite {
     /// Agent registry id (`cursor`, `claude`, …).
     pub agent: String,
-    /// Workflow id when applicable (`gql`, `migrate`, …).
+    /// Workflow id when applicable (`search`, `migrate`, …).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
     /// Artifact kind.
@@ -62,7 +61,6 @@ pub struct InstallJsonResponse {
     pub repo: String,
     pub scope: String,
     pub agents: Vec<String>,
-    pub with_commands: bool,
     pub with_policy: bool,
     pub force: bool,
     pub writes: Vec<InstallWrite>,
@@ -73,7 +71,6 @@ pub fn build_install_response(
     repo: &str,
     scope: &str,
     agents: Vec<String>,
-    with_commands: bool,
     with_policy: bool,
     force: bool,
     writes: Vec<InstallWrite>,
@@ -85,7 +82,6 @@ pub fn build_install_response(
         repo: repo.to_string(),
         scope: scope.to_string(),
         agents,
-        with_commands,
         with_policy,
         force,
         writes,

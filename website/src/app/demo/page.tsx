@@ -26,7 +26,7 @@ export default function DemoPage() {
         Agent pack scenarios
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-[var(--body)]">
-        Workflow skills and slash commands map to these CLI recipes.
+        Workflow skills map to these CLI recipes.
       </p>
       <div className="mt-8">
         <DemoPlayground />

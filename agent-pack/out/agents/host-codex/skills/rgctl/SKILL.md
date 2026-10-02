@@ -37,15 +37,15 @@ rgctl -r "$REPO" -f json <command> …
 
 **Critical:** Parse `schema_version` + payload from **stdout**. **Never use `2>/dev/null`** — it swallows rgctl errors.
 
-For many queries in one session, optional: `rgctl serve` + `POST /api/query` (see [HTTP API](../../docs/http-api.md)).
+For interactive exploration, optional: `rgctl serve --open` (dashboard). Agents should still spawn CLI structured verbs (`find` / `callers` / `relations` / `inventory` / …).
 
-Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/` into the repo.
+Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` in the repo to build `{repo}/.rgctl/`.
 
 ## Agent Loop
 
 ```text
 1. USER PROMPT     → natural language (not a CLI string)
-2. SUBPROCESS      → rgctl -f json <command>  (or HTTP /api/query)
+2. SUBPROCESS      → rgctl -f json <structured command>
 3. GRAPH FACTS     → parse schema_version + payload
 4. LLM REASONING   → summarize using "what to report" guidelines
 5. ACTION          → edit / plan / check — re-query if graph may be stale
@@ -90,30 +90,44 @@ Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/
 
 | User Intent | CLI Command |
 |-------------|-------------|
-| Evaluate migration rules | `discover . --with-kantra` |
-| Filter by migration target | `discover . --with-kantra --kantra-target quarkus` |
-| CI / custom ruleset | `discover . --with-kantra --kantra-rules PATH` |
-| List indexed rules (GQL) | `gql "MATCH (r:KantraRule) RETURN r LIMIT 20"` |
-| Rules for one target label | `gql` with `` r.`konveyor.io/target` `` property (backticks) |
+| Evaluate migration rules | `discover . --with-kantra` or `rules run ./rules/` |
+| Filter by migration target | `discover . --with-kantra --kantra-target quarkus` / `rules run ./rules/ --target quarkus` |
+| CI / custom ruleset | `discover . --with-kantra --kantra-rules PATH` / `rules run PATH` |
+| Index rules only | `discover . --with-kantra --kantra-index-only` |
+| List indexed rules | `find --type kantrarule --limit 50` / `inventory --by type` |
+| Rule → code links | `relations --edge violates --from-type kantrarule` |
 | Read violations artifact | `.rgctl/kantra_findings.json` |
 
 **See:** [User guide — Kantra](../../docs/user-guide.md#kantra-migration-rules---with-kantra), [JSON — kantra_findings](../../docs/json-api.md#kantra_findingsjson)
 
 ### 2. Query & Search
 
+**Prefer structured verbs** (mmap; no Cypher). Parse `-f json` from **stdout** (`schema_version`); never `2>/dev/null`.
+
 | User Intent | CLI Command |
 |-------------|-------------|
-| Inventory functions | `gql --macro-name all_functions unused` |
-| Find callers/callees | `gql "MATCH (a)-[:CALLS]->(b) WHERE ..."` |
+| Session / index freshness | `status` |
+| Schema / counts (incl. zeros) | `inventory --by type` or `inventory --by edge` |
+| Import prefix census | `inventory --by import-prefix` |
+| Count functions | `find --type function --count-only` |
+| Find by name/type | `find "User*" --type class --limit 50` |
+| Suffix scan (MDB / Remote) | `find '*MDB*' --type class` |
+| Classes with annotation | `find --annotation @MessageDriven --type class` |
+| javax import worklist | `find "import javax*" --type import --scope <pkg>` |
+| Annotation pairs (seedless) | `relations --edge annotatedwith --from-type function --to-type annotation --scope <pkg>` |
+| Find callers/callees | `callers <Symbol> --depth 1` / `callees <Symbol>` |
+| Outside callers of a module | `callers <Symbol> --scope <pkg> --scope-mode outside` |
+| EXTENDS / IMPLEMENTS inventory | `relations --edge extends --from-type class` (omit SYMBOL) |
 | Natural-language search | `semantic query "checkout flow"` |
 | List communities | `communities list` |
-| Community members | `gql "MATCH (f) WHERE f.community_id='12'"` |
 | Subsystem ownership | `semantic query "X" --scope community` |
 | Refresh community labels | `communities label --write` |
+| Community census | `inventory --by community` |
 
-**GQL limitations:** no `COUNT`/`ORDER BY`; LIKE prefix/suffix only; CALLS misses dynamic dispatch; Konveyor labels need backticks in `WHERE`.
+**Migration probe order:** `status` → `inventory --by import-prefix` → `find --annotation …` / suffix globs → `rules run` / `--with-kantra` → `callers InitialContext`.
 
-**See:** [GQL Reference](references/gql-reference.md), [Semantic Search Guide](../../docs/guides/semantic-search.md)
+**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) need `--show-attributes` when `annotation_args.json` is present.
+**See:** [Command Encyclopedia](references/command-encyclopedia.md) (find/callers/relations/inventory/status), [Semantic Search Guide](../../docs/guides/semantic-search.md)
 
 ### 3. Impact & Safety
 
@@ -164,19 +178,21 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 | "Where is checkout flow?" | `semantic query "checkout flow" --limit 10` |
 | "Impact if I change X" | `blast-radius X --depth 2` |
 | "Validate against policy" | `check --policy-file policy.json` |
-| "Who calls X" | `gql "MATCH (a)-[:CALLS*1..3]->(b) WHERE a.name='X' RETURN a,b"` |
+| "Who calls X" | `callers X --depth 2` (impact → `blast-radius X`) |
+| "javax imports / annotations" | `find "import javax*" --type import`; `relations --edge annotatedwith --from-type function --to-type annotation` |
 | "Where is X mutated?" | `cpg mutations --type X --exclude-ctors` |
 
 ## Failure Playbook
 
 | Symptom | Fix |
 |---------|-----|
-| No `.rgctl/` in repo | Run `cd repo && rgctl discover .`; or `rgctl migrate-cache` from legacy daemon cache |
+| No `.rgctl/` in repo | Run `cd repo && rgctl discover .` |
 | slice/inspect/cpg fails | Re-discover with `--with-cfg` |
 | semantic query fails | `semantic index` |
-| Ambiguous symbol | Add `--class` or `--file`; disambiguate via GQL |
+| Ambiguous symbol | Add `--class` or `--file` on callers/find |
 | `check` exit 1 | Report violations (JSON still on stdout) |
-| GQL LIKE returns 0 | Try `communities list`, `semantic query`, or broader type patterns |
+| find/relations empty | Run `inventory --by type` / `--by edge` (zeros mean unpopulated schema); check `--scope` |
+| Name glob returns 0 | Try `semantic query` / `communities list` / broader `find '*X*'` types |
 
 ## Artifacts
 
@@ -205,7 +221,6 @@ rgctl -r "$REPO" -f json <command> …
 
 - **[Command Encyclopedia](references/command-encyclopedia.md)** — Full command reference
 - **[Workflows](references/workflows.md)** — Worked scenarios
-- **[GQL Reference](references/gql-reference.md)** — GQL patterns
 - **[Communities & Policy](references/communities-and-policy.md)** — CI policy checks
 
 ## External Documentation
@@ -213,30 +228,30 @@ rgctl -r "$REPO" -f json <command> …
 - [User Guide](../../docs/user-guide.md) — Complete CLI tutorial
 - [JSON API](../../docs/json-api.md) — Schema specifications
 - [Agent Recipes](../../docs/agent-recipes.md) — Copy-paste recipes
-- [AGENTS.md](../../AGENTS.md) — Minimal agent contract
+- [USER_AGENTS_TEMPLATE.md](../../docs/agents/USER_AGENTS_TEMPLATE.md) — paste into consumer repos
+- [AGENTS.md](../../AGENTS.md) — contributor agent README (rgctl source tree)
 - [Policy Format](../../docs/policy-format.md) — CI policy schema
 
 ## Installation
 
 ```bash
-rgctl install --skill
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Writes `.claude/skills/rgctl/`, `.agents/skills/rgctl/`, and `.cursor/skills/rgctl/` from the embedded skill in the binary.
+Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …) and meta-skill `rgctl` for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-commands.md](../../docs/guides/agent-commands.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.
 
 
-## Workflow slash commands (generated)
+## Workflow skills (generated)
 
-| Intent | Command |
-|--------|---------|
-| Index and discover | `$rgctl-discover` |
-| Blast radius and impact | `$rgctl-impact` |
-| Data flow and slices | `$rgctl-flow` |
-| Semantic and structural search | `$rgctl-search` |
-| Graph query language | `$rgctl-gql` |
-| Migration roadmap | `$rgctl-migrate` |
-| Konveyor Kantra rules | `$rgctl-kantra` |
-| CI and policy gates | `$rgctl-gate` |
+| Intent | Skill |
+|--------|-------|
+| Index and discover | `rgctl-discover` |
+| Blast radius and impact | `rgctl-impact` |
+| Data flow and slices | `rgctl-flow` |
+| Semantic and structural search | `rgctl-search` |
+| Migration roadmap | `rgctl-migrate` |
+| Konveyor Kantra rules | `rgctl-kantra` |
+| CI and policy gates | `rgctl-gate` |
 
 **Migrate** (roadmap / `migration_plan.json`) and **Kantra** (rules / `kantra_findings.json`) are separate workflows — do not conflate.
-rgctl-managed router note generatedBy rgctl 0.4.13
+rgctl-managed router note generatedBy rgctl 0.0.0-dev

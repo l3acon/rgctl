@@ -1,15 +1,15 @@
-# rgctl agent pack (install & chat commands)
+# rgctl agent pack (install)
 
-rgctl has two command surfaces:
+rgctl has two surfaces:
 
 | Layer | What it is | Where it lives |
 |--------|------------|----------------|
-| **Engine** | `rgctl discover`, `rgctl -f json gql`, … | Your PATH; graph artifacts in `{repo}/.rgctl/` |
-| **Agent pack** | Meta skill + **eight workflow skills** + optional **slash commands** + optional policy | Repo-local agent dirs (or home with `-g`) |
+| **Engine** | `rgctl discover`, `rgctl -f json find|callers|…`, … | Your PATH; graph artifacts in `{repo}/.rgctl/` |
+| **Agent pack** | Meta skill + **seven workflow skills** + optional policy | Repo-local agent dirs (or home with `-g`) |
 
 The pack is **embedded in the `rgctl` binary** (no separate download). Install the CLI first: [Installation](../installation.md).
 
-`--skill` alone installs the meta router and eight workflow skills. Add **`--with-commands`** for the matching chat commands (`/rgctl-gql`, `/rgctl:impact`, …) — one command per workflow, per adapter. Prefer both for the full agent experience.
+`--skill` installs the meta router and seven workflow skills. Agents load those skills and run structured CLI verbs — there are no slash-command / prompt stubs.
 
 Workflow text is authored under **`skills/rgctl/workflows/`**; `references/workflows.md` in the installed meta skill is **assembled at build time** from those fragments (single source of truth).
 
@@ -30,8 +30,7 @@ You must pass at least one of **`--skill`** or **`--with-policy`**.
 
 | Flag | Effect |
 |------|--------|
-| **`--skill`** | Meta skill **`rgctl`** (router + `references/`) and eight workflow skills: `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-gql`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`. |
-| **`--with-commands`** | Chat slash commands / prompts per adapter (e.g. Cursor `/rgctl-gql`, Claude `/rgctl:gql`). Use with **`--skill`** for the full experience. |
+| **`--skill`** | Meta skill **`rgctl`** (router + `references/`) and seven workflow skills: `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`. |
 | **`--with-policy`** | Structural bias snippet (e.g. `.cursor/rules/rgctl-structural.mdc`). Optional; does not replace skills. |
 | **`--tools id1,id2`** or **`--tools all`** | Which **registry adapters** receive files. **Default (omit flag):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. **`all`** = full registry (~40 products). Unknown ids: stderr warning; if none valid, exit **1**. |
 | **`-g` / `--global`** | Install under your **home** (e.g. `~/.cursor/skills/…`) instead of repo-local paths. Only agents with `supports_global: true` in the registry (see `--list-agents`). |
@@ -44,29 +43,24 @@ You must pass at least one of **`--skill`** or **`--with-policy`**.
 ```bash
 cd /path/to/your-app
 
-# Skills + slash commands for common IDEs (repo-local)
-rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+# Skills for common IDEs (repo-local)
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 
 # Cursor only
-rgctl install --skill --with-commands --tools cursor
+rgctl install --skill --tools cursor
 
-# Antigravity only
-rgctl install --skill --with-commands --tools antigravity
+# Antigravity (`.agent/skills/`)
+rgctl install --skill --tools antigravity
 
-# Full registry (many dot-directories)
-rgctl install --skill --with-commands --tools all
+# Every registry adapter
+rgctl install --skill --tools all
 
-# Optional Cursor rule when .rgctl/ exists
-rgctl install --skill --with-commands --tools cursor --with-policy
+# Skills + Cursor structural policy
+rgctl install --skill --tools cursor --with-policy
 
-# Global install (user-level agent dirs)
-rgctl install --skill --with-commands -g --tools cursor
-
-# Inspect adapters before installing
-rgctl install --list-agents
+# User-home install (adapters that support -g)
+rgctl install --skill -g --tools cursor
 ```
-
-### After install
 
 Install does **not** run `discover`. Index the codebase separately:
 
@@ -74,7 +68,7 @@ Install does **not** run `discover`. Index the codebase separately:
 export REPO=/path/to/your-app
 cd "$REPO"
 rgctl discover .
-# Chat: /rgctl-gql …   OR   shell: rgctl -f json gql '…'
+# then: rgctl -f json find|callers|relations|…
 ```
 
 Add `.rgctl/` and agent skill dirs to `.gitignore` if you want them local-only.
@@ -88,45 +82,41 @@ Add `.rgctl/` and agent skill dirs to `.gitignore` if you want them local-only.
 
 ## What gets written
 
-Paths come from **`agent-pack/agents/registry.toml`** (per-product `agent_dir`, `skills_subdir`, `commands_subdir`).
+Paths come from **`agent-pack/agents/registry.toml`** (per-product `agent_dir`, `skills_subdir`).
 
 | Kind | Example (Cursor, repo-local) |
 |------|------------------------------|
 | Meta skill | `.cursor/skills/rgctl/SKILL.md` + `references/` |
-| Workflow skill | `.cursor/skills/rgctl-gql/SKILL.md`, … |
-| Command | `.cursor/commands/rgctl-gql.md` |
+| Workflow skill | `.cursor/skills/rgctl-discover/SKILL.md`, … |
 | Policy | `.cursor/rules/rgctl-structural.mdc` (with `--with-policy`) |
 
 **Shared dedup:** **`codex`**, **`agents`**, and **`zed`** use **`.agents/skills/`**; install writes each destination once.
 
 ### Adapter examples
 
-| Agent | Skills | Commands / prompts |
-|-------|--------|-------------------|
-| Cursor | `.cursor/skills/rgctl-*` | `.cursor/commands/rgctl-*.md` |
-| Claude | `.claude/skills/rgctl-*` | `.claude/commands/` (`rgctl:gql` style) |
-| OpenCode | `.opencode/skills/rgctl-*` | `.opencode/commands/rgctl-*.md` |
-| Pi | `.pi/skills/rgctl-*` | `.pi/prompts/rgctl-*.md` |
-| GitHub Copilot | `.github/skills/` | `.github/prompts/*.prompt.md` |
+| Agent | Skills |
+|-------|--------|
+| Cursor | `.cursor/skills/rgctl-*` |
+| Claude | `.claude/skills/rgctl-*` |
+| OpenCode | `.opencode/skills/rgctl-*` |
+| Pi | `.pi/skills/rgctl-*` |
+| GitHub Copilot | `.github/skills/` |
 
 Run **`rgctl install --list-agents`** for the full table.
 
 ---
 
-## Workflows (chat vs CLI)
+## Workflows → CLI
 
-Chat commands are **steering wheels**; the engine remains the terminal CLI.
-
-| Workflow | Cursor (example) | Claude (example) | Primary CLI |
-|----------|------------------|------------------|-------------|
-| Index | `/rgctl-discover` | `/rgctl:discover` | `discover` |
-| Impact | `/rgctl-impact` | `/rgctl:impact` | `blast-radius` |
-| Data flow | `/rgctl-flow` | `/rgctl:flow` | `slice`, `cpg flows`, … |
-| Search | `/rgctl-search` | `/rgctl:search` | `semantic query` |
-| GQL | `/rgctl-gql` | `/rgctl:gql` | `gql` |
-| Migration roadmap | `/rgctl-migrate` | `/rgctl:migrate` | discover + `migration_plan.json` |
-| Kantra rules | `/rgctl-kantra` | `/rgctl:kantra` | `discover --with-kantra` |
-| CI gate | `/rgctl-gate` | `/rgctl:gate` | `check`, `pr-check` |
+| Workflow | Skill | Primary CLI |
+|----------|-------|-------------|
+| Index | `rgctl-discover` | `discover` |
+| Impact | `rgctl-impact` | `blast-radius` |
+| Data flow | `rgctl-flow` | `slice`, `cpg flows`, … |
+| Search | `rgctl-search` | `find`, `semantic query`, … |
+| Migration roadmap | `rgctl-migrate` | discover + `migration_plan.json` |
+| Kantra rules | `rgctl-kantra` | `discover --with-kantra` |
+| CI gate | `rgctl-gate` | `check`, `pr-check` |
 
 **Migrate** (roadmap / `migration_plan.json`) and **Kantra** (Konveyor / `kantra_findings.json`) are **separate** workflows — do not conflate them in prompts or reports.
 
@@ -135,10 +125,10 @@ Chat commands are **steering wheels**; the engine remains the terminal CLI.
 ## JSON output
 
 ```bash
-rgctl -r "$REPO" -f json install --skill --with-commands --tools cursor
+rgctl -r "$REPO" -f json install --skill --tools cursor
 ```
 
-Uses **`schema_version`: 2** (`scope`, `agents`, `with_commands`, per-write `agent`, `workflow`, `kind`, `status`). See [JSON API §18](../json-api.md#18-install). If any write is `skipped_exists`, JSON is still printed and the process exits **1**.
+Uses **`schema_version`: 3** (`scope`, `agents`, `with_policy`, per-write `agent`, `workflow`, `kind`, `status`). See [JSON API §18](../json-api.md#18-install). If any write is `skipped_exists`, JSON is still printed and the process exits **1**.
 
 ---
 
@@ -168,8 +158,6 @@ The **rgctl source tree** root [`AGENTS.md`](../../AGENTS.md) is for **contribut
 ## Related
 
 - [Agent pack walkthrough](agent-skill.md) — use cases and agent loop
-- [Installation](../installation.md) — binary setup
-- [JSON API §18](../json-api.md#18-install) — install payload types
-- [USER_AGENTS_TEMPLATE.md](../agents/USER_AGENTS_TEMPLATE.md) — paste into consumer repos
-- [AGENTS.md](../../AGENTS.md) — contributor agent README for this repository
-- Release notes: [agent-pack-install](../releases/agent-pack-install.md) · GitHub [#84](https://github.com/sshaaf/rgctl/issues/84)
+- [USER_AGENTS_TEMPLATE](../agents/USER_AGENTS_TEMPLATE.md) — paste into consumer repos
+- [JSON API §18](../json-api.md#18-install) — install schema
+- [Agent pack release notes](../releases/agent-pack-install.md)

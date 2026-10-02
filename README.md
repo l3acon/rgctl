@@ -39,7 +39,7 @@ rgctl -f json blast-radius MyService
 rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b) RETURN a,b LIMIT 20'
 
 # Use with your favorite LLM agent
-rgctl install --skill --with-commands --tools cursor,claude,codex,agents
+rgctl install --skill --tools cursor,claude,codex,agents
 ```
 
 https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
@@ -97,10 +97,10 @@ Always prefer **`-f json`** for agents and scripts ([JSON API](docs/json-api.md)
 
 ## Use with coding agents
 
-Install the bundled pack (skills + slash commands) into your IDE tooling:
+Install the bundled pack (skills) into your IDE tooling:
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude,codex,agents
+rgctl install --skill --tools cursor,claude,codex,agents
 ```
 
 Then: **discover once → query with `-f json`**. See [Agent commands](docs/guides/agent-commands.md).  

@@ -1086,7 +1086,7 @@ Install the embedded **agent pack** (workflow skills, optional commands, optiona
 Human-readable install reference: [Agent commands guide](guides/agent-commands.md).
 
 ```bash
-rgctl -r "$REPO" -f json install --skill [--with-commands] [--with-policy] \
+rgctl -r "$REPO" -f json install --skill [] [--with-policy] \
   [--tools cursor,claude,codex,agents|all] [-g] [--force]
 rgctl -f json install --list-agents
 ```
@@ -1110,16 +1110,15 @@ type ListAgentsResponse = {
 
 ```typescript
 type InstallWriteStatus = "created" | "unchanged" | "overwritten" | "skipped_exists";
-type InstallWriteKind = "skill" | "command" | "policy" | "meta";
+type InstallWriteKind = "skill" | "policy" | "meta";
 
 type InstallResponse = {
-  schema_version: 2;
+  schema_version: 3;
   command: "install";
   skill: "rgctl";
   repo: string; // absolute install prefix (repo or home for -g)
   scope: "local" | "global";
   agents: string[];
-  with_commands: boolean;
   with_policy: boolean;
   force: boolean;
   writes: Array<{
@@ -1136,7 +1135,7 @@ type InstallResponse = {
 Pass `--skill` and/or `--with-policy`. `--host` is deprecated (use `--tools`). Workflow markdown is authored under `skills/rgctl/workflows/`; installed `references/workflows.md` is assembled at rgctl build time. If any write is `skipped_exists`, JSON is still printed and the process exits 1.
 
 ```bash
-rgctl -r "$REPO" -f json install --skill --with-commands | jq '.writes[] | {agent, workflow, kind, status}'
+rgctl -r "$REPO" -f json install --skill | jq '.writes[] | {agent, workflow, kind, status}'
 ```
 
 ---

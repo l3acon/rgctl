@@ -3,7 +3,7 @@ name: rgctl-discover
 description: "Index and discover. Use for rgctl discover workflow. Spawn rgctl -f json; parse schema_version from stdout."
 rgctl-managed: true
 metadata:
-  generatedBy: "rgctl 0.4.13"
+  generatedBy: "rgctl 0.0.0-dev"
 ---
 
 # Discover workflow
@@ -18,7 +18,9 @@ metadata:
 
 **Fast path:** If `.rgctl/` exists and the user did not ask to rebuild, do **not** re-run discover.
 
-Common flags: `--with-cfg`, `--with-kantra`, `--export-migration-hints` (migration plan is the **migrate** workflow, not discover alone).
+Common flags: `--with-cfg` (CFG/PDG archive), `--with-ast-skeleton`, `--with-dfg-loops` (loop-carried PDG tags). Migration plan output is the **migrate** workflow; Konveyor rules are the **kantra** workflow — do not conflate them with a plain index.
+
+Artifacts live at `{repo}/.rgctl/`. Check CFG readiness with `rgctl -f json cpg status` before slice/PDG workflows.
 
 
 ## Agent loop
