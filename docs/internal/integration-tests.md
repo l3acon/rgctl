@@ -14,7 +14,7 @@ cargo test --test rgctl_no_daemon -- --test-threads=1
 
 | Tier | When | Corpus | Confidence |
 |------|------|--------|------------|
-| **A** | Every PR | `tests/fixtures/tiny_polyglot_repo` (temp copy) | In-repo `.rgctl/` layout, gql/metrics, discover target pitfalls |
+| **A** | Every PR | `tests/fixtures/tiny_polyglot_repo` (temp copy) | In-repo `.rgctl/` layout, structured query/metrics, discover target pitfalls |
 | **B** | Manual / nightly | `example/linux`, metasfresh, … | Scale + cold perf baselines |
 
 ---
@@ -25,7 +25,7 @@ cargo test --test rgctl_no_daemon -- --test-threads=1
 
 | File | Tests | What it proves |
 |------|-------|----------------|
-| `tests/rgctl_no_daemon.rs` | 5 (+ 1 ignored) | Artifacts under `{repo}/.rgctl/`; gql/metrics; `-r` + `discover .` pitfall; absolute-path discover |
+| `tests/rgctl_no_daemon.rs` | 5 (+ 1 ignored) | Artifacts under `{repo}/.rgctl/`; structured query/metrics; `-r` + `discover .` pitfall; absolute-path discover |
 
 ### Commands
 
@@ -51,7 +51,7 @@ cargo test --test rgctl_no_daemon -- --test-threads=1
 
 | File | Test | Corpus | Wall (reference M3 Pro) |
 |------|------|--------|---------------------------|
-| `tests/rgctl_no_daemon.rs` | `linux_no_daemon_discover_and_gql_smoke` | `example/linux` | ~145 s discover |
+| `tests/rgctl_no_daemon.rs` | `linux_no_daemon_discover_and_query_smoke` | `example/linux` | ~145 s discover |
 | `tests/cold_profile_gates.rs` | `linux_cold_discover_within_baseline` | `example/linux` | baseline 145 s |
 | `tests/cold_profile_gates.rs` | `metasfresh_cold_discover_within_baseline` | `example/metasfresh-4.9.8b` | baseline 74 s (`--full`) |
 
@@ -78,7 +78,7 @@ export ECOMM=/path/to/rbuilder/rgctl-tests/ecommerce-java
 cd "$ECOMM"
 "$RGCTL" discover . --languages java -e target,data
 "$RGCTL" semantic index
-"$RGCTL" -f json gql 'MATCH (n:Function) RETURN n LIMIT 5'
+"$RGCTL" -f json find --type function --limit 5
 ```
 
 Reference symbols from [ecommerce-java README](../../rgctl-tests/ecommerce-java/README.md).

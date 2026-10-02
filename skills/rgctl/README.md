@@ -71,7 +71,7 @@ From a target repository (not the rgctl source tree unless you are dogfooding):
 rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs meta skill `rgctl`, workflow skills (`rgctl-discover`, …). See [Agent commands guide](../../docs/guides/agent-commands.md).
+Installs meta skill `rgctl`, workflow skills (`rgctl-discover`, …). See [Agent pack walkthrough](../../docs/guides/agent-skill.md).
 
 **Maintainers:** edit workflow bodies under `workflows/`; regenerate `references/workflows.md` with `assemble_workflows_reference` (see `rgctl-agent-pack-codegen` test `workflows_reference_matches_fragments`).
 
@@ -79,6 +79,6 @@ Installs meta skill `rgctl`, workflow skills (`rgctl-discover`, …). See [Agent
 
 - [User Guide](../../docs/user-guide.md) - Complete CLI tutorial
 - [Agent recipes](../../docs/agent-recipes.md) - Copy-paste CLI workflows
-- [HTTP API](../../docs/http-api.md) - Optional `rgctl serve` for dashboard
+- [HTTP Server and Dashboard](../../docs/guides/http-server-and-dashboard.md) - Optional `rgctl serve` for dashboard
 - [JSON API](../../docs/json-api.md) - Schema specifications
 - [All Guides](../../docs/guides/README.md) - Feature-specific guides

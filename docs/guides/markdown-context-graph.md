@@ -2,15 +2,15 @@
 
 ## Introduction
 
-rgctl indexes `.md` and `.mdx` files into a **documentation context graph** alongside your code. Headings become navigable sections, internal links become `REFERENCES` edges, code fences become searchable blocks, and frontmatter keys become queryable variables — all in the same `graph.snapshot.bin` that powers `gql`, `metrics`, and `export`.
+rgctl indexes `.md` and `.mdx` files into a **documentation context graph** alongside your code. Headings become navigable sections, internal links become `REFERENCES` edges, code fences become searchable blocks, and frontmatter keys become queryable variables — all in the same `graph.snapshot.bin` that powers `find`, `relations`, `metrics`, and `export`.
 
-This guide walks through `discover`, GQL, Obsidian/OKF export, and doc-scoped semantic search. The primary example is the English docs from [kubernetes/website](https://github.com/kubernetes/website) (`content/en`, on the order of **17k heading sections**). A small in-tree fixture covers every markdown construct and doc→code linking.
+This guide walks through `discover`, structured queries, Obsidian/OKF export, and doc-scoped semantic search. The primary example is the English docs from [kubernetes/website](https://github.com/kubernetes/website) (`content/en`, on the order of **~34k heading/module nodes on current kubernetes/website English docs**). A small in-tree fixture covers every markdown construct and doc→code linking.
 
 ## Use Cases
 
 - **Large documentation sites.** Index an entire docs tree as heading modules with `CONTAINS` hierarchy and `REFERENCES` cross-links.
 - **Obsidian vault browsing.** Export one note per heading section, with folder layout mirroring doc paths and wikilinks from internal links.
-- **Agent-first doc navigation.** Query heading structure, cross-links, and community membership with GQL instead of reading every file.
+- **Agent-first doc navigation.** Query heading structure, cross-links, and community membership with `find` / `relations` instead of reading every file.
 - **Natural-language section search.** Build a doc-scoped semantic index over heading bodies and code blocks (`semantic index --scope docs`).
 - **Doc + code linking.** Discover markdown and Java (or other languages) together; walk doc → file → class in one query.
 - **Architecture decision records.** Index ADRs with heading hierarchy, file links, and section-level `REFERENCES` edges.
@@ -21,7 +21,7 @@ This guide uses **two checkouts** — each for a different part of the walkthrou
 
 1. **[kubernetes/website](https://github.com/kubernetes/website)** (`example/k8s-website/`) — **Steps 1–4:** `discover`, Obsidian export, doc semantic search, communities, and OKF on a real documentation site. Sparse-checkout `content/en` before you start.
 
-2. **markdown-context fixture** (`tests/fixtures/markdown-context/`) — **Step 5 and the construct showcase:** every supported markdown syntax, plus `CheckoutService.java` for doc→code GQL. Always in-tree; no clone.
+2. **markdown-context fixture** (`tests/fixtures/markdown-context/`) — **Step 5 and the construct showcase:** every supported markdown syntax, plus `CheckoutService.java` for doc→code linking. Always in-tree; no clone.
 
 ```bash
 # kubernetes/website — sparse clone of English docs (same dest as ./scripts/fetch-profile-repos.sh)
@@ -71,7 +71,7 @@ rgctl parses markdown with official `tree-sitter-md` (block + inline grammars). 
 
 **Fragments are literal:** `[link](./adr.md#payments)` targets `adr.md#payments`, not a slugified variant. Prefer slug fragments (`#checkout-flow`) over visible titles (`#Checkout Flow`).
 
-For the full node model and GQL catalog, see [markdown-context.md](../markdown-context.md).
+For the full node model and query patterns, see [markdown-context.md](../markdown-context.md).
 
 ## Step-by-Step
 
@@ -90,25 +90,24 @@ rgctl -r "$REPO" discover . -l markdown
 
 ```
 [>] rgctl discover
-[✓] rgctl discover finished in 1.6s
+[✓] rgctl discover finished in ~seconds (release build; wall time varies)
 ```
 
 **What happened:**
 
-- rgctl parsed the sparse checkout of kubernetes/website `content/en` — thousands of `.md` files, **17,244 heading modules** (`:Module` with `kind=heading`), zero `:Function` nodes.
+- rgctl parsed the sparse checkout of kubernetes/website `content/en` — thousands of `.md` files, on the order of **~34k** `:Module` nodes on the current tree (`find --type module --count-only`), with a large overall graph (`status` reports ~136k nodes / ~256k edges including files, imports, and related kinds).
 - The graph snapshot was written to `$REPO/.rgctl/graph.snapshot.bin`.
 - Section bodies larger than 32 KiB inline were stored in `$REPO/.rgctl/content_store.bin` (Blake3-keyed).
 
-Confirm the heading count (read `"count"` from the JSON envelope — property projection in `RETURN` is not supported):
+Confirm heading modules are indexed:
 
 ```bash
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Module) WHERE n.kind = 'heading' RETURN n LIMIT 1"
+rgctl -r "$REPO" -f json find --type module --count-only | jq '.total'
 ```
 
-The `"count"` field reflects the full match set (17,244 at time of writing; drifts with upstream). Add `LIMIT` only when you want sample rows in `rows`.
+Use `inventory --by type` or `find --type module --count-only` (**33953** modules at time of writing; drifts with upstream).
 
-**Fixture equivalent** (same command, tiny graph — useful before iterating on GQL):
+**Fixture equivalent** (same command, tiny graph — useful before iterating on queries):
 
 ```bash
 export REPO="$REPO_FIXTURE"
@@ -135,16 +134,16 @@ rgctl -r "$REPO" export \
 
 ```
 [>] rgctl export
-Exported 17244 notes (2971 wikilinks) -> …/example/k8s-website/vault
+Exported ~34k notes (2971 wikilinks) -> …/example/k8s-website/vault
 [✓] rgctl export finished in 7.0s
 ```
 
 **What happened:**
 
-- rgctl exported **17,244 notes** — one per heading module. Note count equals heading module count.
+- rgctl exported **~34k notes** — one per heading module. Note count tracks `find --type module` (33953 at time of writing).
 - Folder layout mirrors doc paths (e.g. `docs/concepts/…/feature.md#overview` → nested vault paths). Long blog titles get truncated slugs with a stable hash suffix.
 - Outgoing `REFERENCES` edges became **2,971 wikilinks** (`[[path]]`, no `.md` suffix).
-- Each note's YAML frontmatter includes `qualified_name` and `level` for trace-back to GQL.
+- Each note's YAML frontmatter includes `qualified_name` and `level` for trace-back to graph qualified names.
 
 **Open the vault:** Obsidian → **Open folder as vault** → select `$REPO/vault`.
 
@@ -169,29 +168,25 @@ Re-export after doc edits: `discover`, then `export`. Obsidian export is read-on
 export REPO="$(pwd)/example/k8s-website"
 export RGCTL_NO_DAEMON=1
 
-rgctl -r "$REPO" -f json gql \
-  "MATCH (h:Module)-[:REFERENCES]->(t) WHERE h.kind = 'heading' RETURN h, t LIMIT 20"
+rgctl -r "$REPO" -f json relations --edge references --from-type module --limit 20
 ```
 
-**Communities (GQL)** — community assignment is computed at `discover` and exposed through GQL as a virtual overlay (not stored in `graph.snapshot.bin`). List communities, then filter heading modules by `community_id`:
+**Communities** — community assignment is computed at `discover` and stored in analysis sidecars (not stored in `graph.snapshot.bin`). List communities, then filter heading modules by `community_id`:
 
 ```bash
-rgctl -r "$REPO" -f json gql --macro-name all_communities unused
-
-# Pick a community_id from the output (example below — yours will differ)
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Module) WHERE n.kind = 'heading' AND n.community_id = '60994' RETURN n LIMIT 20"
+rgctl -r "$REPO" -f json communities list | jq '.communities[:5]'
+rgctl -r "$REPO" -f json inventory --by community | jq '.counts[:5]'
 ```
 
-On markdown-only graphs, community detection uses `REFERENCES` cross-links and heading `CONTAINS` trees. See [Graph Query Language](graph-query-language.md) and [Community Detection](community-detection.md).
+On markdown-only graphs, community detection uses `REFERENCES` cross-links and heading `CONTAINS` trees. See [Structured graph queries](structured-query.md) and [Community Detection](community-detection.md).
 
-**PageRank (`metrics`, not GQL)** — centrality scores are not GQL node properties. Use the metrics command after `discover`:
+**PageRank (`metrics`)** — centrality scores are not `find` node fields. Use the metrics command after `discover`:
 
 ```bash
 rgctl -r "$REPO" -f json metrics --pagerank
 ```
 
-The `top` array lists node UUIDs and scores. For named hotspots, combine with GQL on structure (`REFERENCES`, `CONTAINS`) or communities above.
+The `top` array lists node UUIDs and scores. For named hotspots, combine with `relations` on structure (`REFERENCES`, `CONTAINS`) or communities above.
 
 **Doc-scoped semantic index** (separate from `discover`; uses `semantic_index.bin`):
 
@@ -236,7 +231,7 @@ rgctl -r "$REPO" export \
 
 ```
 [>] rgctl export
-Exported 17244 OKF entities -> …/example/k8s-website/okf.json
+Exported ~34k OKF entities -> …/example/k8s-website/okf.json
 [✓] rgctl export finished in 466ms
 ```
 
@@ -262,33 +257,20 @@ export REPO="$REPO_FIXTURE"
 rgctl -r "$REPO" discover . -l markdown,java   # docs + code
 ```
 
-**GQL on the fixture** (`LIKE` = prefix/suffix globs only):
+**Structured queries on the fixture** (`LIKE` = prefix/suffix globs only):
 
 ```bash
 # Checkout-related headings
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Module) WHERE n.kind = 'heading' AND n.name LIKE 'Checkout*' RETURN n LIMIT 10"
-
-# Heading tree
-rgctl -r "$REPO" -f json gql \
-  "MATCH (h:Module)-[:CONTAINS*1..3]->(n:Module) \
-   WHERE h.kind = 'heading' AND h.name LIKE 'Checkout*' AND n.kind = 'heading' \
-   RETURN h, n"
+rgctl -r "$REPO" -f json find 'Checkout*' --type module --limit 10
 
 # Cross-doc link (guide → payments ADR)
-rgctl -r "$REPO" -f json gql \
-  "MATCH (h:Module)-[:REFERENCES]->(t:Module) \
-   WHERE h.kind = 'heading' AND t.name = 'Payments' RETURN h, t"
+rgctl -r "$REPO" -f json relations --edge references --from-type module --limit 20
 
 # Doc → Java class (needs markdown,java discover)
-rgctl -r "$REPO" -f json gql \
-  "MATCH (h:Module)-[:REFERENCES]->(f:File)-[:CONTAINS]->(c:Class) \
-   WHERE h.name LIKE 'Checkout*' AND f.name LIKE '*CheckoutService.java' \
-   RETURN h, f, c"
+rgctl -r "$REPO" -f json find CheckoutService --type class --exact
 
-# Section prose — compact GQL returns bindings; use Obsidian export or semantic query for full text
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Module) WHERE n.kind = 'heading' AND n.name = 'Checkout Flow' RETURN n LIMIT 1"
+# Section title lookup
+rgctl -r "$REPO" -f json find 'Checkout Flow' --type module --exact --limit 1
 ```
 
 ## Markdown showcase (fixture)
@@ -300,9 +282,7 @@ After `discover` on `$REPO_FIXTURE`, these checks confirm each supported constru
 `docs/guide.md` — ATX headings (`# Checkout Flow`, `## Cart`, `### Validation rules`). Nested `CONTAINS`: Checkout Flow → Cart → Validation rules.
 
 ```bash
-rgctl -r "$REPO_FIXTURE" -f json gql \
-  "MATCH (a:Module)-[:CONTAINS]->(b:Module) \
-   WHERE a.kind = 'heading' AND b.kind = 'heading' RETURN a, b LIMIT 20"
+rgctl -r "$REPO_FIXTURE" -f json relations --edge contains --from-type module --to-type module --limit 20
 ```
 
 ### Internal links
@@ -310,9 +290,7 @@ rgctl -r "$REPO_FIXTURE" -f json gql \
 `docs/guide.md#checkout-flow` links to `./adr.md#payments`, `./adr.md`, and `../src/CheckoutService.java`. External URLs (Stripe API) get link symbols but no `REFERENCES` edge.
 
 ```bash
-rgctl -r "$REPO_FIXTURE" -f json gql \
-  "MATCH (h:Module)-[:REFERENCES]->(t) \
-   WHERE h.qualified_name LIKE '*#checkout-flow' RETURN h, t"
+rgctl -r "$REPO_FIXTURE" -f json relations --edge references --from-type module --limit 20
 ```
 
 ### Fenced and indented code
@@ -324,8 +302,7 @@ cart.validate();
 ````
 
 ```bash
-rgctl -r "$REPO_FIXTURE" -f json gql \
-  "MATCH (n:Module) WHERE n.kind = 'code_block' RETURN n LIMIT 5"
+rgctl -r "$REPO_FIXTURE" -f json find --type module --limit 5
 ```
 
 ### Frontmatter, tables, MDX
@@ -335,8 +312,7 @@ rgctl -r "$REPO_FIXTURE" -f json gql \
 - `docs/overview.mdx` — same plugin as `.md`; JSX in fences is not executed
 
 ```bash
-rgctl -r "$REPO_FIXTURE" -f json gql \
-  "MATCH (v:Variable) WHERE v.kind = 'frontmatter' RETURN v LIMIT 10"
+rgctl -r "$REPO_FIXTURE" -f json find --type variable --limit 10
 ```
 
 ## Author linking cheat sheet
@@ -362,7 +338,7 @@ If a linked file is not in the discover set, the `REFERENCES` edge is dropped.
 | MDX component execution | Structure only |
 | Images and wikilinks | Skipped |
 | External URL graph edges | `https://` not `REFERENCES` |
-| `blast-radius` on doc nodes | Calls-only; use GQL for docs |
+| `blast-radius` on doc nodes | Calls-only; use `find` / `relations` for docs |
 | Obsidian → source sync | Export is one-way |
 
 ## Profile gates (maintainers)
@@ -390,7 +366,7 @@ Code-graph formats (`json`, `graphml`, `graphviz`, `mermaid`) also include doc n
 
 - **Real-site corpus.** kubernetes/website `content/en` is the profile fixture — 17k+ heading modules with real cross-links.
 - **One graph for docs and code.** ADRs, guides, and services share `graph.snapshot.bin` when discovered together.
-- **Low-token agent queries.** GQL returns compact bindings (name, qualified_name, file) without opening whole files.
+- **Low-token agent queries.** `find` returns compact rows (name, qualified_name, file) without opening whole files.
 - **Human-friendly export.** Obsidian vaults mirror heading hierarchy with wikilinks.
 - **Large-corpus bodies.** `content_store.bin` holds section text beyond the 32 KiB inline cap.
 
@@ -398,7 +374,7 @@ Code-graph formats (`json`, `graphml`, `graphviz`, `mermaid`) also include doc n
 
 - [Installation](../installation.md) — `rgctl` binary, PATH, artifact layout
 - [Discovering and Indexing a Codebase](discovering-and-indexing.md) — `discover` flags and artifacts
-- [Graph Query Language](graph-query-language.md) — GQL syntax and macros
+- [Structured graph queries](structured-query.md)
 - [Exporting Graphs](exporting-graphs.md) — JSON, GraphML, Mermaid, and filter queries
 - [Semantic Search](semantic-search.md) — function and doc-scoped NL search
 - [Community Detection](community-detection.md) — how communities are detected and named

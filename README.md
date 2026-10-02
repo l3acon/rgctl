@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.99%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
-[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-commands/)
+[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-skill/)
 [![Tier 1](https://img.shields.io/badge/languages-14%20Tier%201-8b5cf6?style=flat-square)](https://shaaf.dev/rgctl/docs/languages/)
 
 [![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=black)](docs/languages/README.md)
@@ -103,7 +103,7 @@ Install the bundled pack (skills) into your IDE tooling:
 rgctl install --skill --tools cursor,claude,codex,agents
 ```
 
-Then: **discover once → query with `-f json`**. See [Agent commands](docs/guides/agent-commands.md).  
+Then: **discover once → query with `-f json`**. See [Agent pack](docs/guides/agent-skill.md).  
 For *your* application repo, optionally paste [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) as `AGENTS.md`.
 
 ---

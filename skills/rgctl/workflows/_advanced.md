@@ -10,4 +10,4 @@ rgctl -r "$REPO" serve --open
 #   rgctl -f json find|callers|relations|inventory|status …
 ```
 
-See [docs/http-api.md](../../docs/http-api.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.
+See [docs/guides/http-server-and-dashboard.md](../../docs/guides/http-server-and-dashboard.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.

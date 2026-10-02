@@ -18,8 +18,8 @@ const capabilityRows = [
         body: "One Rust indexing pass builds the graph plus reachability caches. Later questions are lookups — not greps.",
       },
       {
-        title: "gql",
-        body: "Exact inventory and typed edges with macros (all_functions, communities). Stable -f json with schema_version.",
+        title: "find · callers",
+        body: "Exact inventory and typed edges (find, callers, relations, inventory). Stable -f json with schema_version.",
       },
       {
         title: "semantic",

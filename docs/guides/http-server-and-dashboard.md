@@ -2,22 +2,25 @@
 
 ## Introduction
 
-The `serve` command launches an HTTP server that provides both a **browser-based dashboard** for visual exploration and a **query API** for programmatic access. The dashboard lets you explore the code graph, run GQL queries, visualize blast radius, inspect CFGs, and browse communities -- all from your browser. The API endpoints (`/api/query`, `/api/semantic/*`) let agents and scripts issue queries without spawning a new process for each one.
+The `serve` command launches an HTTP server that provides both a **browser-based dashboard** for visual exploration and a **semantic search API** for programmatic NL lookup. The dashboard lets you explore the code graph, visualize blast radius, inspect CFGs, and browse communities — all from your browser.
+
+For **structural** questions (symbols, callers, relations, inventories), agents and scripts should use CLI verbs with `-f json` (`find`, `callers`, `callees`, `relations`, `inventory`, `status`) — see [Structured graph queries](structured-query.md).
 
 ## Use Cases
 
 - **Interactive exploration.** Browse functions, classes, and communities in a visual UI.
-- **Persistent query session.** Keep the server running and issue repeated queries over HTTP instead of spawning a new CLI process each time.
+- **Persistent semantic session.** Keep the server running and POST natural-language queries to `/api/semantic/query`.
 - **Team sharing.** Run the server on a shared host so the whole team can explore the codebase.
-- **Agent integration.** LLM agents can POST queries to `/api/query` for low-latency, stateful graph access.
 - **Demo and presentation.** Show stakeholders the architecture of a codebase through the dashboard.
 
 ## Example Project
 
 This guide uses the **CoolStore** (`example/coolstore`). `rgctl serve` can start the full pipeline itself. To only serve existing artifacts:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover --with-cfg --with-dashboard
+rgctl -r example/coolstore discover -l java --with-cfg --with-dashboard
 rgctl -r example/coolstore serve --no-pipeline --open
 ```
 
@@ -37,17 +40,17 @@ rgctl -r example/coolstore serve --open
 
 - The server starts on `http://127.0.0.1:8080`.
 - The `--open` flag opens the dashboard in your default browser.
-- The dashboard serves from `.rgctl/dashboard/` and the query API is available at `/api/query`.
+- The dashboard serves from `.rgctl/dashboard/`. Semantic search is available at `/api/semantic/*` when an index exists.
 
 ### 2. Custom Host and Port
 
 Bind to a different address or port:
 
 ```bash
-rgctl -r example/coolstore serve --host 0.0.0.0 --port 3000
+rgctl -r example/coolstore serve --host 0.0.0.0 --port 8080
 ```
 
-This makes the server accessible on all network interfaces at port 3000, useful for team sharing.
+This makes the server accessible on all network interfaces at port 8080, useful for team sharing.
 
 ### 3. Query API Only
 
@@ -57,7 +60,7 @@ If you only need the API (no dashboard UI):
 rgctl -r example/coolstore serve --query-only
 ```
 
-This starts a lighter server with only the `/api/query` and `/api/semantic/*` endpoints.
+This starts a lighter server with `/api/status` and `/api/semantic/*` (no static files).
 
 ### 4. Dashboard Only
 
@@ -67,34 +70,13 @@ If you only need the visual dashboard:
 rgctl -r example/coolstore serve --dashboard-only
 ```
 
-### 5. Querying the API with curl
+### 5. Structural queries from the CLI
 
-With the server running, issue GQL queries via HTTP:
+While the server is running, issue graph queries in another terminal (same repo root):
 
 ```bash
-curl -s http://127.0.0.1:8080/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "MATCH (f:Function) WHERE f.name = '\''priceShoppingCart'\'' RETURN f"}'
-```
-
-**Response:**
-
-```json
-{
-  "count": 1,
-  "rows": [
-    [
-      {
-        "binding": "f",
-        "file": "example/coolstore/./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
-        "node": "priceShoppingCart",
-        "qualified_name": "com.redhat.coolstore.service.ShoppingCartService.priceShoppingCart",
-        "type": "Function"
-      }
-    ]
-  ],
-  "schema_version": 1
-}
+rgctl -r example/coolstore -f json find priceShoppingCart --exact | jq '.entities[0]'
+rgctl -r example/coolstore -f json callers priceShoppingCart | jq '.callers[].name'
 ```
 
 ### 6. Semantic Search via API
@@ -106,6 +88,8 @@ curl -s http://127.0.0.1:8080/api/semantic/query \
   -H "Content-Type: application/json" \
   -d '{"query": "shopping cart checkout", "limit": 5}'
 ```
+
+Build the index first: `rgctl semantic index` (then restart `serve`).
 
 ### 7. Dashboard tabs
 
@@ -122,19 +106,15 @@ When the dashboard opens in your browser, you will see several tabs:
 | **Blast** | Blast radius visualization with caller/impact trees |
 | **Taint** | Taint analysis results (requires `--with-taint`) |
 | **Migration** | Migration roadmap viewer (requires `--export-migration-hints`) |
-| **Query Guide** | Built-in GQL query reference |
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/query` | POST | Execute a GQL query (HTTP 503 + pipeline status if the graph is not ready) |
 | `/api/status` | GET | Full-pipeline status (`schema_version` 1) |
 | `/api/semantic/query` | POST | Semantic search |
-| `/api/semantic/index` | POST | Trigger semantic indexing |
+| `/api/semantic/status` | GET | Semantic index availability |
 | `/` | GET | Dashboard UI |
-
-See the [HTTP API Reference](../http-api.md) for complete endpoint documentation.
 
 ## Server Options Reference
 
@@ -151,14 +131,14 @@ See the [HTTP API Reference](../http-api.md) for complete endpoint documentation
 ## Benefits
 
 - **Zero setup.** One command to launch a full-featured analysis dashboard.
-- **Dual interface.** Visual dashboard for humans, HTTP API for agents and scripts.
-- **Session persistence.** The server keeps the graph in memory, making repeated queries fast.
+- **Dual interface.** Visual dashboard for humans; CLI JSON for agents and scripts.
+- **Session persistence.** The server keeps artifacts hot; repeated semantic queries stay fast.
 - **Team accessible.** Bind to `0.0.0.0` to share the dashboard across a network.
 - **Low resource.** HTTP `serve` stays up until Ctrl+C.
 
 ## Related Guides
 
 - [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- `discover --with-dashboard` generates the dashboard bundle
-- [Graph Query Language](graph-query-language.md) -- the query language used by the API
+- [Structured graph queries](structured-query.md) -- CLI verbs for agents
 - [Semantic Search](semantic-search.md) -- semantic queries available via `/api/semantic/*`
 - [Blast Radius Analysis](blast-radius-analysis.md) -- blast-radius visualization in the dashboard

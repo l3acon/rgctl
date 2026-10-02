@@ -109,7 +109,7 @@ Extract and run `rgctl --version`. See [User Guide §1](user-guide.md#1-installa
 ## After release
 
 - Verify the Release page lists all four platform archives and checksums.
-- Smoke-test `discover` + `gql` on a small repo with the downloaded binary.
+- Smoke-test `discover` + `find --type function --count-only` on a small repo with the downloaded binary.
 - If `RGCTL_TESTS_DISPATCH_TOKEN` is configured, CI dispatches `rgctl-released` to the external test repo (see workflow comments).
 
 ---

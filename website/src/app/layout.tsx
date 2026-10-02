@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     template: "%s · rgctl",
   },
   description:
-    "Open-source code knowledge graph for LLM agents. Index once, query compact JSON — blast radius, GQL, semantic search, migration planning.",
+    "Open-source code knowledge graph for LLM agents. Index once, query compact JSON — blast radius, structured find/callers, semantic search, migration planning.",
   metadataBase: new URL("https://shaaf.dev/rgctl"),
   openGraph: {
     title: "rgctl",

@@ -18,8 +18,10 @@ Slicing works in two directions: **backward** (what statements contributed to th
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` with `--with-cfg` to enable CFG/PDG analysis:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover --with-cfg
+rgctl -r example/coolstore discover -l java --with-cfg
 ```
 
 The `--with-cfg` flag is required because slicing depends on the Program Dependence Graph (PDG), which is built from the control-flow graph.
@@ -50,12 +52,6 @@ rgctl -r example/coolstore -f json slice \
       "kind": "data",
       "source": "node_0",
       "target": "node_1",
-      "variable": "sci"
-    },
-    {
-      "kind": "data",
-      "source": "node_0",
-      "target": "node_1",
       "variable": "getQuantity"
     },
     {
@@ -63,15 +59,25 @@ rgctl -r example/coolstore -f json slice \
       "source": "node_0",
       "target": "node_1",
       "variable": "sc"
+    },
+    {
+      "kind": "data",
+      "source": "node_0",
+      "target": "node_1",
+      "variable": "sci"
     }
   ],
   "file": "./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
-  "lines": [66, 68],
+  "lines": [
+    66,
+    68
+  ],
   "nodes": [
     {
       "id": "node_0",
       "kind": "Expression",
-      "label": "sc.setCartItemPromoSavings(\n                            sc.getCartItemPromoSavings() + sci.getPromoSavings() * sci.getQuantity())",
+      "label": "sc.setCartItemPromoSavings(
+                            sc.getCartItemPromoSa...",
       "line": 66
     },
     {
@@ -109,7 +115,7 @@ rgctl -r example/coolstore -f json cpg flows \
 ```json
 {
   "direction": "forward",
-  "file": "example/coolstore/./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
+  "file": "src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
   "function": "priceShoppingCart",
   "line": 68,
   "lines": [64, 68, 81, 83],

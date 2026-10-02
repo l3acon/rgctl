@@ -3,7 +3,7 @@
 **What rgctl is** and how a **code knowledge graph** works — concepts before commands.
 
 **Hands-on:** [Installation](installation.md) · [Guides](guides/README.md) (CoolStore) · [User Guide](user-guide.md) (ecommerce-java).  
-**Agents:** [agent-commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill`.  
+**Agents:** [agent-skill](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill`.  
 **Contribute to rgctl:** [AGENTS.md](../AGENTS.md). **JSON:** [json-api.md](json-api.md).
 
 ---
@@ -39,16 +39,16 @@ You do not need graph theory to use the CLI: **indexing builds the map; commands
       ▼
   artifact root ({repo}/.rgctl/)
       │
-      ├── gql / blast-radius / metrics / communities / cpg / slice / inspect
+      ├── find / callers / relations / blast-radius / metrics / communities / cpg / slice / inspect
       ├── check / pr-check / diff          (CI + snapshot compare)
       ├── semantic index + query           (opt-in embedder)
       ├── export                           (JSON, GraphML, Mermaid, Obsidian, …)
-      └── serve                            (optional HTTP dashboard + /api/query)
+      └── serve                            (optional HTTP dashboard + semantic API)
 ```
 
 1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](guides/discovering-and-indexing.md) for `-r` vs `.` pitfalls.  
 2. **Many times:** query commands read `{repo}/.rgctl/`. Prefer **`-f json`** and never scrape stderr ([JSON API](json-api.md)).  
-3. **Agents:** install the pack (`rgctl install --skill --tools …`) — meta skill + workflow skills ([agent-commands](guides/agent-commands.md)).  
+3. **Agents:** install the pack (`rgctl install --skill --tools …`) — meta skill + workflow skills ([agent-skill](guides/agent-skill.md)).  
 4. **Dashboard:** optional UI after `discover --with-dashboard` + `serve` — not required for structural answers.
 
 Capability designs for contributors: [design/](design/README.md).
@@ -78,7 +78,7 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 | Capability | Intent |
 |------------|--------|
 | **discover** | Index repo → graph + analytics caches under `.rgctl/` |
-| **gql** | Exact inventory and relation queries (Cypher-like) |
+| **find / callers / relations / inventory** | Structured graph queries (agent-facing) |
 | **blast-radius** | Upstream impact / reachability for a symbol |
 | **slice / taint** | Statement-level data/control dependence; source→sink |
 | **inspect** | CFG / PDG / dominance for one function |
@@ -91,9 +91,9 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 | **migration hints** | Package roadmap JSON (`--export-migration-hints`) |
 | **Kantra** | Migration-rule findings during discover (`--with-kantra`) |
 | **install** | Bundle agent skills / optional policy into IDEs |
-| **serve** | Foreground HTTP dashboard + `/api/query` for one repository |
+| **serve** | Foreground HTTP dashboard + semantic HTTP API for one repository |
 
-**Markdown / docs:** `discover` indexes `.md` / `.mdx` by default (headings, links, frontmatter). GQL on `:Module` (`kind=heading`) and `REFERENCES`; function semantic search stays separate. See [markdown-context.md](markdown-context.md) · [guide](guides/markdown-context-graph.md).
+**Markdown / docs:** `discover` indexes `.md` / `.mdx` by default (headings, links, frontmatter). Use `find` / `relations` on `module` nodes and `references` edges; function semantic search stays separate. See [guide](guides/markdown-context-graph.md).
 
 ---
 
@@ -115,11 +115,11 @@ Current Tier 1 ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP
 | Install / verify the binary | [Installation](installation.md) |
 | Feature how-tos on CoolStore | [Guides](guides/README.md) |
 | Full CLI + ecommerce-java | [User Guide](user-guide.md) |
-| Agent pack (skills) | [agent-commands](guides/agent-commands.md) · [agent-skill](guides/agent-skill.md) |
+| Agent pack (skills) | [agent-skill](guides/agent-skill.md) |
 | Paste into *another* repo | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Language support matrix | [languages/README.md](languages/README.md) (JSON SSOT → website) |
 | JSON fields / `schema_version` | [json-api.md](json-api.md) |
-| HTTP `serve` API | [http-api.md](http-api.md) |
+| HTTP `serve` API | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | Latest release notes | [v0.4.17](releases/v0.4.17.md) |
 | Contribute / cold profiles | [AGENTS.md](../AGENTS.md) · [docs hub — For contributors](README.md#for-contributors) |
 | Research map | [further-reading.md](further-reading.md) |

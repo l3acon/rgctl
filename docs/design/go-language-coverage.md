@@ -49,7 +49,7 @@ cargo test --test graph_correctness go -- --nocapture
 
 # Spot-check call edges
 ./target/release/rgctl -r rgctl-tests/ecommerce-go -f json \
-  gql "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE a.name = 'Run' RETURN a,b"
+  relations Run --edge calls --direction out --limit 20
 ```
 
 When adding a new Go surface, **add a row here**, a fixture symbol, and an `lf_*` expected-fact before claiming support.
