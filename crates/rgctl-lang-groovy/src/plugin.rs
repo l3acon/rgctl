@@ -164,7 +164,8 @@ impl GroovyPlugin {
 
         while let Some(node) = stack.pop() {
             match node.kind() {
-                "class_declaration" | "interface_declaration" | "enum_declaration" => {
+                "class_declaration" | "interface_declaration" | "enum_declaration"
+                | "annotation_type_declaration" => {
                     let Some(simple) = Self::type_name(node, source) else {
                         let mut cursor = node.walk();
                         for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev()
@@ -176,6 +177,7 @@ impl GroovyPlugin {
                     let symbol_type = match node.kind() {
                         "interface_declaration" => SymbolType::Interface,
                         "enum_declaration" => SymbolType::Enum,
+                        "annotation_type_declaration" => SymbolType::Annotation,
                         _ => SymbolType::Class,
                     };
                     let qn = Self::qualify(package.as_deref(), &simple);
@@ -394,12 +396,121 @@ impl GroovyPlugin {
                         }
                     }
             }
+            // AnnotatedWith on types / methods / constructors (Java-shaped modifiers).
+            if matches!(
+                node.kind(),
+                "class_declaration"
+                    | "interface_declaration"
+                    | "enum_declaration"
+                    | "annotation_type_declaration"
+                    | "method_declaration"
+                    | "function_definition"
+                    | "constructor_declaration"
+                    | "compact_constructor_declaration"
+            ) {
+                Self::push_annotated_with_for(node, source, file_path, root, &mut relations);
+            }
             let mut cursor = node.walk();
             for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
                 stack.push(child);
             }
         }
         Ok(relations)
+    }
+
+    /// Emit `AnnotatedWith` for `@Foo` / `@Foo(...)` on a declaration.
+    fn push_annotated_with_for(
+        node: Node,
+        source: &[u8],
+        file_path: &Path,
+        root: Node,
+        relations: &mut Vec<Relation>,
+    ) {
+        let package = Self::package_name(root, source);
+        let from = match node.kind() {
+            "class_declaration"
+            | "interface_declaration"
+            | "enum_declaration"
+            | "annotation_type_declaration" => Self::type_name(node, source)
+                .map(|n| Self::qualify(package.as_deref(), &n)),
+            "method_declaration" | "function_definition" => {
+                let name = node
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(|s| s.trim().to_string());
+                name.map(|name| {
+                    if let Some(cls) = Self::enclosing_class(node, source) {
+                        Self::qualify(package.as_deref(), &format!("{cls}.{name}"))
+                    } else {
+                        Self::qualify(package.as_deref(), &name)
+                    }
+                })
+            }
+            "constructor_declaration" | "compact_constructor_declaration" => {
+                let cls = Self::enclosing_class(node, source)
+                    .or_else(|| Self::type_name(node, source))
+                    .unwrap_or_else(|| "Unknown".into());
+                Some(Self::qualify(package.as_deref(), &format!("{cls}.<init>")))
+            }
+            _ => None,
+        };
+        let Some(from) = from else {
+            return;
+        };
+
+        let mut cursor = node.walk();
+        let modifiers = node.children(&mut cursor).find(|c| c.kind() == "modifiers");
+        let Some(modifiers) = modifiers else {
+            return;
+        };
+        let mut mc = modifiers.walk();
+        for child in modifiers.children(&mut mc) {
+            if !matches!(child.kind(), "annotation" | "marker_annotation") {
+                continue;
+            }
+            let raw_name = child
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source).ok())
+                .map(str::to_string)
+                .or_else(|| {
+                    // Fallback: strip leading `@` from annotation text.
+                    child.utf8_text(source).ok().map(|t| {
+                        t.trim()
+                            .trim_start_matches('@')
+                            .split(['(', ' ', '\n'])
+                            .next()
+                            .unwrap_or("")
+                            .to_string()
+                    })
+                })
+                .unwrap_or_default();
+            let simple = raw_name
+                .rsplit('.')
+                .next()
+                .unwrap_or(&raw_name)
+                .trim()
+                .to_string();
+            if simple.is_empty() {
+                continue;
+            }
+            let args = child
+                .child_by_field_name("arguments")
+                .and_then(|n| n.utf8_text(source).ok())
+                .map(str::to_string);
+            let mut metadata = serde_json::json!({ "language": "groovy" });
+            if let Some(args) = args {
+                metadata["arguments"] = serde_json::Value::String(args);
+            }
+            relations.push(Relation {
+                from: from.clone(),
+                to: simple,
+                relation_type: RelationType::AnnotatedWith,
+                location: Self::loc(&file_path.to_string_lossy(), child),
+                metadata,
+                to_qualified_hint: None,
+                to_type_hint: None,
+            });
+        }
     }
 
     fn calculate_cyclomatic(&self, node: Node) -> usize {
@@ -542,6 +653,31 @@ mod tests {
                 .iter()
                 .any(|r| r.relation_type == RelationType::Calls),
             "expected Calls: {:?}",
+            all.relations
+        );
+    }
+
+    #[test]
+    fn extracts_annotated_with() {
+        let src = b"@CompileStatic\nclass OrderService {\n  @Override\n  String toString() { \"x\" }\n}\n";
+        let plugin = GroovyPlugin::new().unwrap();
+        let all = plugin
+            .extract_all(Path::new("OrderService.groovy"), src)
+            .unwrap();
+        assert!(
+            all.relations.iter().any(|r| {
+                r.relation_type == RelationType::AnnotatedWith
+                    && r.to == "CompileStatic"
+                    && r.from.contains("OrderService")
+            }),
+            "expected AnnotatedWith CompileStatic: {:?}",
+            all.relations
+        );
+        assert!(
+            all.relations.iter().any(|r| {
+                r.relation_type == RelationType::AnnotatedWith && r.to == "Override"
+            }),
+            "expected AnnotatedWith Override: {:?}",
             all.relations
         );
     }

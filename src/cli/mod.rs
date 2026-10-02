@@ -39,6 +39,7 @@ pub mod semantic_output;
 mod slice;
 pub mod slice_output;
 mod stage_profile;
+mod structured_query;
 
 pub use args::OutputFormat;
 
@@ -218,7 +219,7 @@ pub enum Commands {
         extra: Vec<String>,
     },
 
-    /// Execute graph query language
+    /// Execute graph query language (experimental; prefer find/callers/relations/inventory)
     Gql {
         query: String,
 
@@ -227,6 +228,172 @@ pub enum Commands {
 
         #[arg(long)]
         macro_name: Option<String>,
+    },
+
+    /// Find symbols by name/type over the mmap graph index (no GQL)
+    Find {
+        /// Name or glob (`Foo`, `User*`, `*Service*`). Omit with `--type` to list by type.
+        #[arg(value_name = "PATTERN")]
+        pattern: Option<String>,
+
+        /// Filter by node type (function, class, import, annotation, …)
+        #[arg(short = 't', long = "type", value_name = "TYPE")]
+        type_name: Option<String>,
+
+        /// Path glob filter
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+
+        /// Language filter (java, rust, …)
+        #[arg(short = 'l', long = "lang", value_name = "LANG")]
+        lang: Option<String>,
+
+        /// qualified_name prefix scope
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        /// Scope mode: inside (default), outside, crossing
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        /// Alias for `--scope-mode outside`
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        /// Exact name match (disable glob)
+        #[arg(long = "exact")]
+        exact: bool,
+
+        /// Max results [default: 50]
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+
+        /// Return counts only
+        #[arg(long = "count-only")]
+        count_only: bool,
+    },
+
+    /// Incoming CALLS neighbors for a symbol
+    Callers {
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+    },
+
+    /// Outgoing CALLS neighbors for a symbol
+    Callees {
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+    },
+
+    /// Typed edge traversal; omit SYMBOL for seedless set-wide scan
+    Relations {
+        /// Optional seed symbol (omit for seedless typed-edge scan)
+        #[arg(value_name = "SYMBOL")]
+        symbol: Option<String>,
+
+        /// Edge type (calls, uses, extends, implements, annotatedwith, …)
+        #[arg(short = 'e', long = "edge", value_name = "TYPE")]
+        edge: String,
+
+        /// in | out | both [default: out]
+        #[arg(long = "direction", default_value = "out")]
+        direction: String,
+
+        /// Filter edge source node type (seedless / seeded)
+        #[arg(long = "from-type", value_name = "TYPE")]
+        from_type: Option<String>,
+
+        /// Filter edge target node type
+        #[arg(long = "to-type", value_name = "TYPE")]
+        to_type: Option<String>,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+    },
+
+    /// Aggregate symbol/edge counts (includes zero-count schema kinds for type/edge)
+    Inventory {
+        /// Aggregation dimension: type | edge | lang | file | community
+        #[arg(long = "by", default_value = "type")]
+        by: String,
+
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+    },
+
+    /// Alias namespace for structured query verbs (`query find`, `query callers`, …)
+    Query {
+        #[command(subcommand)]
+        action: QueryCommands,
     },
 
     /// Line-level program slice or taint trace
@@ -499,6 +666,108 @@ pub enum Commands {
         /// Overwrite rgctl-managed files that differ from the bundle
         #[arg(long)]
         force: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum QueryCommands {
+    /// Alias for `rgctl find`
+    Find {
+        #[arg(value_name = "PATTERN")]
+        pattern: Option<String>,
+        #[arg(short = 't', long = "type", value_name = "TYPE")]
+        type_name: Option<String>,
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+        #[arg(short = 'l', long = "lang", value_name = "LANG")]
+        lang: Option<String>,
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "exact")]
+        exact: bool,
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+        #[arg(long = "count-only")]
+        count_only: bool,
+    },
+    /// Alias for `rgctl callers`
+    Callers {
+        symbol: String,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl callees`
+    Callees {
+        symbol: String,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl relations`
+    Relations {
+        symbol: Option<String>,
+        #[arg(short = 'e', long = "edge")]
+        edge: String,
+        #[arg(long = "direction", default_value = "out")]
+        direction: String,
+        #[arg(long = "from-type")]
+        from_type: Option<String>,
+        #[arg(long = "to-type")]
+        to_type: Option<String>,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl inventory`
+    Inventory {
+        #[arg(long = "by", default_value = "type")]
+        by: String,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
     },
 }
 
@@ -890,6 +1159,258 @@ impl Cli {
                     file,
                 },
             ),
+            Commands::Find {
+                pattern,
+                type_name,
+                file,
+                lang,
+                scope,
+                scope_mode,
+                exclude_scope,
+                exact,
+                limit,
+                count_only,
+            } => structured_query::run_find(
+                &ctx,
+                pattern,
+                type_name,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class: None,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang,
+                    limit,
+                },
+                exact,
+                count_only,
+            ),
+            Commands::Callers {
+                symbol,
+                depth,
+                file,
+                class,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+            } => structured_query::run_call_neighbors(
+                &ctx,
+                symbol,
+                true,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                },
+            ),
+            Commands::Callees {
+                symbol,
+                depth,
+                file,
+                class,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+            } => structured_query::run_call_neighbors(
+                &ctx,
+                symbol,
+                false,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                },
+            ),
+            Commands::Relations {
+                symbol,
+                edge,
+                direction,
+                from_type,
+                to_type,
+                depth,
+                file,
+                class,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+            } => structured_query::run_relations(
+                &ctx,
+                symbol,
+                edge,
+                direction,
+                from_type,
+                to_type,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                },
+            ),
+            Commands::Inventory {
+                by,
+                file,
+                scope,
+                scope_mode,
+                exclude_scope,
+            } => structured_query::run_inventory(
+                &ctx,
+                by,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class: None,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit: None,
+                },
+            ),
+            Commands::Query { action } => match action {
+                QueryCommands::Find {
+                    pattern,
+                    type_name,
+                    file,
+                    lang,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    exact,
+                    limit,
+                    count_only,
+                } => structured_query::run_find(
+                    &ctx,
+                    pattern,
+                    type_name,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class: None,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang,
+                        limit,
+                    },
+                    exact,
+                    count_only,
+                ),
+                QueryCommands::Callers {
+                    symbol,
+                    depth,
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_call_neighbors(
+                    &ctx,
+                    symbol,
+                    true,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    },
+                ),
+                QueryCommands::Callees {
+                    symbol,
+                    depth,
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_call_neighbors(
+                    &ctx,
+                    symbol,
+                    false,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    },
+                ),
+                QueryCommands::Relations {
+                    symbol,
+                    edge,
+                    direction,
+                    from_type,
+                    to_type,
+                    depth,
+                    file,
+                    class,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_relations(
+                    &ctx,
+                    symbol,
+                    edge,
+                    direction,
+                    from_type,
+                    to_type,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    },
+                ),
+                QueryCommands::Inventory {
+                    by,
+                    file,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                } => structured_query::run_inventory(
+                    &ctx,
+                    by,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class: None,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit: None,
+                    },
+                ),
+            },
             Commands::Inspect { symbol, layer } => {
                 inspect::run(&ctx, inspect::InspectArgs { symbol, layer })
             }
@@ -1192,6 +1713,18 @@ fn command_label_for(command: &Commands) -> &'static str {
     match command {
         Commands::Discover { .. } => "discover",
         Commands::Gql { .. } => "gql",
+        Commands::Find { .. } => "find",
+        Commands::Callers { .. } => "callers",
+        Commands::Callees { .. } => "callees",
+        Commands::Relations { .. } => "relations",
+        Commands::Inventory { .. } => "inventory",
+        Commands::Query { action } => match action {
+            QueryCommands::Find { .. } => "query find",
+            QueryCommands::Callers { .. } => "query callers",
+            QueryCommands::Callees { .. } => "query callees",
+            QueryCommands::Relations { .. } => "query relations",
+            QueryCommands::Inventory { .. } => "query inventory",
+        },
         Commands::Slice { .. } => "slice",
         Commands::BlastRadius { .. } => "blast-radius",
         Commands::Inspect { .. } => "inspect",

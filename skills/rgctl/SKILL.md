@@ -101,19 +101,27 @@ Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/
 
 ### 2. Query & Search
 
+**Prefer structured verbs** (mmap; no Cypher). Parse `-f json` from **stdout** (`schema_version`); never `2>/dev/null`.
+
 | User Intent | CLI Command |
 |-------------|-------------|
-| Inventory functions | `gql --macro-name all_functions unused` |
-| Find callers/callees | `gql "MATCH (a)-[:CALLS]->(b) WHERE ..."` |
+| Schema / counts (incl. zeros) | `inventory --by type` or `inventory --by edge` |
+| Count functions | `find --type function --count-only` |
+| Find by name/type | `find "User*" --type class --limit 50` |
+| javax import worklist | `find "import javax*" --type import --scope <pkg>` |
+| Annotation pairs (seedless) | `relations --edge annotatedwith --from-type function --to-type annotation --scope <pkg>` |
+| Find callers/callees | `callers <Symbol> --depth 1` / `callees <Symbol>` |
+| Outside callers of a module | `callers <Symbol> --scope <pkg> --scope-mode outside` |
+| EXTENDS / IMPLEMENTS inventory | `relations --edge extends --from-type class` (omit SYMBOL) |
 | Natural-language search | `semantic query "checkout flow"` |
 | List communities | `communities list` |
-| Community members | `gql "MATCH (f) WHERE f.community_id='12'"` |
 | Subsystem ownership | `semantic query "X" --scope community` |
 | Refresh community labels | `communities label --write` |
+| Ad-hoc Cypher (experimental) | `gql "MATCH …"` — uncanny valley; prefer verbs above |
 
-**GQL limitations:** no `COUNT`/`ORDER BY`; LIKE prefix/suffix only; CALLS misses dynamic dispatch; Konveyor labels need backticks in `WHERE`.
+**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) are not indexed yet.
 
-**See:** [GQL Reference](references/gql-reference.md), [Semantic Search Guide](../../docs/guides/semantic-search.md)
+**See:** [Command Encyclopedia](references/command-encyclopedia.md) (find/callers/relations/inventory), [GQL Reference](references/gql-reference.md) (legacy), [Semantic Search Guide](../../docs/guides/semantic-search.md)
 
 ### 3. Impact & Safety
 
@@ -164,7 +172,8 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 | "Where is checkout flow?" | `semantic query "checkout flow" --limit 10` |
 | "Impact if I change X" | `blast-radius X --depth 2` |
 | "Validate against policy" | `check --policy-file policy.json` |
-| "Who calls X" | `gql "MATCH (a)-[:CALLS*1..3]->(b) WHERE a.name='X' RETURN a,b"` |
+| "Who calls X" | `callers X --depth 2` (impact → `blast-radius X`) |
+| "javax imports / annotations" | `find "import javax*" --type import`; `relations --edge annotatedwith --from-type function --to-type annotation` |
 | "Where is X mutated?" | `cpg mutations --type X --exclude-ctors` |
 
 ## Failure Playbook
@@ -174,9 +183,10 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 | No `.rgctl/` in repo | Run `cd repo && rgctl discover .`; or `rgctl migrate-cache` from legacy daemon cache |
 | slice/inspect/cpg fails | Re-discover with `--with-cfg` |
 | semantic query fails | `semantic index` |
-| Ambiguous symbol | Add `--class` or `--file`; disambiguate via GQL |
+| Ambiguous symbol | Add `--class` or `--file` on callers/find |
 | `check` exit 1 | Report violations (JSON still on stdout) |
-| GQL LIKE returns 0 | Try `communities list`, `semantic query`, or broader type patterns |
+| find/relations empty | Run `inventory --by type` / `--by edge` (zeros mean unpopulated schema); check `--scope` |
+| GQL LIKE returns 0 | Prefer structured verbs; or `semantic query` / `communities list` |
 
 ## Artifacts
 

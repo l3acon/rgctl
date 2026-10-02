@@ -3,6 +3,7 @@
 .claude/
 .opencode/
 .agent
+.reports
 # OpenSpec change proposals (local only — do not commit)
 openspec/
 .scratch/
