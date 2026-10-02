@@ -1,0 +1,60 @@
+schema_version: 1
+id: kotlin-builtins
+languages:
+- kotlin
+rules:
+- id: kt-src-http
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - readLine(
+    - readln(
+    - System.getenv
+    - request.getParameter
+    - call.receive
+- id: kt-src-file
+  role: source
+  kind: FileInput
+  match:
+    type: all_substrings
+    values:
+    - File(
+    - readText
+- id: kt-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - executeQuery
+    - createStatement
+    - prepareStatement
+    - rawQuery
+- id: kt-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - Runtime.getRuntime().exec
+    - ProcessBuilder
+- id: kt-sink-file
+  role: sink
+  kind: FileWrite
+  match:
+    type: any_substring
+    values:
+    - Files.write
+    - writeText(
+- id: kt-san
+  role: sanitizer
+  kind: SqlParameterize
+  match:
+    type: any_substring
+    values:
+    - prepareStatement
+    - HtmlUtils.htmlEscape

@@ -1,0 +1,115 @@
+schema_version: 1
+id: rust-builtins
+languages:
+- rust
+rules:
+- id: rs-src-http
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - Path(
+    - Query(
+    - Json(
+    - Form(
+    - RawBody(
+    - TypedHeader(
+    - 'axum::extract'
+    - Extension(
+- id: rs-src-env
+  role: source
+  kind: EnvironmentVar
+  match:
+    type: any_substring
+    values:
+    - 'env::var'
+    - 'std::env::var'
+- id: rs-src-argv
+  role: source
+  kind: CommandLineArg
+  match:
+    type: any_substring
+    values:
+    - 'env::args'
+    - 'std::env::args'
+- id: rs-src-file
+  role: source
+  kind: FileInput
+  match:
+    type: any_substring
+    values:
+    - 'File::open'
+    - read_to_string
+    - 'std::fs::read'
+- id: rs-src-net
+  role: source
+  kind: NetworkInput
+  match:
+    type: any_substring
+    values:
+    - 'reqwest::'
+    - 'hyper::'
+    - 'TcpStream::connect'
+- id: rs-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - 'sqlx::query'
+    - query_as
+    - .execute(
+    - fetch_one(
+    - fetch_all(
+    - fetch_optional(
+- id: rs-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - 'Command::new'
+    - 'std::process::Command'
+- id: rs-sink-html
+  role: sink
+  kind: HtmlRender
+  cwe: CWE-79
+  match:
+    type: all_substrings
+    values:
+    - 'format!'
+    - Html
+- id: rs-sink-file
+  role: sink
+  kind: FileWrite
+  match:
+    type: any_substring
+    values:
+    - 'std::fs::write'
+    - write_all(
+- id: rs-san-bind
+  role: sanitizer
+  kind: SqlParameterize
+  match:
+    type: substring
+    value: .bind(
+- id: rs-san-typed
+  role: sanitizer
+  kind: TypeCast
+  detail: typed
+  match:
+    type: any_substring
+    values:
+    - '.parse::<'
+    - FromStr
+- id: rs-san-html
+  role: sanitizer
+  kind: HtmlEscape
+  match:
+    type: any_substring
+    values:
+    - html_escape
+    - 'ammonia::'

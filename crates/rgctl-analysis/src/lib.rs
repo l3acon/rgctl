@@ -62,6 +62,7 @@ pub mod slicing;
 pub mod storage;
 pub mod structural_topology;
 pub mod taint;
+pub mod taint_rules;
 pub mod type_inference;
 
 pub use alias::may_alias_names;
@@ -232,4 +233,5 @@ pub use slicing::{
 pub use storage::{AnalysisIndexEntry, AnalysisStorage, FunctionAnalysis, FunctionIdSyncEntry};
 pub use structural_topology::StructuralTopology;
 pub use taint::{Sanitizer, TaintAnalyzer, TaintFlow, TaintSink, TaintSource};
+pub use taint_rules::{TaintRuleSet, bundled_cwe_catalog, CweCatalogEntry};
 pub use type_inference::{InferredType, TypeInferenceEngine, VariableType, confidence_for};

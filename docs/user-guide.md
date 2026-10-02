@@ -323,6 +323,7 @@ Harmonic, dashboard, migration export, security, CFG/PDG, and discover-time tain
 | `--with-security` | Secret scanning |
 | `--with-cfg` | Per-function CFG, dominators, PDG (archive under `.rgctl/analysis/`) |
 | `--with-taint` | Discover-time taint into archive (implies CFG/PDG pass) |
+| `--taint-rules PATH` | Extra YAML pack file or directory (after built-ins + `.rgctl/taint-rules.d/`) |
 | `--with-harmonic` | Harmonic centrality (migration ranking) |
 | `--with-dashboard` | Static dashboard bundle under `.rgctl/dashboard/` |
 | `--export-migration-hints` | Migration roadmap JSON (alias: `--export-migration-plan`) |
@@ -1231,6 +1232,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `--with-security` | Secret scanning |
 | `--with-cfg` | CFG / PDG (not taint); alias `--cfg` |
 | `--with-taint` | Discover-time taint (implies CFG pass) |
+| `--taint-rules PATH` | Extra taint YAML pack (file or dir; after built-ins / `.rgctl/taint-rules.d/`) |
 | `--with-dfg-loops` | Tag loop-carried `DataDependency` edges in PDG (with `--with-cfg`) |
 | `--with-ast-skeleton` | Build AST skeleton archive for `cpg ast` |
 | `--with-harmonic` | Harmonic centrality (default off; needed for migration ranking) |

@@ -1,0 +1,144 @@
+schema_version: 1
+id: cwe-catalog
+patterns:
+- cwe_id: CWE-89
+  name: SQL Injection
+  description: Improper neutralization of special elements in SQL commands
+  severity: 10
+  source_patterns:
+  - 'request\.(GET|POST|query|body)'
+  - 'req\.(query|params|body)'
+  sink_patterns:
+  - '\.execute\('
+  - '\.query\('
+  - 'cursor\.(execute|executemany)'
+  sanitizer_patterns:
+  - 'int\('
+  - 'parseInt\('
+  - 'prepare\('
+- cwe_id: CWE-79
+  name: Cross-Site Scripting (XSS)
+  description: Improper neutralization of input during web page generation
+  severity: 9
+  source_patterns:
+  - 'request\.(GET|POST)'
+  - 'req\.(query|body)'
+  sink_patterns:
+  - innerHTML
+  - 'document\.write'
+  - '\.html\('
+  sanitizer_patterns:
+  - 'escape\('
+  - 'sanitize\('
+  - 'html\.escape'
+- cwe_id: CWE-78
+  name: OS Command Injection
+  description: Improper neutralization of special elements in OS commands
+  severity: 10
+  source_patterns:
+  - 'request\.GET'
+  - 'req\.query'
+  - 'sys\.argv'
+  sink_patterns:
+  - 'os\.system\('
+  - 'subprocess\.(call|run|Popen)'
+  - 'Command::new'
+  sanitizer_patterns:
+  - 'shlex\.quote'
+  - 'shellEscape\('
+- cwe_id: CWE-22
+  name: Path Traversal
+  description: Improper limitation of pathname to a restricted directory
+  severity: 8
+  source_patterns:
+  - 'request\.(GET|POST)'
+  - 'req\.(query|params)'
+  sink_patterns:
+  - 'open\('
+  - 'fs\.readFile'
+  - 'File::open'
+  sanitizer_patterns:
+  - 'os\.path\.basename'
+  - 'path\.basename'
+- cwe_id: CWE-798
+  name: Hardcoded Credentials
+  description: Use of hard-coded credentials
+  severity: 9
+  source_patterns:
+  - 'password\s*=\s*[''\"]'
+  - 'api_key\s*=\s*[''\"]'
+  - 'secret\s*=\s*[''\"]'
+  sink_patterns:
+  sanitizer_patterns:
+  - 'env::var'
+  - 'process\.env'
+- cwe_id: CWE-502
+  name: Insecure Deserialization
+  description: Deserialization of untrusted data
+  severity: 9
+  source_patterns:
+  - 'request\.(GET|POST|body)'
+  - 'req\.body'
+  sink_patterns:
+  - 'pickle\.loads'
+  - 'yaml\.load'
+  - 'serde_json::from_str'
+  sanitizer_patterns:
+  - jsonschema
+  - 'validate\('
+- cwe_id: CWE-918
+  name: Server-Side Request Forgery (SSRF)
+  description: Unvalidated URL fetch from user input
+  severity: 8
+  source_patterns:
+  - 'request\.(GET|POST)'
+  - 'req\.(query|params)'
+  sink_patterns:
+  - 'requests\.get\('
+  - 'urllib\.request'
+  - 'fetch\('
+  - 'http\.get\('
+  sanitizer_patterns:
+  - allowlist
+  - validate_url
+- cwe_id: CWE-352
+  name: Cross-Site Request Forgery (CSRF)
+  description: Missing anti-CSRF token on state-changing requests
+  severity: 7
+  source_patterns:
+  - '@app\.route'
+  - 'router\.post'
+  sink_patterns:
+  - '\.post\('
+  - POST
+  sanitizer_patterns:
+  - csrf
+  - csrf_token
+  - '@csrf\.exempt'
+- cwe_id: CWE-287
+  name: Improper Authentication
+  description: Authentication bypass or missing verification
+  severity: 9
+  source_patterns:
+  - login
+  - authenticate
+  sink_patterns:
+  - bypass
+  - skip_auth
+  - '#\[allow\(unauthenticated\)\]'
+  sanitizer_patterns:
+  - verify_password
+  - check_token
+- cwe_id: CWE-306
+  name: Missing Authentication for Critical Function
+  description: Sensitive operation without authentication check
+  severity: 8
+  source_patterns:
+  - admin
+  - delete_user
+  sink_patterns:
+  - '\.delete\('
+  - drop_table
+  sanitizer_patterns:
+  - require_auth
+  - '@login_required'

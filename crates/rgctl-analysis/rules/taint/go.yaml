@@ -1,0 +1,123 @@
+schema_version: 1
+id: go-builtins
+languages:
+- go
+rules:
+- id: go-src-http
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - Query(
+    - Param(
+    - PostForm(
+    - ShouldBindJSON
+    - BindJSON
+    - FormValue(
+    - GetHeader(
+    - Cookie(
+- id: go-src-env
+  role: source
+  kind: EnvironmentVar
+  match:
+    type: any_substring
+    values:
+    - os.Getenv
+    - os.LookupEnv
+- id: go-src-argv
+  role: source
+  kind: CommandLineArg
+  match:
+    type: substring
+    value: os.Args
+- id: go-src-file
+  role: source
+  kind: FileInput
+  match:
+    type: any_substring
+    values:
+    - ReadFile(
+    - io.ReadAll
+    - ioutil.ReadAll
+    - json.Unmarshal
+    - io.ReadCloser
+- id: go-src-net
+  role: source
+  kind: NetworkInput
+  match:
+    type: any_substring
+    values:
+    - http.Get(
+    - http.Post(
+- id: go-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - .Exec(
+    - .Query(
+    - .QueryRow(
+    - db.Exec
+    - sql.Open
+- id: go-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - exec.Command
+    - exec.CommandContext
+- id: go-sink-html-tmpl
+  role: sink
+  kind: HtmlRender
+  cwe: CWE-79
+  match:
+    type: any_substring
+    values:
+    - template.HTML(
+    - c.HTML(
+- id: go-sink-html-fprintf
+  role: sink
+  kind: HtmlRender
+  cwe: CWE-79
+  match:
+    type: all_substrings
+    values:
+    - fmt.Fprintf
+    - ResponseWriter
+- id: go-sink-file
+  role: sink
+  kind: FileWrite
+  match:
+    type: any_substring
+    values:
+    - os.WriteFile
+    - ioutil.WriteFile
+- id: go-san-num
+  role: sanitizer
+  kind: TypeCast
+  detail: numeric
+  match:
+    type: any_substring
+    values:
+    - strconv.Atoi
+    - strconv.ParseInt
+    - strconv.ParseFloat
+- id: go-san-html
+  role: sanitizer
+  kind: HtmlEscape
+  match:
+    type: substring
+    value: html.EscapeString
+- id: go-san-sql
+  role: sanitizer
+  kind: SqlParameterize
+  match:
+    type: any_substring
+    values:
+    - Prepare(
+    - PrepareContext(
