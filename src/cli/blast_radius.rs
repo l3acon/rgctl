@@ -27,6 +27,10 @@ pub struct BlastRadiusArgs {
     pub with_slices: bool,
     pub class: Option<String>,
     pub file: Option<String>,
+    /// Label impact nodes with boundary catalogs.
+    pub classify_boundary: bool,
+    /// Allowlist boundary kinds / HTTP methods (`REST_ENDPOINT`, `POST`, …).
+    pub boundary: Vec<String>,
 }
 
 struct PreparedImpact {
@@ -302,7 +306,7 @@ fn try_snapshot_lite_path(
     };
 
     let response = build_lite_response(ctx, args, parsed, store, &engine)?;
-    emit_output(ctx, &response)?;
+    emit_output(ctx, args, response)?;
     Ok(Some(()))
 }
 
@@ -359,15 +363,54 @@ fn resolve_blast_result(
     Ok(engine.analyze(symbol_id)?)
 }
 
-fn emit_output(ctx: &CliContext, response: &BlastRadiusResponse) -> Result<()> {
-    if ctx.format == OutputFormat::Json {
-        return ctx.emit_json_value(&response_to_json(response));
+fn emit_output(ctx: &CliContext, args: &BlastRadiusArgs, mut response: BlastRadiusResponse) -> Result<()> {
+    if args.classify_boundary {
+        enrich_boundaries(&mut response, &args.boundary);
     }
-    ctx.emit(&emit_text(response))
+    if ctx.format == OutputFormat::Json {
+        return ctx.emit_json_value(&response_to_json(&response));
+    }
+    ctx.emit(&emit_text(&response))
+}
+
+fn enrich_boundaries(response: &mut BlastRadiusResponse, allowlist: &[String]) {
+    use rgctl_analysis::{bundled_boundary_catalogs, classify_boundaries, BoundaryNodeRef};
+    let catalogs = bundled_boundary_catalogs();
+    let empty: Vec<String> = Vec::new();
+    let nodes: Vec<BoundaryNodeRef<'_>> = response
+        .topology
+        .impact_zone
+        .iter()
+        .map(|s| BoundaryNodeRef {
+            name: s.fqn.rsplit('.').next().unwrap_or(s.fqn.as_str()),
+            qualified_name: Some(s.fqn.as_str()),
+            file: if s.file_path.is_empty() {
+                None
+            } else {
+                Some(s.file_path.as_str())
+            },
+            language: Some(response.target.language.as_str()),
+            annotations: empty.as_slice(),
+        })
+        .collect();
+    let allow = if allowlist.is_empty() {
+        None
+    } else {
+        Some(allowlist)
+    };
+    let labels = classify_boundaries(&catalogs, &nodes, allow);
+    response.boundaries = labels
+        .into_iter()
+        .filter_map(|l| serde_json::to_value(l).ok())
+        .collect();
 }
 
 pub fn run(ctx: &CliContext, args: BlastRadiusArgs) -> Result<()> {
-    if ctx.format == OutputFormat::Json && args.policy_file.is_none() && !args.with_slices {
+    if ctx.format == OutputFormat::Json
+        && args.policy_file.is_none()
+        && !args.with_slices
+        && !args.classify_boundary
+    {
         let mut session = rgctl_service::Session::new(&ctx.repo);
         if !session.graph_ready() {
             anyhow::bail!("Graph not found (run `rgctl discover` first)");
@@ -397,7 +440,7 @@ pub fn run(ctx: &CliContext, args: BlastRadiusArgs) -> Result<()> {
 
     if !needs_full_graph {
         if let Some(response) = try_fast_cached_lookup(ctx, &args, &parsed)? {
-            return emit_output(ctx, &response);
+            return emit_output(ctx, &args, response);
         }
 
         if let Some(session) = ctx.snapshot_session()? {
@@ -485,9 +528,10 @@ pub fn run(ctx: &CliContext, args: BlastRadiusArgs) -> Result<()> {
         lookup,
         gatekeeping,
     );
-    emit_output(ctx, &response)?;
+    let violated = response.gatekeeping.policy_status == "VIOLATED";
+    emit_output(ctx, &args, response)?;
 
-    if response.gatekeeping.policy_status == "VIOLATED" {
+    if violated {
         std::process::exit(1);
     }
 

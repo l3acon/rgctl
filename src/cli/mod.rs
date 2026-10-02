@@ -290,6 +290,10 @@ pub enum Commands {
         /// Include annotation argument text when indexed (requires --annotation)
         #[arg(long = "show-attributes")]
         show_attributes: bool,
+
+        /// Package coordinates (PURL / GAV / crate) → import prefix filter
+        #[arg(long = "package", value_name = "COORDS")]
+        package: Option<String>,
     },
 
     /// Incoming CALLS neighbors for a symbol
@@ -321,6 +325,14 @@ pub enum Commands {
 
         #[arg(long = "limit", value_name = "N")]
         limit: Option<usize>,
+
+        /// Package coordinates for facade / import-scope filtering
+        #[arg(long = "package", value_name = "COORDS")]
+        package: Option<String>,
+
+        /// Filter / seed by method names (comma-separated; e.g. OSV affected_methods)
+        #[arg(long = "methods", value_name = "NAME[,NAME…]", value_delimiter = ',')]
+        methods: Vec<String>,
     },
 
     /// Outgoing CALLS neighbors for a symbol
@@ -489,6 +501,29 @@ pub enum Commands {
 
         #[arg(long)]
         no_policy: bool,
+
+        /// Label impact nodes using boundary catalogs (REST / messaging / …)
+        #[arg(long = "classify-boundary")]
+        classify_boundary: bool,
+
+        /// Restrict boundaries to kinds/methods (`REST_ENDPOINT`, `POST`, …); repeatable
+        #[arg(long = "boundary", value_name = "KIND", action = clap::ArgAction::Append)]
+        boundary: Vec<String>,
+    },
+
+    /// Sink-first taint (`--sink` + `--source external`); requires `discover --with-cfg`
+    Taint {
+        /// Sink symbol / method (e.g. `ObjectMapper.readValue`)
+        #[arg(long = "sink", value_name = "SYMBOL")]
+        sink: String,
+
+        /// Source mode (v1: `external` only)
+        #[arg(long = "source", default_value = "external")]
+        source: String,
+
+        /// Max call/dataflow depth
+        #[arg(long = "depth", default_value_t = 8)]
+        depth: usize,
     },
 
     /// Inspect raw CFG / PDG / dominance for a function symbol
@@ -709,6 +744,18 @@ pub enum VulnCommands {
         /// Path to OSV JSON file
         #[arg(long = "osv", value_name = "PATH")]
         osv: std::path::PathBuf,
+    },
+    /// Reachability pipeline → OpenVEX (triage → deps → package/callers → taint)
+    Analyze {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+        /// JAR/WAR roots (opt-in)
+        #[arg(long = "include-jars", value_name = "DIR", num_args = 1..)]
+        include_jars: Vec<std::path::PathBuf>,
+        /// node_modules roots (opt-in)
+        #[arg(long = "include-node-modules", value_name = "DIR", num_args = 1..)]
+        include_node_modules: Vec<std::path::PathBuf>,
     },
 }
 
@@ -1238,6 +1285,8 @@ impl Cli {
                 with_slices,
                 class,
                 file,
+                classify_boundary,
+                boundary,
             } => blast_radius::run(
                 &ctx,
                 blast_radius::BlastRadiusArgs {
@@ -1248,8 +1297,15 @@ impl Cli {
                     with_slices,
                     class,
                     file,
+                    classify_boundary,
+                    boundary,
                 },
             ),
+            Commands::Taint {
+                sink,
+                source,
+                depth,
+            } => vuln_deps::run_sink_taint(&ctx, sink, source, depth),
             Commands::Find {
                 pattern,
                 type_name,
@@ -1263,6 +1319,7 @@ impl Cli {
                 count_only,
                 annotation,
                 show_attributes,
+                package,
             } => structured_query::run_find(
                 &ctx,
                 pattern,
@@ -1276,6 +1333,8 @@ impl Cli {
                     exclude_scope,
                     lang,
                     limit,
+                    package,
+                    methods: None,
                 },
                 exact,
                 count_only,
@@ -1292,6 +1351,8 @@ impl Cli {
                 scope_mode,
                 exclude_scope,
                 limit,
+                package,
+                methods,
             } => structured_query::run_call_neighbors(
                 &ctx,
                 symbol,
@@ -1306,6 +1367,12 @@ impl Cli {
                     exclude_scope,
                     lang: None,
                     limit,
+                    package,
+                    methods: if methods.is_empty() {
+                        None
+                    } else {
+                        Some(methods)
+                    },
                 },
             ),
             Commands::Callees {
@@ -1332,6 +1399,8 @@ impl Cli {
                     exclude_scope,
                     lang: None,
                     limit,
+                    package: None,
+                    methods: None,
                 },
             ),
             Commands::Relations {
@@ -1365,6 +1434,8 @@ impl Cli {
                     exclude_scope,
                     lang: None,
                     limit,
+                    package: None,
+                    methods: None,
                 },
             ),
             Commands::Inventory {
@@ -1385,6 +1456,8 @@ impl Cli {
                     exclude_scope,
                     lang: None,
                     limit: None,
+                    package: None,
+                    methods: None,
                 },
             ),
             Commands::Status => session_status::run_status(&ctx),
@@ -1422,7 +1495,9 @@ impl Cli {
                         exclude_scope,
                         lang,
                         limit,
-                    },
+                    package: None,
+                    methods: None,
+                },
                     exact,
                     count_only,
                     annotation,
@@ -1452,7 +1527,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit,
-                    },
+                    package: None,
+                    methods: None,
+                },
                 ),
                 QueryCommands::Callees {
                     symbol,
@@ -1478,7 +1555,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit,
-                    },
+                    package: None,
+                    methods: None,
+                },
                 ),
                 QueryCommands::Relations {
                     symbol,
@@ -1511,7 +1590,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit,
-                    },
+                    package: None,
+                    methods: None,
+                },
                 ),
                 QueryCommands::Inventory {
                     by,
@@ -1531,7 +1612,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit: None,
-                    },
+                    package: None,
+                    methods: None,
+                },
                 ),
             },
             Commands::Inspect { symbol, layer } => {
@@ -1792,6 +1875,11 @@ impl Cli {
             ),
             Commands::Vuln { action } => match action {
                 VulnCommands::Triage { osv } => vuln_deps::run_vuln_triage(&ctx, osv),
+                VulnCommands::Analyze {
+                    osv,
+                    include_jars,
+                    include_node_modules,
+                } => vuln_deps::run_vuln_analyze(&ctx, osv, include_jars, include_node_modules),
             },
             Commands::Deps { action } => match action {
                 DepsCommands::Check {
@@ -1856,6 +1944,7 @@ fn command_label_for(command: &Commands) -> &'static str {
         },
         Commands::Slice { .. } => "slice",
         Commands::BlastRadius { .. } => "blast-radius",
+        Commands::Taint { .. } => "taint",
         Commands::Inspect { .. } => "inspect",
         Commands::Metrics { .. } => "metrics",
         Commands::Semantic { action } => match action {
@@ -1884,6 +1973,7 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::Install { .. } => "install",
         Commands::Vuln { action } => match action {
             VulnCommands::Triage { .. } => "vuln triage",
+            VulnCommands::Analyze { .. } => "vuln analyze",
         },
         Commands::Deps { action } => match action {
             DepsCommands::Check { .. } => "deps check",

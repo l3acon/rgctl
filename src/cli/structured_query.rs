@@ -20,6 +20,10 @@ pub struct SharedQueryArgs {
     pub exclude_scope: bool,
     pub lang: Option<String>,
     pub limit: Option<usize>,
+    /// Package coords (`--package`); resolved to import prefix / scope.
+    pub package: Option<String>,
+    /// Optional method name filters for callers (`--methods`).
+    pub methods: Option<Vec<String>>,
 }
 
 impl SharedQueryArgs {
@@ -139,6 +143,27 @@ pub fn run_find(
     annotation: Option<String>,
     show_attributes: bool,
 ) -> Result<()> {
+    let package_coords = shared.package.clone();
+    let mut pattern = pattern;
+    let mut shared = shared;
+    let mut package_resolution = None;
+    if let Some(ref coords) = package_coords {
+        let resolved = rgctl_security::resolve_package(coords)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        if pattern.is_none() {
+            // Prefer first import prefix as find pattern (glob-friendly).
+            if let Some(prefix) = resolved.import_prefixes.first() {
+                pattern = Some(format!("{prefix}*"));
+            }
+        }
+        if shared.scope.is_none() {
+            if let Some(prefix) = resolved.import_prefixes.first() {
+                shared.scope = Some(prefix.clone());
+            }
+        }
+        package_resolution = Some(resolved);
+    }
+
     let store = open_store(ctx)?;
     let node_type = type_name
         .as_deref()
@@ -168,7 +193,25 @@ pub fn run_find(
         .find(pattern.as_deref(), &filters)
         .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
-        return emit_json(ctx, &result);
+        let mut v = serde_json::to_value(&result)?;
+        if let Some(obj) = v.as_object_mut() {
+            if let Some(res) = package_resolution {
+                obj.insert("package".into(), serde_json::to_value(&res)?);
+                if result.total == 0 {
+                    // Attempt bundled presence via deps manifests/jars is CLI-orchestrated;
+                    // here we only flag that imports are empty so agents check deps.
+                    obj.insert(
+                        "bundled_presence".into(),
+                        serde_json::json!({
+                            "present": serde_json::Value::Null,
+                            "honesty": "Zero import hits for package — run `deps check --include-jars` \
+                                        before treating the library as absent"
+                        }),
+                    );
+                }
+            }
+        }
+        return ctx.emit_json_value(&v);
     }
     if count_only {
         ctx.stdout_line(&format!("{}", result.total))?;
@@ -186,27 +229,65 @@ pub fn run_call_neighbors(
     depth: usize,
     shared: SharedQueryArgs,
 ) -> Result<()> {
+    let methods = shared.methods.clone().unwrap_or_default();
+    let package_coords = shared.package.clone();
+    let mut shared = shared;
+    let mut package_resolution = None;
+    let mut symbols = vec![symbol];
+
+    if let Some(ref coords) = package_coords {
+        let resolved = rgctl_security::resolve_package(coords)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        if shared.scope.is_none() {
+            if let Some(prefix) = resolved.import_prefixes.first() {
+                shared.scope = Some(prefix.clone());
+            }
+        }
+        package_resolution = Some(resolved);
+    }
+
+    // When --methods is set, treat each method as an additional seed (or replace bare symbol).
+    if !methods.is_empty() {
+        symbols = methods.clone();
+    }
+
     let store = open_store(ctx)?;
     let mut filters = shared.into_filters(None)?;
     if filters.limit.is_none() {
         filters.limit = Some(50);
     }
     let q = StructuredQuery::new(store.as_ref());
-    let result = q
-        .call_neighbors(&symbol, incoming, depth, &filters)
-        .map_err(|e| map_sq_err(ctx, e))?;
-    if ctx.format == OutputFormat::Json {
-        // Shape as callers/callees field name for agents
-        let mut v = serde_json::to_value(&result)?;
-        if let Some(obj) = v.as_object_mut() {
-            let key = if incoming { "callers" } else { "callees" };
-            if let Some(n) = obj.remove("neighbors") {
-                obj.insert(key.into(), n);
+    let mut all_neighbors = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for sym in &symbols {
+        let result = q
+            .call_neighbors(sym, incoming, depth, &filters)
+            .map_err(|e| map_sq_err(ctx, e))?;
+        for n in result.neighbors {
+            if seen.insert(n.name.clone()) {
+                all_neighbors.push(n);
             }
         }
-        return ctx.emit_json_value(&v);
     }
-    emit_text_entities(ctx, result.neighbors.into_iter().map(|e| e.name))?;
+
+    if ctx.format == OutputFormat::Json {
+        let key = if incoming { "callers" } else { "callees" };
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "schema_version".into(),
+            serde_json::json!(STRUCTURED_QUERY_SCHEMA_VERSION),
+        );
+        obj.insert(key.into(), serde_json::to_value(&all_neighbors)?);
+        obj.insert("total".into(), serde_json::json!(all_neighbors.len()));
+        if let Some(res) = package_resolution {
+            obj.insert("package".into(), serde_json::to_value(&res)?);
+        }
+        if !methods.is_empty() {
+            obj.insert("methods_filter".into(), serde_json::to_value(&methods)?);
+        }
+        return ctx.emit_json_value(&serde_json::Value::Object(obj));
+    }
+    emit_text_entities(ctx, all_neighbors.into_iter().map(|e| e.name))?;
     Ok(())
 }
 

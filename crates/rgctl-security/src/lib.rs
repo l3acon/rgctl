@@ -14,7 +14,10 @@ pub mod cve_patterns;
 pub mod deps_check;
 pub mod error;
 pub mod osv;
+pub mod package_resolve;
+pub mod sink_taint;
 pub mod version;
+pub mod vuln_analyze;
 
 pub use adapters::{scan_jars, scan_manifests, scan_node_modules, BundledScanOpts, DepHit};
 pub use analyzer::{SecurityAnalyzer, SecurityVulnerability};
@@ -24,4 +27,13 @@ pub use error::SecurityError;
 pub use osv::{
     triage_from_vulnerability, triage_osv_bytes, triage_osv_path, OsvPackageTriage, OsvTriage,
 };
+pub use package_resolve::{resolve_package, PackageResolution, PackageResolveError};
+pub use sink_taint::{
+    build_sink_first_result, missing_cfg_error_message, rules_with_osv_overlays,
+    SinkFirstTaintResult, SinkPathSummary, SinkResolution,
+};
 pub use version::{engine_for_ecosystem, VersionEngine};
+pub use vuln_analyze::{
+    affected_methods_from_osv_json, vuln_analyze, BundledPresence, ExploitabilityVerdict,
+    VulnAnalyzeOpts, VulnAnalyzeResult, VULN_ANALYZE_SCHEMA_VERSION,
+};

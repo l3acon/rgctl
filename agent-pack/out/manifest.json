@@ -30,6 +30,10 @@
     {
       "id": "gate",
       "title": "CI and policy gates"
+    },
+    {
+      "id": "vuln",
+      "title": "OSV triage and deps check"
     }
   ],
   "agents": [
