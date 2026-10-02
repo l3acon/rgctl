@@ -94,7 +94,7 @@ const guides = [
   {
     title: "Agent pack",
     feature: "install --skill",
-    blurb: "CoolStore install walkthrough; NL → workflow skill → CLI.",
+    blurb: "Single skill install --skill; NL → CLI via references/workflows.md.",
     href: "/docs/guides/agent-skill/",
   },
 ];

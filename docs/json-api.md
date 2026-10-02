@@ -1132,7 +1132,7 @@ rgctl -r "$REPO" -f json cpg calls priceShoppingCart | jq '.edges[:10]'
 
 ## 18. `install`
 
-Install the embedded **agent pack** (workflow skills, optional commands, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **2**.
+Install the embedded **agent pack** (single skill `rgctl`, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **3**.
 
 Human-readable install reference: [Agent pack walkthrough](guides/agent-skill.md).
 

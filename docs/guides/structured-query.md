@@ -256,5 +256,5 @@ Full field catalog: [json-api.md](../json-api.md#5-structured-query-verbs).
 - [Discovering and indexing](discovering-and-indexing.md) — build `.rgctl/` first
 - [Blast radius analysis](blast-radius-analysis.md) — weighted upstream impact from a symbol
 - [Community detection](community-detection.md) — labels and `communities list`
-- [Agent pack](agent-skill.md) — install workflow skills that call these verbs
+- [Agent pack](agent-skill.md) — install the `rgctl` skill that calls these verbs
 - [JSON API](../json-api.md) — exhaustive stdout schemas

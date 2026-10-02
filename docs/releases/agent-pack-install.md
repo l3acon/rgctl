@@ -1,12 +1,12 @@
 # Agent pack install
 
-Multi-tool agent pack: workflow skills, optional structural policy, and a registry of ~40 agent adapters.
+Multi-tool agent pack: single skill `rgctl`, optional structural policy, and a registry of ~40 agent adapters.
 
 ## Summary
 
 | Area | Change |
 |------|--------|
-| **Install** | `rgctl install --skill` installs meta skill `rgctl` plus workflow skills `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`. |
+| **Install** | `rgctl install --skill` installs one skill named `rgctl` (workflow playbooks live under `references/workflows.md`). |
 | **Targeting** | `--tools cursor,claude` or `--tools all`. **`--host` is deprecated** (warning only; use `--tools`). |
 | **Scope** | `-g` / `--global` for user-level agent dirs. |
 | **Policy** | `--with-policy` installs Cursor structural rule snippet. |

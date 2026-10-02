@@ -182,7 +182,8 @@ export default function HomePage() {
               <code className="font-mono text-sm">
                 rgctl install --skill
               </code>
-              ) for a router skill and seven workflow skills —
+              ) for a single skill named{" "}
+              <code className="font-mono text-sm">rgctl</code> —
               or drop{" "}
               <Link
                 href="/agents/"

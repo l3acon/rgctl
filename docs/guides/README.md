@@ -20,7 +20,7 @@ Practical, step-by-step guides for every major rgctl feature. Each guide uses th
 | [CI Policy Checks](ci-policy-checks.md) | `check`, `pr-check` | PR temporal gates and local policy checks |
 | [HTTP Server and Dashboard](http-server-and-dashboard.md) | `serve` | Run an HTTP API and browser-based dashboard |
 | [Migration Planning](migration-planning.md) | `discover --export-migration-hints` | Generate a dependency-aware migration roadmap |
-| [Agent pack](agent-skill.md) | CoolStore install walkthrough | Use cases; NL → workflow skill → CLI |
+| [Agent pack](agent-skill.md) | CoolStore install walkthrough | Use cases; NL → `rgctl` skill → CLI |
 
 ## Prerequisites
 

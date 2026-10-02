@@ -236,9 +236,10 @@ rgctl install --list-agents
 
 This copies from the binary (no network):
 
-- **Meta skill** `rgctl` — `SKILL.md`, `references/` (workflows assembled from `skills/rgctl/workflows/` at rgctl build time)
-- **Workflow skills** — `rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, … (seven workflows)
+- **Skill `rgctl`** — `SKILL.md`, `references/` (workflows assembled from `skills/rgctl/workflows/` at rgctl build time)
 - **Optional policy** — `--with-policy` (Cursor structural rule snippet)
+
+Install no longer writes separate `rgctl-discover` / `rgctl-impact` / … skill directories.
 
 Default **`--tools`** (omit flag) is **`cursor`, `claude`, `codex`, `agents`, `antigravity`**. Use **`--tools all`** for the full registry (~40 paths). Unknown tool ids warn on stderr; **`--global`** requires `supports_global: true` per agent. **`--host`** is deprecated. Use **`-g`** for a global install under your home directory. If a managed file differs from the bundle, the command exits **1** unless you pass **`--force`**.
 

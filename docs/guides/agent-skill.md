@@ -2,17 +2,14 @@
 
 ## Introduction
 
-The rgctl **agent pack** teaches AI coding agents (Claude Code, Antigravity, Codex, Cursor, …) how to answer structural questions with the rgctl CLI. It is **not a single skill file** — install writes:
+The rgctl **agent pack** teaches AI coding agents (Claude Code, Antigravity, Codex, Cursor, …) how to answer structural questions with the rgctl CLI. Install writes **one skill** named `rgctl`:
 
 | Piece | What it is | Example (Cursor, repo-local) |
 |-------|------------|------------------------------|
-| **Meta skill** | Router + `references/` | `.cursor/skills/rgctl/SKILL.md` |
-| **Workflow skills** (7) | Focused playbooks | `.cursor/skills/rgctl-discover/SKILL.md`, … |
+| **Skill `rgctl`** | Single skill + `references/` (command encyclopedia, workflow scenarios) | `.cursor/skills/rgctl/SKILL.md` |
 | **Policy snippet** | Optional structural bias | `.cursor/rules/rgctl-structural.mdc` (`--with-policy`) |
 
-The pack is **embedded in the `rgctl` binary**. `rgctl install --skill` copies it into per-product paths. Agents load workflow skills and run `rgctl -f json` structured verbs — without the developer memorizing CLI syntax.
-
-Workflows: **discover**, **impact**, **flow**, **search**, **migrate**, **kantra**, **gate**. Agents run structured CLI verbs (`find` / `callers` / `relations` / `inventory` / `status` / `blast-radius` / …) — there are no slash-command or prompt stubs.
+The pack is **embedded in the `rgctl` binary**. `rgctl install --skill` installs **one** skill named `rgctl` per adapter — not separate `rgctl-discover` / `rgctl-impact` / … skills. Agents load that skill and run `rgctl -f json` structured verbs. Scenario playbooks live under `references/workflows.md` inside the skill.
 
 ## Use Cases
 
@@ -52,7 +49,7 @@ rgctl -r example/coolstore discover -l java --with-cfg
 
 ### 1. Install the pack
 
-Install meta skill and workflow skills into your repository:
+Install the `rgctl` skill into your repository:
 
 ```bash
 rgctl -r example/coolstore install --skill --tools cursor,claude,codex,antigravity,agents
@@ -60,12 +57,12 @@ rgctl -r example/coolstore install --skill --tools cursor,claude,codex,antigravi
 
 Text mode lists each created or updated path. Typical layout (Cursor example):
 
-- `.cursor/skills/rgctl/SKILL.md` — meta router + `references/`
-- `.cursor/skills/rgctl-discover/` … `rgctl-gate/` — **seven** workflow skills
+- `.cursor/skills/rgctl/SKILL.md` — the skill
+- `.cursor/skills/rgctl/references/` — command encyclopedia, workflows, communities & policy
 
 **What happened:**
 
-- rgctl unpacked the embedded **agent pack** (generated at build time from `skills/rgctl/` and `skills/rgctl/workflows/`).
+- rgctl unpacked the embedded **agent pack** (generated at build time from `skills/rgctl/`; workflow fragments under `workflows/` assemble into `references/workflows.md`).
 - **Claude** uses `.claude/skills/`.
 - **Codex / agents / zed** share `.agents/skills/` (install dedupes).
 - **Cursor** uses `.cursor/skills/`.
@@ -102,13 +99,6 @@ rgctl -r example/coolstore -f json install --skill --tools cursor \
       "kind": "meta",
       "path": "/path/to/example/coolstore/.cursor/skills/rgctl/SKILL.md",
       "status": "unchanged"
-    },
-    {
-      "agent": "cursor",
-      "workflow": "search",
-      "kind": "skill",
-      "path": "/path/to/example/coolstore/.cursor/skills/rgctl-search/SKILL.md",
-      "status": "created"
     }
   ]
 }
@@ -513,7 +503,7 @@ You must pass at least one of **`--skill`** or **`--with-policy`**.
 
 | Flag | Effect |
 |------|--------|
-| **`--skill`** | Meta skill **`rgctl`** (router + `references/`) and seven workflow skills: `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`. |
+| **`--skill`** | Install the single skill **`rgctl`** (with `references/`). |
 | **`--with-policy`** | Structural bias snippet (e.g. `.cursor/rules/rgctl-structural.mdc`). Optional; does not replace skills. |
 | **`--tools id1,id2`** or **`--tools all`** | Which **registry adapters** receive files. **Default (omit flag):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. **`all`** = full registry (~40 products). Unknown ids: stderr warning; if none valid, exit **1**. |
 | **`-g` / `--global`** | Install under your **home** (e.g. `~/.cursor/skills/…`) instead of repo-local paths. Only agents with `supports_global: true` (see `--list-agents`). |
@@ -548,25 +538,16 @@ Paths come from **`agent-pack/agents/registry.toml`**.
 
 | Kind | Example (Cursor, repo-local) |
 |------|------------------------------|
-| Meta skill | `.cursor/skills/rgctl/SKILL.md` + `references/` |
-| Workflow skill | `.cursor/skills/rgctl-discover/SKILL.md`, … |
+| Skill | `.cursor/skills/rgctl/SKILL.md` + `references/` |
 | Policy | `.cursor/rules/rgctl-structural.mdc` (with `--with-policy`) |
 
 **Shared dedup:** `codex`, `agents`, and `zed` share `.agents/skills/` — install writes each destination once. Run `rgctl install --list-agents` for the full adapter table.
 
-### Workflows → CLI
+### Scenarios inside the skill
 
-| Workflow | Skill | Primary CLI |
-|----------|-------|-------------|
-| Index | `rgctl-discover` | `discover` |
-| Impact | `rgctl-impact` | `blast-radius` |
-| Data flow | `rgctl-flow` | `slice`, `cpg flows`, … |
-| Search | `rgctl-search` | `find`, `semantic query`, … |
-| Migration roadmap | `rgctl-migrate` | discover + `migration_plan.json` |
-| Kantra rules | `rgctl-kantra` | `discover --with-kantra` |
-| CI gate | `rgctl-gate` | `check`, `pr-check` |
+Intent → CLI mappings live in the skill’s NL routing table and `references/workflows.md` (discover, impact, flow, search, migrate, kantra, gate). There are **no** separate `rgctl-*` skill directories — one skill covers all of them.
 
-**Migrate** (roadmap) and **Kantra** (Konveyor findings) are separate workflows — do not conflate them.
+**Migrate** (roadmap / `migration_plan.json`) and **Kantra** (Konveyor findings) remain separate *topics* in that reference — do not conflate them.
 
 ## How the pack is distributed
 
