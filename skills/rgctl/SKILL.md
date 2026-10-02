@@ -57,8 +57,8 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 ## What to Do When Invoked
 
 1. **Help-only** — If user only wants help/command list → print workflow table below and **stop** (no discover, no queries)
-2. **Fast path (existing index)** — If `.rgctl/` exists **and** request is a structural question (not rebuild) → **do not re-run discover**. Route via workflow table; use CLI `-f json`
-3. **No index** — Run `cd "$REPO" && rgctl discover .` or `rgctl -r "$REPO" discover` (do **not** use `-r REPO discover .` — the `.` ignores `-r`). Add flags only when needed
+2. **Fast path (existing index)** — If `.rgctl/` exists **and** request is a structural question (not rebuild) → **do not re-run discover**. Route via workflow table; use CLI `-f json`. **Exception — vuln / OSV / OpenVEX:** if reachability, sink-first taint, or `vuln analyze` is in scope and CFG was not built (`cpg status` / missing CFG archive), re-run `discover . --with-cfg` (add `--with-taint` for PDG-backed confidence) before P4–P6
+3. **No index** — Run `cd "$REPO" && rgctl discover .` or `rgctl -r "$REPO" discover` (do **not** use `-r REPO discover .` — the `.` ignores `-r`). Add flags only when needed; for vuln scans use `--with-cfg` (see vuln workflow)
 4. **Natural-language routing** — Map utterance with workflow table. Do not ask user to rephrase into CLI unless disambiguation required
 5. **Summarize** — Report key facts, not raw JSON dumps
 6. **Stop conditions** — Pure code-edit/debug with no structural need → do not force rgctl
@@ -137,8 +137,11 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | Blast radius | `blast-radius <Symbol> --depth N` |
 | Policy check (full codebase) | `check --policy-file policy.json` |
 | Policy check (one symbol) | `blast-radius <Symbol> --policy-file policy.json` |
+| OSV / CVE / OpenVEX | `discover . --with-cfg` then `vuln triage` → `deps check` → `vuln analyze` (see vuln workflow) |
 
-**See:** [Blast Radius Guide](../../docs/guides/blast-radius-analysis.md), [CI Policy Guide](../../docs/guides/ci-policy-checks.md)
+**Vuln scans:** index with `--with-cfg` before sink-first taint / blast classify / exploitability VEX; add `--with-taint` when PDG-backed confidence is required. Plain discover is enough only for triage + deps-only early exit.
+
+**See:** [Blast Radius Guide](../../docs/guides/blast-radius-analysis.md), [CI Policy Guide](../../docs/guides/ci-policy-checks.md), vuln workflow in [references/workflows.md](references/workflows.md)
 
 ### 4. Metrics & Analysis
 
@@ -178,6 +181,7 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 | "Bottlenecks / hotspots" | `metrics --pagerank` |
 | "Where is checkout flow?" | `semantic query "checkout flow" --limit 10` |
 | "Impact if I change X" | `blast-radius X --depth 2` |
+| "Are we affected by this CVE / OSV?" | `discover . --with-cfg` → `vuln triage` / `deps check` / `vuln analyze` (vuln workflow) |
 | "Validate against policy" | `check --policy-file policy.json` |
 | "Who calls X" | `callers X --depth 2` (impact → `blast-radius X`) |
 | "javax imports / annotations" | `find "import javax*" --type import`; `relations --edge annotatedwith --from-type function --to-type annotation` |
@@ -189,6 +193,7 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 |---------|-----|
 | No `.rgctl/` in repo | Run `cd repo && rgctl discover .` |
 | slice/inspect/cpg fails | Re-discover with `--with-cfg` |
+| vuln analyze / sink-first taint weak (`cfg_available=false`) | Re-discover with `--with-cfg` (add `--with-taint` for PDG confidence) |
 | semantic query fails | `semantic index` |
 | Ambiguous symbol | Add `--class` or `--file` on callers/find |
 | `check` exit 1 | Report violations (JSON still on stdout) |
