@@ -159,7 +159,7 @@ Run a quick smoke test on any repository:
 ```bash
 cd /path/to/any/repo
 rgctl discover .
-rgctl gql 'MATCH (n:Function) RETURN n LIMIT 5'
+rgctl find --type function --limit 5
 ```
 
 If both commands produce output without errors, the installation is working.
@@ -176,7 +176,7 @@ The default. Run `discover` once (writes `{repo}/.rgctl/`), then issue queries a
 
 ```bash
 rgctl discover .
-rgctl -f json gql 'MATCH (n:Function) RETURN n LIMIT 10'
+rgctl -f json find --type function --limit 10 | jq '.returned'
 rgctl -f json blast-radius MyFunction
 ```
 
@@ -197,14 +197,15 @@ rgctl serve --no-pipeline       # serve existing artifacts, skip auto-pipeline
 Query the API:
 
 ```bash
-curl -s http://127.0.0.1:8080/api/query \
+curl -s http://127.0.0.1:8080/api/status | jq .
+curl -s -X POST http://127.0.0.1:8080/api/semantic/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "MATCH (f:Function) RETURN f LIMIT 5"}'
+  -d '{"query":"main entry","limit":5}'
 ```
 
 **Best for:** repeated queries in one session, team exploration, agent integration over HTTP, visual dashboard browsing.
 
-See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) and [HTTP API reference](http-api.md).
+See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) and [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md).
 
 ### Mode comparison
 
@@ -243,7 +244,7 @@ Default **`--tools`** (omit flag) is **`cursor`, `claude`, `codex`, `agents`, `a
 
 Install does **not** run `discover` — index the repo separately (`rgctl discover .`).
 
-**Full reference:** [Agent commands guide](guides/agent-commands.md) · [Agent pack walkthrough](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
+**Full reference:** [Agent pack walkthrough](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
 
 ---
 
@@ -379,9 +380,9 @@ Start with the default mode (no extra flags). Add `--with-cfg`, `--with-taint`, 
 |------|-------------|
 | Full CLI walkthrough | [User Guide](user-guide.md) |
 | Concepts and architecture | [Introduction](Introduction.md) |
-| Use rgctl with agents | [Agent commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
+| Use rgctl with agents | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) |
 | Step-by-step feature guides | [Guides](guides/README.md) |
 | JSON output reference | [JSON API](json-api.md) |
-| HTTP API details | [HTTP API](http-api.md) |
+| HTTP API details | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | Supported languages | [Languages](languages/README.md) |

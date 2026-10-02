@@ -238,4 +238,4 @@ rgctl -r "$REPO" -f json <command> …
 rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …) and meta-skill `rgctl` for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-commands.md](../../docs/guides/agent-commands.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.
+Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …) and meta-skill `rgctl` for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-skill.md](../../docs/guides/agent-skill.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.

@@ -41,7 +41,7 @@ Legend: **Implemented** = algorithm or structure in the codebase with tests; **I
 | Idea | Status | rgctl | CLI |
 |------|--------|----------|-----|
 | Sparse pre-computed call reachability | **Implemented** (rgctl engineering) | Blast engine + compressed snapshots — see [graph-storage-architecture.md](graph-storage-architecture.md) | `rgctl blast-radius`, `rgctl check` |
-| Rich relation matrix (30+ edge types) | **Implemented** | [`schema.rs`](../crates/rgctl-graph/src/schema.rs), extraction pipeline | `rgctl gql`, `rgctl export` |
+| Rich relation matrix (30+ edge types) | **Implemented** | [`schema.rs`](../crates/rgctl-graph/src/schema.rs), extraction pipeline | `rgctl relations`, `rgctl export` |
 
 This is the core differentiator for **LLM agents**: deterministic reachability answers in compact JSON instead of dumping whole files into context.
 
@@ -49,7 +49,7 @@ This is the core differentiator for **LLM agents**: deterministic reachability a
 
 | Work | Status | Overlap with rgctl | Gap / opportunity |
 |------|--------|----------------------|-------------------|
-| [CodexGraph (NAACL 2025)](#2-codexgraph-bridging-large-language-models-and-code-repositories-via-code-graph-databases-naacl-2025) | **Inspired** | GQL, rich node metadata, `-f json`, [JSON API](json-api.md), export | Dual-agent “write then translate” query planner not implemented — good contribution target |
+| [CodexGraph (NAACL 2025)](#2-codexgraph-bridging-large-language-models-and-code-repositories-via-code-graph-databases-naacl-2025) | **Inspired** | Structured query verbs, rich node metadata, `-f json`, [JSON API](json-api.md), export | Dual-agent “write then translate” query planner not implemented — good contribution target |
 | [Codebadger — CPG + LLM (ICSE 2026)](https://arxiv.org/abs/2603.24837) | **Inspired** | CFG + PDG + slice + taint stack (CPG-shaped) | No Joern import; interprocedural taint depth varies — see [TASK_PLAN](../.github/TASK_PLAN.md) Phase 12/13 |
 | [TAILOR / hybrid AST+CFG+DFG](#7-learning-graph-based-code-representations-for-source-code-tailor) | **Reading** | Tree-sitter AST + CFG/PDG layer | Learned embeddings not in scope today |
 | [Reliable Graph-RAG for Codebases (2026)](#5-reliable-graph-rag-for-codebases-ast-derived-graphs-vs-llm-extracted-knowledge-graphs-arxiv-2026) | **Aligned** | AST-derived graph via Tree-sitter, not LLM-extracted KG | Benchmark comparisons welcome |
@@ -67,7 +67,7 @@ This is the core differentiator for **LLM agents**: deterministic reachability a
 Read a paper above and want to land it in rgctl? High-value openings:
 
 1. **Interprocedural taint** with sanitizer summaries across call boundaries (Codebadger / CPG literature).
-2. **Query planning for agents** — natural language → GQL / blast-radius without token-heavy file reads (CodexGraph direction).
+2. **Query planning for agents** — natural language → structured CLI verbs / blast-radius without token-heavy file reads (CodexGraph direction).
 3. **Migration-specific relations** — framework API pairs, deprecated symbol tracking (ReCode / environment-in-the-loop papers).
 4. **Benchmarks** — publish repro scripts comparing rgctl JSON output vs file-grep baselines on coolstore or your repo.
 5. **Cross-language reachability** — richer IMPORTS / IMPLEMENTS for polyglot monorepos.
@@ -96,7 +96,7 @@ Research papers on code graphs, migration, LLM agents, and program analysis — 
    - Integrates LLM agents with graph database interfaces for code structure-aware context retrieval
    - Evaluated on CrossCodeEval, SWE-bench, and EvoCodeBench benchmarks
    - Uses structural properties of graph databases for precise retrieval
-   - **rgctl:** [Inspired — see table above](#modern-code-graphs--llm-agents) (GQL + JSON; dual-agent planner is a gap)
+   - **rgctl:** [Inspired — see table above](#modern-code-graphs--llm-agents) (structured query JSON; dual-agent planner is a gap)
 
 2b. **Codebadger: Bridging Code Property Graphs and Language Models** (ICSE 2026)
    - [arXiv](https://arxiv.org/abs/2603.24837)

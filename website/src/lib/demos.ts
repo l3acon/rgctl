@@ -63,34 +63,35 @@ export const demos: DemoScenario[] = [
     flow: "Modernization audit",
     title: "Function inventory",
     prompt: "Give me an inventory of functions so we can spot shrink candidates.",
-    commands: ["-f json gql --macro-name all_functions unused"],
-    note: "all_functions lists every function. The word unused is only a required QUERY placeholder — not a dead-code filter.",
+    commands: ["-f json find --type function --count-only", "-f json find --type function --limit 50"],
+    note: "Prefer count-only for size; then page entities with --limit.",
     output: `{
-  "schema_version": 1,
-  "count": 292,
-  "rows": [
-    [{"binding": "f", "node": "formatLegacyCsvExport", "type": "Function"}]
+  "schema_version": 2,
+  "total": 292,
+  "returned": 50,
+  "entities": [
+    {"name": "formatLegacyCsvExport", "type": "function"}
   ]
 }`,
     reasoning:
-      "Use the inventory, then verify callers with blast-radius / CALL queries before deleting anything.",
+      "Use the inventory, then verify callers with callers / blast-radius before deleting anything.",
   },
   {
     id: "communities",
     flow: "Modernization audit",
     title: "Named communities",
     prompt: "What architectural communities does the graph see?",
-    commands: ["-f json gql --macro-name all_communities unused"],
-    note: "Lists label-propagation communities — not orphaned modules. Prefer communities list for labels + modularity.",
+    commands: ["-f json communities list"],
+    note: "Lists label-propagation communities — not orphaned modules.",
     output: `{
   "schema_version": 1,
-  "count": 40,
-  "rows": [
-    [{"binding": "c", "type": "Community", "community_id": 19, "label": "legacy_v1_reports", "member_count": 14}]
+  "modularity": 0.45,
+  "communities": [
+    {"id": 19, "label": "legacy_v1_reports", "member_count": 14}
   ]
 }`,
     reasoning:
-      "Inspect members and call edges into/out of a community before proposing a prune.",
+      "Inspect members via semantic --scope community and call edges before proposing a prune.",
   },
   {
     id: "semantic",
@@ -112,7 +113,7 @@ export const demos: DemoScenario[] = [
   ]
 }`,
     reasoning:
-      "Semantic hits point at entrypoints. Follow with blast-radius / GQL before editing.",
+      "Semantic hits point at entrypoints. Follow with blast-radius / callers before editing.",
   },
   {
     id: "community-search",

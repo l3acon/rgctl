@@ -37,12 +37,8 @@ export default async function LanguageSupportPage({ params }: Props) {
   const githubManifest = `${GITHUB_REPO}/blob/main/${manifestPath}`;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <p className="mb-6 text-sm text-[var(--mute)]">
-        <Link href="/docs/" className="underline">
-          Docs
-        </Link>
-        {" / "}
         <Link href="/docs/languages/" className="underline">
           Languages
         </Link>

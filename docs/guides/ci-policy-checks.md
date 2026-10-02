@@ -160,12 +160,12 @@ Policy field `scope.strict_diff: true` also enables strict mode for `check`.
 ### Example: CoolStore
 
 ```bash
-rgctl -r example/coolstore discover .
+rgctl -r example/coolstore discover . -l java
 rgctl -r example/coolstore -f json check \
   --policy-file example/coolstore/policy.json
 ```
 
-A strict `max_impact_nodes` policy will report many `scale failure` violations on lodash helpers — expected on a large dependency graph. That illustrates why PR workflows use **`new_violations_only`** instead of failing on all existing debt.
+On CoolStore Java-only, `example/coolstore/policy.json` (`max_impact_nodes: 15`) fails `check` on symbols such as `toProduct` when the impact zone is 19. That illustrates why PR workflows use **`new_violations_only`** instead of failing on all existing debt.
 
 ---
 

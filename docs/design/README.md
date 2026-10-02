@@ -15,8 +15,8 @@ Engineering designs for rgctl capabilities. Each doc follows the [migration plan
 | CFG | [cfg-design.md](cfg-design.md) | CFG / PDG Analysis |
 | PDG | [pdg-design.md](pdg-design.md) | Dataflow |
 | Dominance | [dominance-design.md](dominance-design.md) | Dataflow → Dominator Tree |
-| GQL | [gql-design.md](gql-design.md) | Graph Visualization (+ Query Guide) |
-| Community query & naming | [community-query-and-naming-plan.md](community-query-and-naming-plan.md) | Graph Visualization (legend) + GQL |
+| Structured query (agent CLI) | [../guides/structured-query.md](../guides/structured-query.md) | CLI + agent skills |
+| Community query & naming | [community-query-and-naming-plan.md](community-query-and-naming-plan.md) | Graph Visualization (legend) + `communities list` |
 | Hybrid CPG (two-resolution) | [hybrid-cpg-plan.md](hybrid-cpg-plan.md) | CLI/HTTP agent-first (`cpg`); dashboard optional later |
 | Graph metrics | [graph-metrics-design.md](graph-metrics-design.md) | Functions |
 | Migration planner | [migration-planner-design.md](migration-planner-design.md) | Migration |

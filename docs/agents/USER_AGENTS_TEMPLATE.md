@@ -8,7 +8,7 @@
 > rgctl -r "$REPO" install --skill --tools cursor,claude,codex,antigravity,agents
 > ```
 >
-> See [Agent commands](../guides/agent-commands.md). This template is a fallback / complementary channel — skills remain the canonical runtime guidance.
+> See [Agent pack](../guides/agent-skill.md). This template is a fallback / complementary channel — skills remain the canonical runtime guidance.
 >
 > **Not for contributing to rgctl itself.** Contributors: see the repository root [AGENTS.md](../../AGENTS.md).
 
@@ -17,7 +17,7 @@
 rgctl is designed so agents answer **structural questions** from a pre-built graph instead of reading whole files into context.
 
 **Installation:** [installation.md](../installation.md)  
-**Agent pack install:** [agent-commands.md](../guides/agent-commands.md)  
+**Agent pack install:** [agent-skill.md](../guides/agent-skill.md)  
 **Full JSON reference:** [json-api.md](../json-api.md) · [site](https://sshaaf.github.io/rgctl/docs/json-api/)  
 **Copy-paste recipes:** [agent-recipes.md](../agent-recipes.md)  
 **Human walkthrough:** [user-guide.md](../user-guide.md)  
@@ -102,10 +102,10 @@ rgctl -r "$REPO" -f json blast-radius ShoppingCartService
 
 ```bash
 rgctl -r "$REPO" serve --open
-# POST http://127.0.0.1:8080/api/query  {"query":"MATCH (n:Function) RETURN n LIMIT 5"}
+# rgctl -f json find --type function --limit 5
 ```
 
-See [http-api.md](../http-api.md).
+See [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md).
 
 ---
 

@@ -53,7 +53,7 @@ export default function DemoPage() {
           kind="cli"
           preferGif
           className="mx-auto max-w-4xl"
-          caption="CLI (VHS) — discover, GQL, Kantra, blast → CPG → semantic."
+          caption="CLI (VHS) — discover, find, Kantra, blast → CPG → semantic."
         />
         <DemoMedia
           kind="dashboard"

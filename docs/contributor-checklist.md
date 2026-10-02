@@ -67,7 +67,7 @@ Copy-paste **PR checklist** block: [tier-1 §7](tier-1-language-support.md#7-pr-
 | E5 Dashboard bundle | E | `cargo test --release --test dashboard_ecommerce_{lang}` + shared [dashboard_harness.rs](../tests/dashboard_harness.rs) |
 | E6 Workspace clean | E | [§5 standard test workflow](#5-standard-test-workflow) |
 | F6 Field-write golden | F | `crates/rgctl-analysis/src/field_write.rs` — `{id}_cfg_captures_field_write_and_query` |
-| Langfeature GQL probes | E/F | `cargo test --test java_langfeatures` · `cargo test --test go_langfeatures` · `cargo test --test ruby_langfeatures` (see [go-language-coverage.md](design/go-language-coverage.md), [ruby-extract-honesty.md](ruby-extract-honesty.md)) |
+| Langfeature structured-query probes | E/F | `cargo test --test java_langfeatures` · `cargo test --test go_langfeatures` · `cargo test --test ruby_langfeatures` (see [go-language-coverage.md](design/go-language-coverage.md), [ruby-extract-honesty.md](ruby-extract-honesty.md)) |
 
 **Dashboard gates by language** (release mode; external fixture repos — set `RGCTL_*_REPO` if needed):
 
@@ -106,9 +106,9 @@ Deep guide: [markdown-context.md](markdown-context.md). Fixture: `tests/fixtures
 
 | Gate | Command |
 |------|---------|
-| CLI discover + GQL | `cargo test --test markdown_context_cli` |
+| CLI discover + markdown queries | `cargo test --test markdown_context_cli` |
 | In-memory spec matrix | `cargo test -p rgctl-extraction markdown_spec_coverage` |
-| Extraction unit tests | `cargo test -p rgctl-lang-markdown` · `cargo test -p rgctl-extraction markdown_context_gql` |
+| Extraction unit tests | `cargo test -p rgctl-lang-markdown` · `cargo test -p rgctl-extraction` |
 
 Optional cold profile (large corpus): [markdown-context.md § Cold profile](markdown-context.md#cold-profile-kuberneteswebsite).
 
@@ -123,7 +123,6 @@ Map **what you touched** → **tests to run**. Design detail lives in [design/RE
 | CLI JSON serializers | `cargo test --test cli_output` | [cli-io-sanity-qe.md](cli-io-sanity-qe.md) Layer 1 |
 | CLI subprocess / flags | `cargo test --release --test subprocess_golden_path` · `--test all_commands_sanity` | Layers 2–3 |
 | Blast radius / policy | `cargo test --test blast_radius` · `--release --test blast_radius_perf` | [blast-radius-design.md](design/blast-radius-design.md) |
-| GQL | `cargo test --test gql_integration` · `--test gql_optimizer` | [gql-design.md](design/gql-design.md) |
 | Semantic search | `cargo test --test semantic_search_qe` · `semantic_audit` · `semantic_boundary` | [semantic-search-design.md](design/semantic-search-design.md) |
 | Graph / metrics / communities | `cargo test --test graph_correctness` · `map_collision_qe` · `cross_feature_qe` · `community_audit` | QE suite |
 | CFG / PDG / slice | `cargo test --test slicing` · `with_cfg_cli` · `dominance` | [cfg-design.md](design/cfg-design.md) · [pdg-design.md](design/pdg-design.md) |
@@ -131,7 +130,7 @@ Map **what you touched** → **tests to run**. Design detail lives in [design/RE
 | Hybrid CPG (`cpg` CLI) | `field_write` unit tests · `with_cfg_cli` | [hybrid-cpg-plan.md](design/hybrid-cpg-plan.md) |
 | Migration planner | `cargo test --test migration_plan_cli` · `with_dashboard_cli` | [migration-planner-design.md](design/migration-planner-design.md) |
 | CI policy `check` | subprocess golden paths · `graph_projections` | [ci-policy-checks-design.md](design/ci-policy-checks-design.md) |
-| HTTP `serve` | `cargo test --test http_serve` | [http-api.md](http-api.md) |
+| HTTP `serve` | `cargo test --test http_serve` | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | Dashboard export / UI | `cargo test dashboard_harness` · `./scripts/test-dashboard-golden.sh` | [dashboard-design.md](dashboard-design.md) |
 | User-guide workflow | `cargo test --test user_guide_scenarios` (needs release `rgctl`, `jq`) | [user-guide.md](user-guide.md) |
 | Core integration | `cargo test --test integration_core_features` · `bundles` | Edge extraction + persistence |
@@ -189,7 +188,7 @@ CLI I/O layer reference: [cli-io-sanity-qe.md](cli-io-sanity-qe.md). Workflow mi
 |-------------|--------|
 | User CLI | [user-guide.md](user-guide.md) · validate with `cargo test --test user_guide_scenarios` |
 | Contribute (agent README) | [AGENTS.md](../AGENTS.md) |
-| Use rgctl / JSON | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [json-api.md](json-api.md) · [agent-recipes.md](agent-recipes.md) · [agent-commands](guides/agent-commands.md) |
+| Use rgctl / JSON | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [json-api.md](json-api.md) · [agent-recipes.md](agent-recipes.md) · [agent-skill](guides/agent-skill.md) |
 | Languages (coverage JSON → website) | [languages/README.md](languages/README.md) |
 | Dashboard UX | [dashboard-user-guide.md](dashboard-user-guide.md) |
 | New capability | Matching doc in [design/](design/README.md) |

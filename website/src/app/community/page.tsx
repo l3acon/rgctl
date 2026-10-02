@@ -36,7 +36,7 @@ const actions = [
 
 export default function CommunityPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <Badge className="mb-4">Open source</Badge>
       <h1 className="text-3xl tracking-tight text-[var(--ink)] sm:text-4xl">
         Grow rgctl with us

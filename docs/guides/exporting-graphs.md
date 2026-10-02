@@ -19,8 +19,10 @@ Whether you want to load your code graph into Neo4j, visualize it in Gephi, embe
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` first:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover
+rgctl -r example/coolstore discover -l java
 ```
 
 ## Step-by-Step
@@ -40,8 +42,8 @@ rgctl -r example/coolstore export \
 
 ```
 [>] rgctl export
-Exported 7526 nodes, 21396 edges -> /tmp/coolstore.graphml
-[✓] rgctl export finished in 68ms
+Exported 152 nodes, 177 edges -> /tmp/coolstore.graphml
+[✓] rgctl export finished in 12ms
 ```
 
 **What happened:**
@@ -65,7 +67,7 @@ rgctl -r example/coolstore export \
 
 ```
 [>] rgctl export
-Exported 14763 nodes, 50082 edges -> /tmp/coolstore.json
+Exported 152 nodes, 177 edges -> /tmp/coolstore.json
 [✓] rgctl export finished in 70ms
 ```
 
@@ -162,7 +164,7 @@ The `--query` parameter accepts the following filter expressions:
 | `type:TYPE` | Nodes of a specific type | `--query "type:Class"` |
 | `name:NAME` | Nodes matching a name | `--query "name:ShoppingCartService"` |
 
-Note: these are filter expressions, not full GQL `MATCH` queries.
+Note: these are filter expressions, not `find` / `relations` patterns.
 
 ## Export Formats Comparison
 
@@ -186,6 +188,6 @@ Note: these are filter expressions, not full GQL `MATCH` queries.
 ## Related Guides
 
 - [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- must run `discover` before exporting
-- [Graph Query Language](graph-query-language.md) -- use GQL for more complex queries before exporting
+- [Structured graph queries](structured-query.md) -- explore the graph before exporting subsets
 - [HTTP Server and Dashboard](http-server-and-dashboard.md) -- interactive exploration as an alternative to static export
 - [Hybrid CPG](hybrid-cpg.md) -- `cpg export` for CPG-specific GraphSON/GraphML export

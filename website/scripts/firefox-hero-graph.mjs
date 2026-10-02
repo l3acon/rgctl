@@ -7,7 +7,7 @@ import { firefox } from "playwright";
 const BASE = process.env.SITE_URL || "http://localhost:3000";
 const TABS = [
   "blast-radius",
-  "gql",
+  "find",
   "semantic",
   "cpg",
   "metrics",

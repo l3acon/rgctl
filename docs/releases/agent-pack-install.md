@@ -23,6 +23,5 @@ rgctl install --skill --tools cursor,claude --force
 
 ## Related
 
-- [Agent commands guide](../guides/agent-commands.md) — full install flag reference
-- [Agent skill walkthrough](../guides/agent-skill.md)
+- [Agent pack walkthrough](../guides/agent-skill.md)
 - GitHub [#84](https://github.com/sshaaf/rgctl/issues/84) · OpenSpec change `agent-pack-install`.

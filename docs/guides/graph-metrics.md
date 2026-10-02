@@ -18,8 +18,10 @@ Metrics give you a quantitative view of your codebase's architecture -- which fu
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` first:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover
+rgctl -r example/coolstore discover -l java
 ```
 
 ## Step-by-Step
@@ -37,21 +39,29 @@ rgctl -r example/coolstore -f json metrics --pagerank
 ```json
 {
   "pagerank": {
-    "converged": false,
-    "iterations": 20,
-    "max_delta": 0.00028581400200106133,
+    "converged": true,
+    "iterations": 9,
+    "max_delta": 6.728148834490855e-07,
     "top": [
       {
-        "node": "b979f32a-ace5-4f25-b32f-4b5b66d73358",
-        "pagerank": 0.0566426911008737
+        "node": "decbba50-f8fa-50b9-905c-e75d2a69cab5",
+        "pagerank": 0.029448900943039962
       },
       {
-        "node": "dba829f7-ca5e-42b8-b25d-4c5b75583ef6",
-        "pagerank": 0.021913956508072173
+        "node": "1f33cd28-e5f9-5c78-a39d-86d878b734fb",
+        "pagerank": 0.007301250441888811
       },
       {
-        "node": "220c19be-4c4f-4ecf-b1fe-71c8f536d59b",
-        "pagerank": 0.005028400583110091
+        "node": "8b0e2652-bbb9-575e-bf21-e35a79d53d13",
+        "pagerank": 0.006971584463128407
+      },
+      {
+        "node": "d942df07-720c-5947-9d4d-02fc9636a855",
+        "pagerank": 0.006581553480124427
+      },
+      {
+        "node": "7cdc70e2-72a4-59b7-bdd1-95b16f6ec016",
+        "pagerank": 0.006539350370383329
       }
     ]
   },
@@ -61,9 +71,9 @@ rgctl -r example/coolstore -f json metrics --pagerank
 
 **What this tells you:**
 
-- **`converged: false`** -- the algorithm ran for 20 iterations but did not fully converge (the `max_delta` is still above zero). For most practical purposes, the ranking is stable after 20 iterations.
-- **`top`** -- the highest-ranked functions by PageRank score. The top function (`0.0567`) has nearly 3x the score of the second (`0.0219`), indicating it is a dominant structural hub.
-- **`node`** -- the UUID of each function. Use GQL to resolve these to human-readable names.
+- **`converged: true`** -- PageRank converged in 9 iterations on this Java-only graph.
+- **`top`** -- the highest-ranked functions by PageRank score. Top entries are node UUIDs (resolve with `find` / callers); ranks are stable after convergence.
+- **`node`** -- the UUID of each function. Resolve with `rgctl find` by id or follow-up `blast-radius` JSON.
 
 To increase iterations for better convergence:
 
@@ -145,8 +155,7 @@ This returns all three analyses in a single JSON response.
 The metrics output uses node UUIDs. To find out which function a UUID refers to, query the graph:
 
 ```bash
-rgctl -r example/coolstore -f json gql \
-  "MATCH (f:Function) WHERE f.name = 'priceShoppingCart' RETURN f"
+rgctl -r example/coolstore -f json find priceShoppingCart --type function --exact
 ```
 
 Or use `blast-radius` which resolves names automatically:
