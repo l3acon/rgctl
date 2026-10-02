@@ -44,6 +44,7 @@ impl SharedQueryArgs {
             exact: false,
             annotation_names: None,
             show_attributes: false,
+            annotation_arg_index: None,
         })
     }
 }
@@ -51,6 +52,30 @@ impl SharedQueryArgs {
 fn open_store(ctx: &CliContext) -> Result<std::sync::Arc<rgctl_graph::SnapshotNodeStore>> {
     ctx.open_snapshot_store()?
         .context("Graph snapshot not found (run `rgctl discover` first)")
+}
+
+/// Load `.rgctl/annotation_args.json` into a lookup keyed by `source_id\0annotation`.
+fn load_annotation_arg_index(repo: &std::path::Path) -> Option<std::collections::HashMap<String, String>> {
+    let path = rgctl_graph::paths::artifact_path(repo, "annotation_args.json");
+    let bytes = std::fs::read(&path).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let entries = v.get("entries")?.as_array()?;
+    let mut map = std::collections::HashMap::new();
+    for e in entries {
+        let source_id = e.get("source_id")?.as_str()?;
+        let annotation = e.get("annotation")?.as_str()?;
+        let arguments = e.get("arguments")?.as_str()?;
+        let simple = rgctl_graph::parse_annotation_list(annotation)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| annotation.to_string());
+        map.insert(format!("{source_id}\0{simple}"), arguments.to_string());
+    }
+    if map.is_empty() {
+        None
+    } else {
+        Some(map)
+    }
 }
 
 fn emit_json<T: serde::Serialize>(ctx: &CliContext, value: &T) -> Result<()> {
@@ -130,6 +155,9 @@ pub fn run_find(
             anyhow::bail!("--annotation requires at least one name (e.g. @MessageDriven)");
         }
         filters.annotation_names = Some(list);
+    }
+    if show_attributes {
+        filters.annotation_arg_index = load_annotation_arg_index(&ctx.repo);
     }
     // Default limit for find when not counting
     if filters.limit.is_none() && !count_only {

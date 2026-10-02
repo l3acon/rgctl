@@ -143,6 +143,9 @@ pub struct EntityRow {
     pub line: Option<usize>,
     /// Node UUID (string)
     pub id: String,
+    /// Annotation argument text when `--show-attributes` and args are indexed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<String>,
 }
 
 /// Keyed edge row (direction-stable; never positional).
@@ -267,6 +270,8 @@ pub struct QueryFilters {
     pub annotation_names: Option<Vec<String>>,
     /// Request annotation argument payloads when indexed (`--show-attributes`).
     pub show_attributes: bool,
+    /// Optional map `source_id\0annotation_simple` → arguments (from sidecar).
+    pub annotation_arg_index: Option<HashMap<String, String>>,
 }
 
 /// Session over an open snapshot store.
@@ -293,7 +298,36 @@ impl<'a> StructuredQuery<'a> {
             file: node.file_path.as_ref().map(|s| s.to_string()),
             line: node.start_line,
             id: node.id.to_string(),
+            attributes: None,
         }
+    }
+
+    fn project_with_annotation_attrs(
+        node: &Node,
+        annots: &[String],
+        arg_index: Option<&HashMap<String, String>>,
+    ) -> EntityRow {
+        let mut row = Self::project(node);
+        if let Some(idx) = arg_index {
+            let mut parts = Vec::new();
+            for a in annots {
+                let key = format!("{}\0{a}", node.id);
+                if let Some(args) = idx.get(&key) {
+                    parts.push(format!("@{a}{args}"));
+                } else {
+                    // Also try bare annotation key variants
+                    let simple = normalize_annotation_name(a);
+                    let key2 = format!("{}\0{simple}", node.id);
+                    if let Some(args) = idx.get(&key2) {
+                        parts.push(format!("@{simple}{args}"));
+                    }
+                }
+            }
+            if !parts.is_empty() {
+                row.attributes = Some(parts.join("; "));
+            }
+        }
+        row
     }
 
     fn matches_scope(node: &Node, scope: Option<&str>, mode: ScopeMode) -> bool {
@@ -491,21 +525,27 @@ impl<'a> StructuredQuery<'a> {
     /// Entity search (`rgctl find`).
     pub fn find(&self, pattern: Option<&str>, filters: &QueryFilters) -> Result<FindResult> {
         if filters.show_attributes {
-            // Argument indexing is Phase C; refuse inventing empty lookup= fields.
-            if filters
+            let has_annots = filters
                 .annotation_names
                 .as_ref()
                 .map(|v| !v.is_empty())
-                .unwrap_or(false)
+                .unwrap_or(false);
+            if !has_annots {
+                return Err(Error::InvalidQuery(
+                    "--show-attributes requires --annotation".into(),
+                ));
+            }
+            if filters
+                .annotation_arg_index
+                .as_ref()
+                .map(|m| m.is_empty())
+                .unwrap_or(true)
             {
                 return Err(Error::InvalidQuery(
-                    "annotation attributes are not indexed yet; omit --show-attributes or re-discover after arg indexing lands"
+                    "annotation attributes are not indexed yet; omit --show-attributes or re-discover after a Java index that writes .rgctl/annotation_args.json"
                         .into(),
                 ));
             }
-            return Err(Error::InvalidQuery(
-                "--show-attributes requires --annotation and indexed annotation arguments".into(),
-            ));
         }
 
         if let Some(annots) = filters.annotation_names.as_ref() {
@@ -600,7 +640,43 @@ impl<'a> StructuredQuery<'a> {
             Ok(())
         })?;
 
-        Self::finish_find(candidates, filters)
+        Self::finish_find_annotated(candidates, filters, &normalized)
+    }
+
+    fn finish_find_annotated(
+        candidates: Vec<Node>,
+        filters: &QueryFilters,
+        annots: &[String],
+    ) -> Result<FindResult> {
+        let total = candidates.len();
+        let limit = filters.limit.unwrap_or(total);
+        let arg_index = filters.annotation_arg_index.as_ref();
+        let entities: Vec<EntityRow> = if filters.count_only {
+            Vec::new()
+        } else {
+            candidates
+                .into_iter()
+                .take(limit)
+                .map(|n| {
+                    if filters.show_attributes {
+                        Self::project_with_annotation_attrs(&n, annots, arg_index)
+                    } else {
+                        Self::project(&n)
+                    }
+                })
+                .collect()
+        };
+        let returned = if filters.count_only {
+            total.min(limit)
+        } else {
+            entities.len()
+        };
+        Ok(FindResult {
+            schema_version: STRUCTURED_QUERY_SCHEMA_VERSION,
+            returned,
+            total,
+            entities,
+        })
     }
 
     fn finish_find(candidates: Vec<Node>, filters: &QueryFilters) -> Result<FindResult> {
@@ -1668,6 +1744,49 @@ mod tests {
             .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("not indexed") || msg.contains("attributes"));
+    }
+
+    #[test]
+    fn show_attributes_attaches_from_index() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        // Resolve OrderMDB id from a plain find first.
+        let base = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(vec!["MessageDriven".into()]),
+                    node_type: Some(NodeType::Class),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(base.total, 1);
+        let id = base.entities[0].id.clone();
+        let mut idx = HashMap::new();
+        idx.insert(
+            format!("{id}\0MessageDriven"),
+            "(mappedName=\"jms/orders\")".into(),
+        );
+        let res = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(vec!["MessageDriven".into()]),
+                    node_type: Some(NodeType::Class),
+                    show_attributes: true,
+                    annotation_arg_index: Some(idx),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            res.entities[0]
+                .attributes
+                .as_deref()
+                .unwrap_or("")
+                .contains("jms/orders")
+        );
     }
 
     #[test]

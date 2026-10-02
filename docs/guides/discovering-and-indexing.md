@@ -29,7 +29,7 @@ This guide uses the **CoolStore** — a Java EE e-commerce application. It lives
 
 **Pitfall:** `rgctl -r example/coolstore discover` does **not** index `example/coolstore`. The positional `.` becomes the session root (usually your **shell cwd**), so `-r` is ignored. That can scan the wrong tree and fail on large parent directories.
 
-**Artifacts:** `discover` writes snapshots under **`{repo}/.rgctl/`**. Add `.rgctl/` to `.gitignore`. Legacy daemon caches under `~/.rgctl/cache/` can be copied with `rgctl migrate-cache`.
+**Artifacts:** `discover` writes snapshots under **`{repo}/.rgctl/`**. Add `.rgctl/` to `.gitignore`.
 
 ## Step-by-Step
 

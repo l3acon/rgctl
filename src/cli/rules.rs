@@ -22,7 +22,6 @@ pub fn run_rules(
     ctx: &CliContext,
     rules_dir: PathBuf,
     target: Option<String>,
-    index_only: bool,
     catalog: Option<PathBuf>,
 ) -> Result<()> {
     if !rules_dir.is_dir() && catalog.is_none() {
@@ -43,21 +42,6 @@ pub fn run_rules(
 
     let mut profile = DiscoverStageReport::default();
     run_kantra_index(store, rules_opt, catalog_opt, &mut profile)?;
-
-    if index_only {
-        if ctx.format == OutputFormat::Json {
-            let v = serde_json::json!({
-                "schema_version": 1,
-                "command": "rules",
-                "action": "index-only",
-                "kantra_index_secs": profile.kantra_index.secs,
-            });
-            ctx.emit_json_value(&v)?;
-        } else {
-            ctx.stdout_line("rules: indexed KantraRule nodes (eval skipped)")?;
-        }
-        return Ok(());
-    }
 
     let catalog = resolve_kantra_catalog(rules_opt, catalog_opt)?;
     let (engine, _) = KantraEngine::from_catalog(catalog.clone(), target.as_deref())

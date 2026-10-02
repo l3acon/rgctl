@@ -32,7 +32,6 @@ pub mod metrics_output;
 mod pipeline_session;
 pub mod pipeline_status;
 mod policy_file;
-mod migrate_cache;
 mod semantic;
 mod semantic_api;
 pub mod semantic_output;
@@ -41,7 +40,6 @@ pub mod slice_output;
 mod stage_profile;
 mod structured_query;
 mod session_status;
-mod resources;
 mod rules;
 
 pub use args::OutputFormat;
@@ -101,6 +99,10 @@ pub enum Commands {
         /// Repository path (defaults to --repo or cwd)
         #[arg(value_name = "PATH")]
         path: Option<String>,
+
+        /// Locate candidate project roots under PATH matching a glob (e.g. `*coolstore*`); no full index
+        #[arg(long = "find", value_name = "GLOB")]
+        find_roots: Option<String>,
 
         #[arg(short = 'l', long = "languages")]
         languages: Option<String>,
@@ -416,13 +418,6 @@ pub enum Commands {
     /// Session graph status (snapshot presence, digest, node/edge counts; no rediscover)
     Status,
 
-    /// Parse deployment/persistence descriptors (persistence.xml, weblogic/jboss/web/beans)
-    Resources {
-        /// Optional extra descriptor file to include
-        #[arg(long = "file", value_name = "PATH")]
-        file: Option<String>,
-    },
-
     /// Evaluate Konveyor-shaped rules against the session (Kantra engine)
     Rules {
         #[command(subcommand)]
@@ -646,21 +641,6 @@ pub enum Commands {
         dashboard_only: bool,
     },
 
-    /// Copy daemon-era cache artifacts into `{repo}/.rgctl/`
-    MigrateCache {
-        /// Cache entry name under `~/.rgctl/cache/` (default: repo directory name)
-        #[arg(long)]
-        name: Option<String>,
-
-        /// Explicit cache `.rgctl/` source directory
-        #[arg(long, value_name = "PATH")]
-        from: Option<std::path::PathBuf>,
-
-        /// Overwrite existing `{repo}/.rgctl/`
-        #[arg(long)]
-        force: bool,
-    },
-
     /// Diff two columnar graph snapshots (cold diff profiling / compare path)
     Diff {
         /// Base snapshot file or directory containing `graph.snapshot.bin`
@@ -719,10 +699,6 @@ pub enum RulesCommands {
         /// Filter by `konveyor.io/target` label
         #[arg(long = "target", value_name = "NAME")]
         target: Option<String>,
-
-        /// Index KantraRule nodes only; skip evaluation
-        #[arg(long = "index-only")]
-        index_only: bool,
 
         /// Override with a rulesets tree (mutually exclusive with DIR as single ruleset when set)
         #[arg(long = "catalog", value_name = "ROOT")]
@@ -1118,6 +1094,7 @@ impl Cli {
         let result = match self.command {
             Commands::Discover {
                 path,
+                find_roots,
                 languages,
                 exclude,
                 verbose: _,
@@ -1150,6 +1127,7 @@ impl Cli {
                     &ctx,
                     discover::DiscoverArgs {
                         path,
+                        find_roots,
                         languages,
                         exclude: join_exclude_patterns(&exclude),
                         with_security,
@@ -1368,14 +1346,12 @@ impl Cli {
                 },
             ),
             Commands::Status => session_status::run_status(&ctx),
-            Commands::Resources { file } => resources::run_resources(&ctx, file),
             Commands::Rules { action } => match action {
                 RulesCommands::Run {
                     rules_dir,
                     target,
-                    index_only,
                     catalog,
-                } => rules::run_rules(&ctx, rules_dir, target, index_only, catalog),
+                } => rules::run_rules(&ctx, rules_dir, target, catalog),
             },
             Commands::Query { action } => match action {
                 QueryCommands::Find {
@@ -1774,10 +1750,6 @@ impl Cli {
                     force,
                 },
             ),
-            Commands::MigrateCache { name, from, force } => migrate_cache::run(
-                &ctx,
-                migrate_cache::MigrateCacheArgs { name, from, force },
-            ),
             Commands::Diff { base, head } => diff::run(
                 &ctx,
                 diff::DiffArgs { base, head },
@@ -1824,7 +1796,6 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::Relations { .. } => "relations",
         Commands::Inventory { .. } => "inventory",
         Commands::Status => "status",
-        Commands::Resources { .. } => "resources",
         Commands::Rules { .. } => "rules",
         Commands::Query { action } => match action {
             QueryCommands::Find { .. } => "query find",
@@ -1861,7 +1832,6 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::PrCheck { .. } => "pr-check",
         Commands::Export { .. } => "export",
         Commands::Install { .. } => "install",
-        Commands::MigrateCache { .. } => "migrate-cache",
         Commands::Diff { .. } => "diff",
         Commands::Serve { .. } => "serve",
     }

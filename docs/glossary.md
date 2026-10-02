@@ -7,7 +7,7 @@
 | **CPG** | Code Property Graph — hybrid of L_repo (CALL/type) and L_proc (CFG/PDG). CLI: `cpg`. |
 | **CFG** | Control-flow graph of a function (basic blocks and branches). |
 | **Discover** | Index a repository into `{repo}/.rgctl/` artifacts. |
-| **migrate-cache** | Copy legacy `~/.rgctl/cache/{name}/.rgctl/` into the current repo. |
+| **`.rgctl/`** | In-repo artifact directory written by `discover` (snapshots, findings, dashboard, …). |
 | **Fusion** | Late re-ranking of semantic hits with graph signals (blast, PageRank, sketches). |
 | **GQL** | rgctl graph query language (`MATCH` / macros) over the knowledge graph. |
 | **Hamming distance** | Bitwise distance used for packed semantic embedding retrieval. |

@@ -66,6 +66,16 @@ pub struct GraphBuilder {
     active_tracker_key: Option<String>,
     /// Node ids for the active file batch — flushed once in [`Self::end_file_batch`].
     active_tracker_ids: Vec<Uuid>,
+    /// AnnotatedWith argument text keyed for sidecar (columnar edges drop properties).
+    annotation_args: Vec<AnnotationArgEntry>,
+}
+
+/// One annotation usage with argument text (written to `.rgctl/annotation_args.json`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AnnotationArgEntry {
+    pub source_id: String,
+    pub annotation: String,
+    pub arguments: String,
 }
 
 #[derive(Debug, Default)]
@@ -733,6 +743,26 @@ impl GraphBuilder {
                     relation.location.start_line.to_string(),
                 );
             }
+            if relation.relation_type == RelationType::AnnotatedWith
+                && let Some(args) = relation
+                    .metadata
+                    .get("arguments")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+            {
+                let ann = relation
+                    .to
+                    .rsplit(['.', '/', ':'])
+                    .next()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(relation.to.as_str());
+                edge = edge.with_property("arguments".into(), args.to_string());
+                self.annotation_args.push(AnnotationArgEntry {
+                    source_id: from.to_string(),
+                    annotation: ann.to_string(),
+                    arguments: args.to_string(),
+                });
+            }
             self.commit_edge(edge);
         }
         Ok(())
@@ -1214,6 +1244,11 @@ impl GraphBuilder {
             "into_graph called on spilling GraphBuilder; use finish_spill"
         );
         (self.nodes, self.edges)
+    }
+
+    /// Take collected annotation argument entries (for `.rgctl/annotation_args.json`).
+    pub fn take_annotation_args(&mut self) -> Vec<AnnotationArgEntry> {
+        std::mem::take(&mut self.annotation_args)
     }
 
     /// Finish spill writers and return a [`FinishedSpill`] for columnar compile.

@@ -52,7 +52,7 @@ flowchart TB
 
 **Query tiers** (`src/cli/blast_radius.rs`): T0 blast lookup cache hit → in-process mmap engine path → full hydrate for `--with-slices` / `--policy-file`.
 
-> **Retired:** Background daemon mode and the per-repo `query.sock` blast client are removed. All queries run in-process against `{repo}/.rgctl/`. Legacy daemon caches: `rgctl migrate-cache`.
+> **Retired:** Background daemon mode and the per-repo `query.sock` blast client are removed. All queries run in-process against `{repo}/.rgctl/`.
 
 ---
 
