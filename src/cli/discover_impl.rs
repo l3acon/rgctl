@@ -6,6 +6,7 @@ use rgctl_pipeline::with_large_pool;
 use super::discover_cfg::{
     CfgAnalysisOptions, FileSourceCache, preload_file_sources, run_cfg_analysis_batch,
 };
+use super::discover_limits::{check_memory_budget, DiscoverLimits};
 use super::discover_output::build_discover_response;
 use super::stage_profile::{DiscoverStageReport, secs};
 use crate::analysis::graph_utils::PetGraphView;
@@ -37,6 +38,7 @@ pub(crate) struct AnalysisOptions<'a> {
     pub with_security: bool,
     pub with_cfg: bool,
     pub with_taint: bool,
+    pub taint_rules: Option<String>,
     pub with_dfg_loops: bool,
     pub with_ast_skeleton: bool,
     pub write_json_graph: bool,
@@ -59,6 +61,8 @@ pub(crate) struct AnalysisOptions<'a> {
     pub emit_cli_summary: bool,
     /// Persist snapshots under this root (defaults to the scanned `path`).
     pub artifact_root: Option<&'a Path>,
+    /// Opt-in resource limits (`--with-limits`).
+    pub limits: Option<DiscoverLimits>,
 }
 
 /// Result of one `run_full_analysis` pass.
@@ -81,6 +85,7 @@ pub(crate) fn run_full_analysis(
         with_security,
         with_cfg,
         with_taint,
+        taint_rules,
         with_dfg_loops,
         with_ast_skeleton,
         write_json_graph,
@@ -99,6 +104,7 @@ pub(crate) fn run_full_analysis(
         force_reindex,
         emit_cli_summary,
         artifact_root,
+        limits,
     } = opts;
 
     let verbose = ctx.verbose;
@@ -111,6 +117,28 @@ pub(crate) fn run_full_analysis(
     let materialize_fields = run_cfg_pass || force_materialize_fields;
     profile.cfg_enabled = run_cfg_pass;
     profile.security_enabled = with_security;
+
+    if let Some(ref lim) = limits {
+        lim.log_active();
+        if let Some(bytes) = lim.sort_run_bytes() {
+            rgctl_graph::set_sort_run_bytes_override(Some(bytes));
+        }
+        if let Some(n) = lim.threads {
+            // Help any code paths that still use the global Rayon pool.
+            if std::env::var_os("RAYON_NUM_THREADS").is_none() {
+                // SAFETY: single-threaded init before worker pools start.
+                unsafe { std::env::set_var("RAYON_NUM_THREADS", n.to_string()) };
+            }
+        }
+    }
+    // Clear spill sort-run override even on early return / error.
+    struct ClearSortRunOverride;
+    impl Drop for ClearSortRunOverride {
+        fn drop(&mut self) {
+            rgctl_graph::set_sort_run_bytes_override(None);
+        }
+    }
+    let _clear_sort_run = ClearSortRunOverride;
 
     let root = Path::new(path);
     // Source tree scanned for files; `.rgctl/` artifacts live under `store`.
@@ -126,6 +154,7 @@ pub(crate) fn run_full_analysis(
                 .collect(),
         );
     }
+    let taint_lang_scope = discovery.languages.clone();
 
     if let Some(excludes) = exclude {
         discovery.exclude_patterns = excludes
@@ -163,6 +192,11 @@ pub(crate) fn run_full_analysis(
             discovery,
             show_progress: human_output,
             materialize_fields,
+            thread_count: limits.as_ref().and_then(|l| l.threads),
+            stream_channel_capacity: limits
+                .as_ref()
+                .and_then(|l| l.stream_channel_capacity())
+                .unwrap_or_else(|| PipelineConfig::default().stream_channel_capacity),
             ..PipelineConfig::default()
         },
     );
@@ -180,7 +214,7 @@ pub(crate) fn run_full_analysis(
     let index_start = Instant::now();
     let graph_from_snapshot = !force_reindex && file_changes.is_empty() && snapshot_path.is_file();
     let mut cold_reused: Option<crate::analysis::ColdMetadataDb> = None;
-    let (index_stats, graph_digest) = if graph_from_snapshot {
+    let (mut index_stats, graph_digest) = if graph_from_snapshot {
         let load_start = Instant::now();
         let cold = crate::analysis::ColdMetadataDb::open(&snapshot_path)?;
         let digest = cold.store().content_digest()?.to_string();
@@ -202,6 +236,7 @@ pub(crate) fn run_full_analysis(
             duration: load_elapsed,
             extract_duration: Duration::default(),
             graph_build_duration: load_elapsed,
+            ..Default::default()
         };
         cold_reused = Some(cold);
         (stats, digest)
@@ -218,7 +253,13 @@ pub(crate) fn run_full_analysis(
     };
     profile.index_pipeline.secs = secs(index_start.elapsed());
     profile.index_extract.secs = secs(index_stats.extract_duration);
+    profile.extract_pass1.secs = secs(index_stats.extract_pass1_wall);
+    profile.extract_read_cpu.secs = secs(index_stats.extract_read_cpu);
+    profile.extract_parse_cpu.secs = secs(index_stats.extract_parse_cpu);
     profile.index_graph_build.secs = secs(index_stats.graph_build_duration);
+    profile.graph_resolution_index.secs = secs(index_stats.graph_resolution_index);
+    profile.graph_pass2.secs = secs(index_stats.graph_pass2);
+    profile.graph_spill_columnar.secs = secs(index_stats.graph_spill_columnar);
     profile.nodes = index_stats.nodes_created;
     // Snapshot write is folded into index_graph_build (Lever 1: no separate backend rewrite).
     profile.save_snapshot.secs = 0.0;
@@ -337,6 +378,9 @@ pub(crate) fn run_full_analysis(
     profile.functions = functions.len();
     // Seal ingest phase: absolute peak stays; analysis phase peak resets to current RSS.
     profile.ingest_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
+    if let Some(limit) = limits.as_ref().and_then(|l| l.max_mem_mb) {
+        check_memory_budget(profile.ingest_peak_rss_mb, limit)?;
+    }
     debug!(
         ingest_peak_mb = profile.ingest_peak_rss_mb,
         "{}",
@@ -557,7 +601,31 @@ pub(crate) fn run_full_analysis(
         }
 
         let file_sources: Option<FileSourceCache> = if with_ast_skeleton || with_cfg {
-            Some(preload_file_sources(&functions, root, None))
+            Some(preload_file_sources(
+                &functions,
+                root,
+                limits.as_ref().and_then(|l| l.threads),
+            ))
+        } else {
+            None
+        };
+
+        let taint_rule_set = if with_taint {
+            let cli = taint_rules.as_ref().map(std::path::PathBuf::from);
+            let langs = taint_lang_scope.as_ref();
+            match rgctl_analysis::taint_rules::TaintRuleSet::load_with_overlays(
+                Some(Path::new(path)),
+                cli.as_deref(),
+                langs.map(|v| v.as_slice()),
+            ) {
+                Ok(set) => Some(std::sync::Arc::new(set)),
+                Err(err) => {
+                    warn!(error = %err, "failed to load taint rule packs; using bundled defaults");
+                    rgctl_analysis::taint_rules::TaintRuleSet::bundled()
+                        .ok()
+                        .map(std::sync::Arc::new)
+                }
+            }
         } else {
             None
         };
@@ -568,9 +636,10 @@ pub(crate) fn run_full_analysis(
             root,
             CfgAnalysisOptions {
                 verbose,
-                thread_count: None,
+                thread_count: limits.as_ref().and_then(|l| l.threads),
                 enable_taint: with_taint,
                 dfg_loops: with_dfg_loops,
+                taint_rules: taint_rule_set,
             },
             file_sources.as_ref(),
         );
@@ -1028,27 +1097,36 @@ pub(crate) fn run_full_analysis(
 
     // Save graph topology (no analysis properties!)
     let save_tracker_start = Instant::now();
-    let mut node_path_pairs: Vec<(String, uuid::Uuid)> = Vec::with_capacity(cold.node_count());
-    cold.for_each_node(&mut |node| {
-        let raw_path = node.file_path.as_deref().or_else(|| {
-            if matches!(node.node_type, NodeType::File) {
-                Some(node.name.as_str())
-            } else {
-                None
-            }
-        });
-        if let Some(path) = raw_path {
-            node_path_pairs.push((crate::incremental::normalize_path_str(path), node.id));
-        }
-    })?;
-    const PAR_SORT_NODE_PATHS_MIN: usize = 32_768;
-    if node_path_pairs.len() >= PAR_SORT_NODE_PATHS_MIN {
-        node_path_pairs.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let node_mapping = if !index_stats.node_path_mapping.is_empty() {
+        std::mem::take(&mut index_stats.node_path_mapping)
     } else {
-        node_path_pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    }
-    let node_mapping = crate::incremental::group_sorted_node_paths(node_path_pairs);
-    file_tracker.index_files_with_mapping(&files, node_mapping)?;
+        let mut node_path_pairs: Vec<(String, uuid::Uuid)> =
+            Vec::with_capacity(cold.node_count());
+        cold.for_each_node(&mut |node| {
+            let raw_path = node.file_path.as_deref().or_else(|| {
+                if matches!(node.node_type, NodeType::File) {
+                    Some(node.name.as_str())
+                } else {
+                    None
+                }
+            });
+            if let Some(path) = raw_path {
+                node_path_pairs.push((crate::incremental::normalize_path_str(path), node.id));
+            }
+        })?;
+        const PAR_SORT_NODE_PATHS_MIN: usize = 32_768;
+        if node_path_pairs.len() >= PAR_SORT_NODE_PATHS_MIN {
+            node_path_pairs.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        } else {
+            node_path_pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        }
+        crate::incremental::group_sorted_node_paths(node_path_pairs)
+    };
+    file_tracker.index_files_with_mapping(
+        &files,
+        node_mapping,
+        Some(&index_stats.file_hashes),
+    )?;
     file_tracker.save()?;
     profile.save_tracker.secs = secs(save_tracker_start.elapsed());
 
@@ -1188,6 +1266,9 @@ pub(crate) fn run_full_analysis(
     let analysis_size = std::fs::metadata(&analysis_path)?.len() as f64 / (1024.0 * 1024.0);
     mem_monitor.stop_periodic_sampling();
     profile.analysis_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
+    if let Some(limit) = limits.as_ref().and_then(|l| l.max_mem_mb) {
+        check_memory_budget(profile.analysis_peak_rss_mb.max(profile.ingest_peak_rss_mb), limit)?;
+    }
     let snapshot = mem_monitor.snapshot()?;
     profile.wall_total.secs = secs(run_start.elapsed());
     profile.peak_rss_mb = snapshot.peak_mb;
@@ -1223,7 +1304,9 @@ pub(crate) fn run_full_analysis(
 
         info!("");
         info!("[i] Next steps:");
-        info!("   rgctl gql \"MATCH (n:Function) RETURN n\"  # Query the graph");
+        info!("   rgctl -f json find --type function --limit 20");
+        info!("   rgctl -f json inventory --by type");
+        info!("   rgctl -f json relations --edge calls --limit 20");
         info!("   rgctl slice <file> --line <N> --variable <VAR>");
         if dashboard_dir.join("manifest.json").is_file() {
             info!("   rgctl serve --open   # Dashboard + query API at http://127.0.0.1:8080");

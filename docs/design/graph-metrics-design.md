@@ -154,4 +154,4 @@ Screenshots: `capture-design-screenshots.mjs` → `docs/images/design/graph-metr
 
 - [Migration planner design](migration-planner-design.md)
 - [Blast radius design](blast-radius-design.md)
-- [GQL design](gql-design.md)
+- [Structured graph queries](../guides/structured-query.md)

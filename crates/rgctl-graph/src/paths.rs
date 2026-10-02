@@ -166,14 +166,6 @@ pub fn migrate_legacy_daemon_home(home_root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Path to cached artifacts for a daemon-era repo name: `~/.rgctl/cache/{name}/.rgctl/`.
-pub fn daemon_cache_artifacts(name: &str) -> Option<PathBuf> {
-    let home = legacy_daemon_home()?;
-    let _ = migrate_legacy_daemon_home(&home);
-    let root = home.join(".rgctl").join("cache").join(name);
-    Some(root.join(ARTIFACT_DIR_NAME))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

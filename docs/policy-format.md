@@ -57,7 +57,7 @@ JSON policy files gate **blast-radius**, **`check`**, and **`pr-check`** command
 }
 ```
 
-Assign domains via GQL (`RETURN n` includes node `id`) or from blast-radius JSON (`target.id`).
+Assign domains via `find` JSON (`entities[].id`) or from blast-radius JSON (`target.id`).
 
 ---
 

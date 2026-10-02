@@ -64,8 +64,8 @@ A language is **fully supported** when all rows are ✅ and backed by automated 
 | # | Requirement | Where |
 |---|-------------|--------|
 | C1 | `taint_enabled: true` on profile | `language_profile.rs` |
-| C2 | `detect_{lang}_patterns()` — sources, sinks, sanitizers | `crates/rgctl-analysis/src/taint.rs` |
-| C3 | Taint routed via `canonical_language_id()` | `TaintAnalyzer::detect_patterns` |
+| C2 | Declarative taint pack under `crates/rgctl-analysis/rules/taint/{lang}.yaml` (sources, sinks, sanitizers) | Schema + engine in `taint_rules.rs`; do **not** add `detect_{lang}_patterns()` in Rust |
+| C3 | Taint routed via `canonical_language_id()` | `TaintAnalyzer::detect_patterns` / `TaintRuleSet::for_language` |
 | C4 | Interprocedural CFG uses correct language (not wrong grammar) | `interprocedural_cfg.rs` → `language_id_from_path` |
 | C5 | Slice CLI resolves language from file path | `src/cli/context.rs` → `language_from_path` |
 
@@ -119,20 +119,20 @@ Required for high-quality `cpg mutations` / typed field writes. Reference: Java 
 | Python | `__init__` → `Class.<init>`; harvest `self.x` fields | Annotations when present |
 | C | No language ctors; struct fields + typed params required | Strong on structs; `file_stem::name` FQN; normalized `#include` Import graph |
 
-**Java extract honesty (java-extract-gaps + java-grammar-remainder + java-gql-remainder-gates):**
+**Java extract honesty (java-extract-gaps + java-grammar-remainder + remainder gates):**
 
 - Annotation types are `:Annotation` nodes (not `:Interface`). Usages emit `AnnotatedWith`; no classpath/FQN resolution beyond imports/package best-effort.
 - Records are `Class` with `metadata.is_record`; compact ctors and `<clinit>` / `<initblock>N` are CFG entry points.
 - Annotation elements are Functions with `is_annotation_element`; interface `constant_declaration` becomes fields.
-- Generics/`throws` are symbol metadata (`type_params`, `throws`); not TypeParameter nodes. GQL JSON projects allowlisted properties (`type_params`, `throws`, `is_lambda`, `is_external_stub`, …).
+- Generics/`throws` are symbol metadata (`type_params`, `throws`); not TypeParameter nodes. Structured `find` JSON can surface allowlisted properties where indexed (`type_params`, `throws`, `is_lambda`, `is_external_stub`, …).
 - Lambdas are synthetic Functions (`$lambda$N`, `is_lambda`); direct CFG `$lambda$N` lookup is file-global (prefer enclosing-method CFG).
 - Anonymous classes use synthetic `Outer.$AnonymousN` owners.
 - Expression refs: field reads → `References`; array `new` → `Instantiates`; `.class` → `References`. No full points-to.
 - Type-use annotations (`annotated_type`) and declaration-site parameter annotations attach to the **owning method/constructor** (parameter encodings are not graph nodes). Field type-use attaches to the field symbol.
-- Unresolved Instantiates / DependsOn / Uses / AnnotatedWith / References / Calls targets become deduplicated **external stub** nodes (`is_external_stub`, file `<external>`) so GQL edges survive; stubs are placeholders, not a JDK model.
+- Unresolved Instantiates / DependsOn / Uses / AnnotatedWith / References / Calls targets become deduplicated **external stub** nodes (`is_external_stub`, file `<external>`) so graph edges survive in `relations`; stubs are placeholders, not a JDK model.
 - Pattern-matching (`record_pattern` / `type_pattern`) not first-class symbols.
 - No full reflection / retention-policy analysis.
-- GQL gates: `cargo test --test java_langfeatures` (fixture `tests/fixtures/java/langfeatures`).
+- Langfeature gates: `cargo test --test java_langfeatures` (fixture `tests/fixtures/java/langfeatures`).
 
 **Rust extract honesty (rust-extraction-depth):**
 
@@ -142,14 +142,14 @@ Required for high-quality `cpg mutations` / typed field writes. Reference: Java 
 - Module-prefix FQNs from `src/` path (`services::order::Foo::bar`); not full `rustc` name resolution.
 - `struct { ... }`, `Type::new()`, `Type::default()` → `Instantiates`; field reads → `References`.
 - `dyn Trait`, macros, and opaque callees → `metadata.unresolved` on `Calls`.
-- GQL gates: `cargo test --test rust_langfeatures` (fixture `rgctl-tests/ecommerce-rust`).
+- Langfeature gates: `cargo test --test rust_langfeatures` (fixture `rgctl-tests/ecommerce-rust`).
 
 **C extract honesty (c-extraction-depth):**
 
 - File-scoped FQN: `{file_stem}::{symbol}` on functions and structs; `foo.h` / `foo.c` pairs may share the same qualified name — filter by `file_path`.
 - `#include` → normalized `Import` symbols (`metadata.kind: "include"`); path strings only, no filesystem resolution.
 - Function-pointer and macro-generated calls → `metadata.unresolved` on `Calls` when callee cannot be resolved statically; `#define` indexing deferred.
-- GQL gates: `cargo test --test c_langfeatures` (fixture `rgctl-tests/ecommerce-c`, CALLS ≥ 40).
+- Langfeature gates: `cargo test --test c_langfeatures` (fixture `rgctl-tests/ecommerce-c`, CALLS ≥ 40).
 
 ---
 
@@ -173,7 +173,9 @@ crates/
       def_use.rs                        # Per-language def/use AST cases
       field_write.rs                    # Mutation index (Layer F)
       field_write_locals.rs             # Per-language local/param type recovery (F5)
-      taint.rs                          # Per-language taint patterns
+      taint_rules.rs                    # Declarative packs + apply engine
+      rules/taint/*.yaml                # Per-language source/sink/sanitizer packs
+      taint.rs                          # Forward taint analysis (uses rule engine)
   rgctl-languages/                   # Wire register() into default binary
 tests/
   {lang}_cfg_analysis.rs                # Fixture CFG tests
@@ -331,13 +333,13 @@ PDG construction is shared; no separate file unless control-dependency edge case
 
 ### Step 7 — Taint patterns
 
-In `taint.rs`:
+Add a declarative pack at `crates/rgctl-analysis/rules/taint/{id}.yaml` (schema_version 1):
 
-1. Add `detect_mylang_patterns(&mut self)`.
-2. Register in `detect_patterns` via `canonical_language_id` match arm.
+1. List `languages: [{id}]` and ordered `rules` with `role` (`source` / `sink` / `sanitizer`), `kind`, and `match` (`substring` / `any_substring` / `all_substrings` / `regex` / `all_of`).
+2. Register the YAML in `BUNDLED_PACKS` inside `taint_rules.rs` (`include_str!`).
 3. Cover at minimum: HTTP/input sources, SQL/shell sinks, common sanitizers for that ecosystem.
 
-Keep patterns **statement-text** based for now (consistent with existing code); type-aware taint is optional (`with_type_inference`).
+Do **not** add `detect_{id}_patterns()` in Rust. Keep patterns **statement-text** based for v1; type-aware taint remains optional (`with_type_inference`). Project overlays: `.rgctl/taint-rules.d/` or `--taint-rules PATH`.
 
 ### Step 8 — Tests
 
@@ -413,7 +415,7 @@ Copy into your PR description:
 - [ ] **Layer F:** `fields[]`, `is_constructor` + `.<init>`/`::<init>`, typed params
 - [ ] **Layer F:** `merge_local_types` arm in `field_write_locals.rs` (or documented N/A)
 - [ ] **Layer F:** golden `{id}_cfg_captures_field_write_and_query` in `field_write` tests
-- [ ] `taint.rs` `detect_{id}_patterns`
+- [ ] `taint` pack `rules/taint/{id}.yaml` + `BUNDLED_PACKS` entry (not `detect_{id}_patterns`)
 - [ ] `extract_relations` emits `Calls` (and inheritance if applicable)
 - [ ] `{id}-ast-coverage.json` + `ast_coverage` test (`*_ast_coverage_manifest_matches_grammar`)
 - [ ] Integration test + dashboard gate (or documented fixture path)

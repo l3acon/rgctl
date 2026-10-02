@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function InstallPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <Badge className="mb-4">Get started</Badge>
       <h1 className="font-[family-name:var(--font-serif)] text-3xl font-semibold tracking-tight text-[var(--ink)] sm:text-4xl">
         Install rgctl
@@ -37,29 +37,22 @@ export default function InstallPage() {
           , put <code className="font-mono text-[var(--body-strong)]">rgctl</code>{" "}
           on your <code className="font-mono">PATH</code>, then install the{" "}
           <strong className="font-medium text-[var(--ink)]">agent pack</strong>{" "}
-          into the repo you will index (meta skill, eight workflow skills, and
-          slash commands):
+          into the repo you will index (single skill{" "}
+          <code className="font-mono text-[var(--body-strong)]">rgctl</code>
+          ):
         </p>
         <TerminalBlock
           lines={[
             "rgctl --version",
-            "rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents",
+            "rgctl install --skill --tools cursor,claude,codex,antigravity,agents",
           ]}
         />
         <p className="text-sm text-[var(--mute)]">
-          Installs meta skill <code className="font-mono">rgctl</code>, workflow
-          skills (<code className="font-mono">rgctl-discover</code>,{" "}
-          <code className="font-mono">rgctl-gql</code>, …{" "}
-          <code className="font-mono">rgctl-gate</code>), and matching slash
-          commands under each adapter (e.g.{" "}
-          <code className="font-mono">.cursor/skills/</code> and{" "}
-          <code className="font-mono">.cursor/commands/</code>). See{" "}
-          <Link href="/docs/guides/agent-commands/" className="underline">
-            agent commands
-          </Link>{" "}
-          and the{" "}
+          Installs <code className="font-mono">rgctl</code> under each adapter
+          (e.g. <code className="font-mono">.cursor/skills/rgctl/</code>). See
+          the{" "}
           <Link href="/docs/guides/agent-skill/" className="underline">
-            agent pack walkthrough
+            agent pack guide
           </Link>
           .
         </p>
@@ -97,7 +90,7 @@ export default function InstallPage() {
           lines={[
             "cd rgctl-tests/ecommerce-java",
             "rgctl discover .",
-            "rgctl -f json gql --macro-name all_functions unused | jq '.count'",
+            "rgctl -f json find --type function --count-only | jq '.total'",
             'rgctl -f json blast-radius "priceShoppingCart" --depth 2',
           ]}
         />
@@ -113,7 +106,7 @@ export default function InstallPage() {
           <Link href="/docs/guides/">Read the guides</Link>
         </Button>
         <Button variant="ghost" asChild>
-          <Link href="/docs/">Docs hub</Link>
+          <Link href="/agents/">Agents</Link>
         </Button>
         <Button variant="ghost" asChild>
           <Link href="/demo/">Try demos</Link>

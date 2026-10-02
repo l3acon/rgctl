@@ -14,7 +14,7 @@ const assets = {
     gif: "/demos/user-guide-cli.gif",
     label: "CLI walkthrough (VHS)",
     blurb:
-      "Recorded from docs/videos/user-guide-cli.tape — discover, GQL, Kantra, blast-radius, CPG, semantic.",
+      "Recorded from docs/videos/user-guide-cli.tape — discover, find, Kantra, blast-radius, CPG, semantic.",
     alt: "rgctl CLI demo: discover, query, Kantra rules, blast-radius, and semantic search",
   },
   dashboard: {

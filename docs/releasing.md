@@ -6,11 +6,38 @@ How maintainers publish versioned binaries and GitHub Releases.
 
 ## Version numbers
 
-- **Crate / CLI version** lives in root [`Cargo.toml`](../Cargo.toml) (`[package].version`).
-- **Workspace crates** share the same version in their `Cargo.toml` files and `[workspace.dependencies]` pins.
-- **Git tags** use a `v` prefix: `v0.2.0` (not `0.2.0` alone).
+- **Single source of truth:** `[workspace.package] version` in root [`Cargo.toml`](../Cargo.toml).
+- **All workspace crates** use `version.workspace = true` (including the root `rgctl` package).
+- **`[workspace.dependencies]`** path pins still carry an explicit `version = "…"` (crates.io metadata); keep them in lockstep with the workspace version.
+- **Git tags** use a `v` prefix: `v0.4.18` (not `0.4.18` alone).
 
-Bump all workspace versions together before tagging.
+### Automating the bump
+
+Install once:
+
+```bash
+cargo install cargo-edit --locked      # cargo set-version
+cargo install cargo-release --locked  # cargo release
+```
+
+**Bump TOMLs only** (no commit/tag) — updates workspace package version, path pins, and README release link:
+
+```bash
+./scripts/bump-version.sh patch       # or: minor | major | 0.4.18
+git diff   # review, commit yourself, then tag (below)
+```
+
+**Bump + commit + tag + push** (see [`release.toml`](../release.toml); dry-run by default).
+Requires a **clean git tree** (commit the inheritance / docs changes first):
+
+```bash
+cargo release patch --workspace              # preview
+cargo release patch --workspace --execute    # commit, tag vX.Y.Z, push
+```
+
+`publish = false`: we do **not** `cargo publish` to crates.io yet. Pushing the `v*` tag still triggers the GitHub Release binary workflow below.
+
+Write `docs/releases/vX.Y.Z.md` before or right after the bump so CI can attach curated notes.
 
 ---
 
@@ -82,7 +109,7 @@ Extract and run `rgctl --version`. See [User Guide §1](user-guide.md#1-installa
 ## After release
 
 - Verify the Release page lists all four platform archives and checksums.
-- Smoke-test `discover` + `gql` on a small repo with the downloaded binary.
+- Smoke-test `discover` + `find --type function --count-only` on a small repo with the downloaded binary.
 - If `RGCTL_TESTS_DISPATCH_TOKEN` is configured, CI dispatches `rgctl-released` to the external test repo (see workflow comments).
 
 ---

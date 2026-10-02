@@ -27,9 +27,7 @@ pub struct AgentManifestEntry {
     pub id: String,
     pub agent_dir: String,
     pub skills_subdir: String,
-    pub commands_subdir: Option<String>,
     pub skills_path: String,
-    pub commands_path: Option<String>,
     pub invoke_prefix: String,
     pub supports_global: bool,
 }
@@ -74,7 +72,6 @@ pub struct PackArtifact {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackArtifactKind {
     Skill,
-    Command,
     Policy,
     Meta,
 }
@@ -95,7 +92,6 @@ pub fn collect_artifacts(
     manifest: &PackManifest,
     agent_ids: &[String],
     skills: bool,
-    with_commands: bool,
     with_policy: bool,
 ) -> Result<Vec<PackArtifact>, String> {
     let mut out = Vec::new();
@@ -116,21 +112,6 @@ pub fn collect_artifacts(
                 &mut out,
                 &mut seen_dest,
             )?;
-        }
-
-        if with_commands {
-            if let Some(cmd_sub) = &entry.commands_subdir {
-                let cmd_prefix = format!("{}{}/", embed_prefix, cmd_sub);
-                collect_commands(
-                    &cmd_prefix,
-                    embed_prefix.as_str(),
-                    agent_id,
-                    &entry.agent_dir,
-                    cmd_sub,
-                    &mut out,
-                    &mut seen_dest,
-                )?;
-            }
         }
     }
 
@@ -189,61 +170,11 @@ fn collect_skills(
     Ok(())
 }
 
-fn collect_commands(
-    cmd_prefix: &str,
-    embed_prefix: &str,
-    agent_id: &str,
-    agent_dir: &str,
-    commands_subdir: &str,
-    out: &mut Vec<PackArtifact>,
-    seen_dest: &mut HashMap<PathBuf, ()>,
-) -> Result<(), String> {
-    for (path, _) in pack_files() {
-        let path = path.to_string_lossy();
-        if !path.starts_with(cmd_prefix) {
-            continue;
-        }
-        let after_embed = path.strip_prefix(embed_prefix).unwrap_or(&path);
-        let repo_rel = PathBuf::from(agent_dir).join(after_embed);
-        if seen_dest.contains_key(&repo_rel) {
-            continue;
-        }
-        seen_dest.insert(repo_rel.clone(), ());
-        let workflow = workflow_from_command_path(after_embed, commands_subdir);
-        out.push(PackArtifact {
-            agent_id: agent_id.to_string(),
-            workflow,
-            kind: PackArtifactKind::Command,
-            repo_rel,
-            bundle_rel: PathBuf::from(path.as_ref()),
-        });
-    }
-    Ok(())
-}
-
 fn workflow_from_skill_path(after_embed: &str, skills_subdir: &str) -> Option<String> {
     let prefix = format!("{skills_subdir}/");
     let rest = after_embed.strip_prefix(&prefix)?;
     let name = rest.split('/').next()?;
     name.strip_prefix("rgctl-").map(str::to_string)
-}
-
-fn workflow_from_command_path(after_embed: &str, commands_subdir: &str) -> Option<String> {
-    let prefix = format!("{commands_subdir}/");
-    let file = after_embed.strip_prefix(&prefix)?;
-    let file = Path::new(file).file_name()?.to_string_lossy();
-    let stem = file
-        .strip_prefix("rgctl-")
-        .unwrap_or(file.as_ref());
-    for suffix in [".prompt.md", ".prompt", ".toml", ".md"] {
-        if let Some(s) = stem.strip_suffix(suffix) {
-            return Some(s.to_string());
-        }
-    }
-    if commands_subdir.contains("/rgctl") {
-        return Some(stem.to_string());
-    }
-    None
 }
 
 pub fn bundle_bytes(bundle_rel: &Path) -> Option<&[u8]> {

@@ -1,0 +1,34 @@
+schema_version: 1
+id: puppet-builtins
+languages:
+- puppet
+rules:
+- id: pp-src
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - lookup(
+    - hiera(
+    - hiera_hash(
+    - '$facts['
+    - '$::facts'
+- id: pp-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - 'exec {'
+    - 'command =>'
+    - 'provider => ''shell'''
+- id: pp-sink-file
+  role: sink
+  kind: FileWrite
+  match:
+    type: all_substrings
+    values:
+    - 'file {'
+    - 'content =>'

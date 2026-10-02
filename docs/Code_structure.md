@@ -44,7 +44,7 @@ flowchart TB
     end
 
     subgraph query_export["Query & output"]
-        GQL["rgctl-gql<br/>Cypher-like graph queries"]
+        QENG["query engine crate<br/>(internal / not agent API)"]
         EXPORT["rgctl-export<br/>HTML, Mermaid, GraphML, DOT"]
     end
 
@@ -60,14 +60,14 @@ flowchart TB
     RB --> CORE
     RB --> PIPE
     RB --> ANALYSIS
-    RB --> GQL
+    RB --> QENG
     RB --> EXPORT
 
     CORE --> GRAPH
     CORE --> ANALYSIS
     CORE --> PIPE
     CORE --> EXT
-    CORE --> GQL
+    CORE --> QENG
     CORE --> EXPORT
     CORE --> INC
     CORE --> REG
@@ -94,8 +94,8 @@ flowchart TB
     ANALYSIS --> GRAPH
     ANALYSIS --> ERR
 
-    GQL --> GRAPH
-    GQL --> ANALYSIS
+    QENG --> GRAPH
+    QENG --> ANALYSIS
 
     EXPORT --> GRAPH
 
@@ -109,12 +109,12 @@ flowchart TB
     GRAPH --> ERR
     PIPE --> ERR
     EXT --> ERR
-    GQL --> ERR
+    QENG --> ERR
 
     MACROS -.-> LANG
 ```
 
-**Reading the diagram:** Data generally flows **down and left-to-right** during `discover`: registry → extraction → graph → analysis → persisted `.rgctl/` artifacts. Query commands (`blast-radius`, `gql`, `inspect`) read the graph and analysis layers without re-parsing source unless slicing or CFG is required.
+**Reading the diagram:** Data generally flows **down and left-to-right** during `discover`: registry → extraction → graph → analysis → persisted `.rgctl/` artifacts. Query commands (`find`, `blast-radius`, `inspect`) read the graph and analysis layers without re-parsing source unless slicing or CFG is required.
 
 ---
 
@@ -136,10 +136,10 @@ flowchart TB
 #### Entry (`rgctl` root crate)
 
 - **`src/main.rs`** — process entry, dispatches to CLI.
-- **`src/cli/`** — subcommands: `discover`, `blast-radius`, `serve`, `gql`, `slice`, `inspect`, `metrics`, `semantic`, `communities`, `cpg`, `check`, `export`.
+- **`src/cli/`** — subcommands: `discover`, `find` / `callers` / `relations` / …, `blast-radius`, `serve`, `slice`, `inspect`, `metrics`, `semantic`, `communities`, `cpg`, `check`, `export`.
 - **`src/cli/http_serve.rs`** — `serve`: dashboard + `POST /api/query` (foreground HTTP for one repo).
-- **`src/cli/migrate_cache.rs`** — `migrate-cache`: copy legacy `~/.rgctl/cache/` into in-repo `.rgctl/`.
-- **`src/cli/*_output.rs`** — typed JSON serializers (`blast_radius_output`, `discover_output`, `gql_output`, …). Commands assemble domain results from workspace crates and serialize here; **do not** embed algorithm logic in output modules.
+- **`src/cli/session_status.rs`** — `status`: cheap snapshot / digest / node-edge summary.
+- **`src/cli/*_output.rs`** — typed JSON serializers (`blast_radius_output`, `discover_output`, structured-query envelopes, …). Commands assemble domain results from workspace crates and serialize here; **do not** embed algorithm logic in output modules.
 - **`src/languages/`** — wires the active language **bundle** into a `LanguageRegistry` at runtime.
 - Re-exports **`rgctl-core`** for library users (`use rgctl::analysis`, etc.).
 
@@ -147,7 +147,7 @@ Put new **user-facing commands** here; implement behavior in the appropriate wor
 
 #### Facade (`rgctl-core`)
 
-Stable “library surface” for embedders: re-exports graph, analysis, pipeline, export, gql, incremental, registry, rules, semantic, security, project-config. Also hosts **`memory`** monitoring helpers used during discover.
+Stable “library surface” for embedders: re-exports graph, analysis, pipeline, export, incremental, registry, rules, semantic, security, project-config. Also hosts **`memory`** monitoring helpers used during discover.
 
 If you add a new workspace crate that external tools should use, export it through `rgctl-core` (and optionally the root `rgctl` crate).
 
@@ -208,7 +208,6 @@ Single home for **graph algorithms and semantic analysis**:
 
 | Crate | Role |
 |---|---|
-| `rgctl-gql` | Parser, optimizer, executor for Cypher-like queries over `MemoryBackend`. Uses `PetGraphView` from analysis for some paths. |
 | `rgctl-export` | Dashboard HTML, Mermaid, Graphviz/DOT, GraphML; subgraph selection from graph queries. |
 
 #### Cross-cutting
@@ -228,8 +227,8 @@ Single home for **graph algorithms and semantic analysis**:
 | `discover` | `pipeline`, `extraction`, `registry`, `graph`, `analysis`, `incremental`, `export`, `project-config`; stdout JSON via `discover_output` when `-f json` |
 | `blast-radius` | `analysis` (engine + macro index + depth filter), `graph` (columnar snapshot mmap); CLI orchestration in `blast_radius.rs` |
 | `serve` | `http_serve` — foreground HTTP dashboard + `/api/query` |
-| `migrate-cache` | `rgctl-graph` paths + filesystem copy from legacy daemon cache |
-| `gql` | `gql`, `graph` |
+| `status` | Session graph presence / digest / counts |
+| `find` / `callers` / `relations` / `inventory` | `graph` (structured query) |
 | `slice` | `analysis` (CFG, PDG, slicing), reads source from disk |
 | `inspect` | `graph`, `analysis` |
 | `metrics` | `analysis` (centrality, community) |
@@ -268,7 +267,6 @@ Alphabetical list of workspace crates **excluding** individual `rgctl-lang-*` pl
 | **rgctl-error** | `crates/rgctl-error` | Shared error types (`Error`, `Result`) for the whole workspace. |
 | **rgctl-export** | `crates/rgctl-export` | Export graph and analysis to HTML dashboard, Mermaid, GraphML, Graphviz. |
 | **rgctl-extraction** | `crates/rgctl-extraction` | File discovery, extraction orchestration, graph building from plugin output. |
-| **rgctl-gql** | `crates/rgctl-gql` | Graph query language: parse, optimize, execute queries on `MemoryBackend`. |
 | **rgctl-graph** | `crates/rgctl-graph` | Code knowledge graph storage, schema, indexes, JSON import/export, mmap snapshots. |
 | **rgctl-incremental** | `crates/rgctl-incremental` | Incremental updates, file tracking, change detection between indexing runs. |
 | **rgctl-lang-runtime** | `crates/rgctl-lang-runtime` | Generic tree-sitter and regex language plugins from static config. |
@@ -305,7 +303,7 @@ When adding or fixing language support:
 | Add `--depth` or query-tier behavior | `graph_utils` filter + `blast_radius.rs` paths (cache, lite, full) |
 | Add CLI JSON schema / field | `src/cli/<command>_output.rs` + `tests/cli_output/` (Layer 1) |
 | Add subprocess regression for CLI | `subprocess_golden_path.rs` (narrow) or `all_commands_sanity.rs` (full audit) + `tests/fixtures/` — see [`cli-io-sanity-qe.md`](cli-io-sanity-qe.md) |
-| Add a query syntax or optimizer rule | `rgctl-gql` |
+| Add a structured query filter or verb | `rgctl-graph` + `src/cli/structured_query.rs` |
 | Add HTML/Mermaid/GraphML output | `rgctl-export` |
 | Add a discover-time cache file | `discover_impl` writer + relevant analysis/graph module reader |
 | Add a labeling or policy rule | `rgctl-rules` or `rgctl-analysis::policy` |

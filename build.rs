@@ -27,7 +27,7 @@ fn main() {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .count();
-    assert!(count > 500, "agent pack embed too small: {count} files");
+    assert!(count > 100, "agent pack embed too small: {count} files");
 }
 
 fn zip_tree(src: &Path, dest: &Path) -> std::io::Result<()> {

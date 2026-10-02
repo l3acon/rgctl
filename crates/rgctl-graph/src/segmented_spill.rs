@@ -20,10 +20,32 @@ use std::collections::{BinaryHeap, HashMap};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use uuid::Uuid;
 
-/// Default run size for external merge-sort (~64 MiB of record payload).
-pub const DEFAULT_SORT_RUN_BYTES: usize = 64 * 1024 * 1024;
+/// Default run size for external merge-sort (~256 MiB of record payload).
+///
+/// Larger runs cut multi-way merge I/O on kernel-scale spills (nodes/edges
+/// segs are hundreds of MiB). Peak RSS during sort grows by one run buffer.
+pub const DEFAULT_SORT_RUN_BYTES: usize = 256 * 1024 * 1024;
+
+/// Process-wide sort-run override (`0` = use [`DEFAULT_SORT_RUN_BYTES`]).
+/// Set by discover `--with-limits` for constrained containers; leave unset on desktop.
+static SORT_RUN_BYTES_OVERRIDE: AtomicUsize = AtomicUsize::new(0);
+
+/// Cap external-sort run buffers for this process (discover `--with-limits`).
+pub fn set_sort_run_bytes_override(bytes: Option<usize>) {
+    SORT_RUN_BYTES_OVERRIDE.store(bytes.unwrap_or(0), AtomicOrdering::Relaxed);
+}
+
+fn effective_sort_run_bytes() -> usize {
+    let o = SORT_RUN_BYTES_OVERRIDE.load(AtomicOrdering::Relaxed);
+    if o == 0 {
+        DEFAULT_SORT_RUN_BYTES
+    } else {
+        o
+    }
+}
 
 const NODE_KEY_LEN: usize = 16;
 const EDGE_KEY_LEN: usize = 16 + 16 + 8; // from + to + type/pad
@@ -35,6 +57,8 @@ pub struct SegmentedSpill {
     edges: BufWriter<File>,
     node_count: usize,
     edge_count: usize,
+    /// Reused bincode buffer (avoids a fresh `Vec<u8>` per append).
+    scratch: Vec<u8>,
 }
 
 /// Closed spill ready for external sort + columnar compile.
@@ -57,6 +81,7 @@ impl SegmentedSpill {
             edges,
             node_count: 0,
             edge_count: 0,
+            scratch: Vec::with_capacity(64 * 1024),
         })
     }
 
@@ -77,11 +102,13 @@ impl SegmentedSpill {
 
     /// Append a node as length-prefixed bincode with UUID key prefix.
     pub fn append_node(&mut self, node: &Node) -> Result<()> {
-        let blob = bincode::serialize(node)
+        self.scratch.clear();
+        bincode::serialize_into(&mut self.scratch, node)
             .map_err(|e| Error::SerdeError(format!("segmented spill node serialize: {e}")))?;
         self.nodes.write_all(node.id.as_bytes())?;
-        self.nodes.write_all(&(blob.len() as u64).to_le_bytes())?;
-        self.nodes.write_all(&blob)?;
+        self.nodes
+            .write_all(&(self.scratch.len() as u64).to_le_bytes())?;
+        self.nodes.write_all(&self.scratch)?;
         self.node_count += 1;
         Ok(())
     }
@@ -92,15 +119,17 @@ impl SegmentedSpill {
     /// columnar rows after rematerialize/compact.
     pub fn append_edge(&mut self, edge: &Edge) -> Result<()> {
         let canonical = edge.for_columnar_digest();
-        let blob = bincode::serialize(&canonical)
+        self.scratch.clear();
+        bincode::serialize_into(&mut self.scratch, &canonical)
             .map_err(|e| Error::SerdeError(format!("segmented spill edge serialize: {e}")))?;
         let mut key = [0u8; EDGE_KEY_LEN];
         key[..16].copy_from_slice(canonical.from.as_bytes());
         key[16..32].copy_from_slice(canonical.to.as_bytes());
         key[32] = edge_type_to_u8(canonical.edge_type);
         self.edges.write_all(&key)?;
-        self.edges.write_all(&(blob.len() as u64).to_le_bytes())?;
-        self.edges.write_all(&blob)?;
+        self.edges
+            .write_all(&(self.scratch.len() as u64).to_le_bytes())?;
+        self.edges.write_all(&self.scratch)?;
         self.edge_count += 1;
         Ok(())
     }
@@ -159,7 +188,7 @@ pub fn materialize_sorted_graph(spill: &FinishedSpill) -> Result<(Vec<Node>, Vec
                 &nodes_unsorted,
                 &nodes_sorted,
                 NODE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 spill.node_count,
             )
         });
@@ -168,7 +197,7 @@ pub fn materialize_sorted_graph(spill: &FinishedSpill) -> Result<(Vec<Node>, Vec
                 &edges_unsorted,
                 &edges_sorted,
                 EDGE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 spill.edge_count,
             )
         });
@@ -234,7 +263,7 @@ pub fn write_columnar_from_spill(spill: FinishedSpill, path: &Path) -> Result<St
                 &nodes_unsorted,
                 &nodes_sorted,
                 NODE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 node_count,
             )
         });
@@ -243,7 +272,7 @@ pub fn write_columnar_from_spill(spill: FinishedSpill, path: &Path) -> Result<St
                 &edges_unsorted,
                 &edges_sorted,
                 EDGE_KEY_LEN,
-                DEFAULT_SORT_RUN_BYTES,
+                effective_sort_run_bytes(),
                 edge_count,
             )
         });

@@ -45,19 +45,20 @@ const DEMOS: Demo[] = [
     ],
   },
   {
-    id: "gql",
-    label: "gql",
-    caption: "exact inventory · typed edges",
+    id: "find",
+    label: "find",
+    caption: "exact inventory · typed filters",
     copyText:
-      "rgctl -f json gql --macro-name all_functions unused",
+      "rgctl -f json find --type function --count-only",
     lines: [
       {
         kind: "cmd",
-        text: "gql --macro-name all_functions unused",
+        text: "find --type function --count-only",
       },
       { kind: "out", text: "{" },
-      { kind: "json", text: '  "schema_version": 1,' },
-      { kind: "json", text: '  "rows": [{ "name": "priceShoppingCart", … }]' },
+      { kind: "json", text: '  "schema_version": 2,' },
+      { kind: "json", text: '  "total": 292,' },
+      { kind: "json", text: '  "entities": [{ "name": "priceShoppingCart", … }]' },
       { kind: "out", text: "}" },
     ],
   },
@@ -136,11 +137,11 @@ const DEMOS: Demo[] = [
     label: "communities",
     caption: "subsystem clusters",
     copyText:
-      "rgctl -f json gql --macro-name all_communities unused",
+      "rgctl -f json communities list",
     lines: [
       {
         kind: "cmd",
-        text: "gql --macro-name all_communities unused",
+        text: "communities list",
       },
       { kind: "out", text: "{" },
       {

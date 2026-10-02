@@ -1,0 +1,34 @@
+schema_version: 1
+id: groovy-builtins
+languages:
+- groovy
+rules:
+- id: gr-src
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - System.getenv
+    - 'args['
+    - request.getParameter
+- id: gr-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - executeQuery
+    - prepareStatement
+    - sql.execute
+- id: gr-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - Runtime.getRuntime().exec
+    - ProcessBuilder
+    - evaluate(

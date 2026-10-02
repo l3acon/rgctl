@@ -9,7 +9,9 @@ import { GITHUB_REPO } from "@/lib/utils";
 type Props = { params: Promise<{ slug: string[] }> };
 
 export function generateStaticParams() {
-  return listDocSlugs().map((slug) => ({ slug }));
+  return listDocSlugs()
+    .filter((slug) => !(slug.length === 1 && slug[0] === "guides"))
+    .map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -24,15 +26,32 @@ export default async function DocPage({ params }: Props) {
   if (!raw) notFound();
   const md = rewriteDocLinks(raw, slug);
   const githubPath = `${GITHUB_REPO}/blob/main/docs/${slug.join("/")}.md`;
+  const isGuide = slug[0] === "guides";
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <p className="mb-6 text-sm text-[var(--mute)]">
-        <Link href="/docs/" className="underline">
-          Docs
-        </Link>
-        {" / "}
-        {slug.join(" / ")}
+        {isGuide ? (
+          <>
+            <Link href="/docs/guides/" className="underline">
+              Guides
+            </Link>
+            {slug.length > 1 ? (
+              <>
+                {" / "}
+                {slug.slice(1).join(" / ")}
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Link href="/docs/guides/" className="underline">
+              Guides
+            </Link>
+            {" / "}
+            {slug.join(" / ")}
+          </>
+        )}
         {" · "}
         <a href={githubPath} className="underline" target="_blank" rel="noreferrer">
           Edit on GitHub

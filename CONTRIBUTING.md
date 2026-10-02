@@ -89,6 +89,13 @@ Full map: [docs/Code_structure.md](docs/Code_structure.md)
 
 ---
 
+## Releasing (version bump)
+
+Lockstep workspace version via `[workspace.package]` + `version.workspace = true`.
+See **[docs/releasing.md](docs/releasing.md)** for `./scripts/bump-version.sh` and `cargo release`.
+
+---
+
 ## Adding or improving a language / feature
 
 Use the hub checklist for path choice, test matrices, and pre-PR commands:
@@ -103,7 +110,7 @@ Tier 1 depth (Layers A–F): [docs/tier-1-language-support.md](docs/tier-1-langu
 
 - **User-facing:** `docs/Introduction.md`, `docs/user-guide.md`, `docs/dashboard-user-guide.md`
 - **Agents (contribute to rgctl):** root [`AGENTS.md`](AGENTS.md) (starting-context, profiles/tests/benches) · [`docs/json-api.md`](docs/json-api.md)
-- **Agents (use rgctl elsewhere):** [`docs/guides/agent-commands.md`](docs/guides/agent-commands.md) · [`docs/agents/USER_AGENTS_TEMPLATE.md`](docs/agents/USER_AGENTS_TEMPLATE.md) · [`docs/agent-recipes.md`](docs/agent-recipes.md)
+- **Agents (use rgctl elsewhere):** [`docs/guides/agent-skill.md`](docs/guides/agent-skill.md) · [`docs/agents/USER_AGENTS_TEMPLATE.md`](docs/agents/USER_AGENTS_TEMPLATE.md) · [`docs/agent-recipes.md`](docs/agent-recipes.md)
 - **Accuracy:** keep CLI examples aligned with `dashboard/scripts/validate-guide-cli-gbuilder.sh` where possible
 
 ---

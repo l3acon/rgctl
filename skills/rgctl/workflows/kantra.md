@@ -13,7 +13,10 @@ Native evaluation of [Konveyor Kantra](https://github.com/konveyor/kantra) rules
 ```bash
 rgctl discover . -l java --with-kantra
 # violations: .rgctl/kantra_findings.json
-# rules in graph: KantraRule / KantraRuleset nodes (GQL)
+
+# Post-index (when snapshot already exists):
+rgctl -f json rules run ./rules/ --target quarkus
+# rules in graph: find --type kantrarule / inventory --by type
 ```
 
 Report `catalog_id`, `evaluated_rules`, violation count, sample hits (`rule_id`, `file`, `line`, `matched_by`), and top `skipped_rules` reasons.
@@ -29,17 +32,18 @@ rgctl discover . -l java --with-kantra --kantra-target quarkus
 
 `target_filter` appears in `kantra_findings.json`. Only rules with `konveyor.io/target=<NAME>` labels are evaluated.
 
-### Rules inventory (GQL)
+### Rules inventory
 
-**User intent:** *"List migration rules indexed in the graph" / "Which rules target Quarkus?"*
+**User intent:** *"List migration rules indexed in the graph" / "How many Kantra rules?"*
 
 ```bash
-rgctl -f json gql "MATCH (r:KantraRule) RETURN r LIMIT 20"
-# Konveyor labels are node properties — use backtick-quoted keys:
-rgctl -f json gql 'MATCH (r:KantraRule) WHERE r.`konveyor.io/target` = '\''quarkus'\'' RETURN r'
+rgctl -f json find --type kantrarule --limit 50
+rgctl -f json inventory --by type   # KantraRule / KantraRuleset counts
+# after full eval: rule → code links
+rgctl -f json relations --edge violates --from-type kantrarule --limit 50
 ```
 
-`KantraRuleset` nodes link to rules via `CONTAINS` edges. After full eval, `VIOLATES` edges connect rules to code nodes; `kantra_findings.json` has line-level detail and enrichment.
+Line-level detail and enrichment live in `kantra_findings.json` (preferred over edge dumps for violations).
 
 ### Fixture / CI override
 
@@ -59,7 +63,7 @@ Mutually exclusive with `--kantra-catalog`. Embedded catalog is the default when
 rgctl discover . --with-kantra --kantra-index-only
 ```
 
-Useful when you only need GQL rule inventory. Eval stage is skipped; `kantra_findings.json` is not written.
+Useful when you only need structured rule inventory (`find --type kantrarule`). Eval stage is skipped; `kantra_findings.json` is not written.
 
 **Pitfalls:**
 

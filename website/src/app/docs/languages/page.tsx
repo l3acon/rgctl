@@ -18,12 +18,6 @@ export default function LanguagesIndexPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-      <p className="mb-6 text-sm text-[var(--mute)]">
-        <Link href="/docs/" className="underline">
-          Docs
-        </Link>
-        {" / Languages"}
-      </p>
       <Badge className="mb-4">Language support</Badge>
       <h1 className="text-3xl tracking-tight text-[var(--ink)] sm:text-4xl">
         Languages

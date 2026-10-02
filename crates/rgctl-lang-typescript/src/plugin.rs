@@ -435,6 +435,132 @@ impl TypeScriptPlugin {
         })
     }
 
+    fn extract_enum(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string)
+            .or_else(|| {
+                let mut cursor = node.walk();
+                node.children(&mut cursor).find_map(|c| {
+                    if matches!(c.kind(), "type_identifier" | "identifier") {
+                        c.utf8_text(source).ok().map(str::to_string)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .ok_or_else(|| Error::ParseError {
+                file: file_path.into(),
+                line: node.start_position().row + 1,
+                message: "Enum missing name".to_string(),
+            })?;
+
+        let mut fields = Vec::new();
+        if let Some(body) = node.child_by_field_name("body") {
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                if child.kind() == "enum_assignment"
+                    || child.kind() == "property_identifier"
+                    || child.kind() == "identifier"
+                {
+                    let member = if child.kind() == "enum_assignment" {
+                        child
+                            .child_by_field_name("name")
+                            .and_then(|n| n.utf8_text(source).ok())
+                            .map(str::to_string)
+                            .or_else(|| {
+                                let mut c = child.walk();
+                                child.children(&mut c).find_map(|n| {
+                                    if matches!(n.kind(), "property_identifier" | "identifier") {
+                                        n.utf8_text(source).ok().map(str::to_string)
+                                    } else {
+                                        None
+                                    }
+                                })
+                            })
+                    } else {
+                        child.utf8_text(source).ok().map(str::to_string)
+                    };
+                    if let Some(member) = member.filter(|s| !s.is_empty() && s != ",") {
+                        fields.push(Field {
+                            name: member,
+                            field_type: None,
+                            visibility: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(Symbol {
+            name,
+            symbol_type: SymbolType::Enum,
+            qualified_name: None,
+            location: SourceLocation {
+                file: file_path.to_string(),
+                start_line: node.start_position().row + 1,
+                end_line: node.end_position().row + 1,
+                start_column: node.start_position().column,
+                end_column: node.end_position().column,
+            },
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields,
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "typescript" }),
+        })
+    }
+
+    fn extract_type_alias(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string)
+            .or_else(|| {
+                let mut cursor = node.walk();
+                node.children(&mut cursor).find_map(|c| {
+                    if matches!(c.kind(), "type_identifier" | "identifier") {
+                        c.utf8_text(source).ok().map(str::to_string)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .ok_or_else(|| Error::ParseError {
+                file: file_path.into(),
+                line: node.start_position().row + 1,
+                message: "Type alias missing name".to_string(),
+            })?;
+
+        let value = node
+            .child_by_field_name("value")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(|s| s.trim().to_string());
+
+        Ok(Symbol {
+            name,
+            symbol_type: SymbolType::TypeAlias,
+            qualified_name: None,
+            location: SourceLocation {
+                file: file_path.to_string(),
+                start_line: node.start_position().row + 1,
+                end_line: node.end_position().row + 1,
+                start_column: node.start_position().column,
+                end_column: node.end_position().column,
+            },
+            signature: value.clone(),
+            return_type: value,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "typescript" }),
+        })
+    }
+
     fn extract_interface_properties(&self, object_type: Node, source: &[u8]) -> Result<Vec<Field>> {
         let mut fields = Vec::new();
         let mut cursor = object_type.walk();
@@ -625,6 +751,12 @@ impl TypeScriptPlugin {
                             }
                         }
                     }
+                }
+                "enum_declaration" => {
+                    symbols.push(plugin.extract_enum(node, source, file_path)?);
+                }
+                "type_alias_declaration" => {
+                    symbols.push(plugin.extract_type_alias(node, source, file_path)?);
                 }
                 "import_statement" => {
                     symbols.extend(extract_import_symbols(
@@ -1381,6 +1513,39 @@ export function gamma(n: number): number {
         assert_eq!(person_iface.symbol_type, SymbolType::Interface);
         // Fields extraction may vary based on tree-sitter parsing
         // The important thing is we found the interface
+    }
+
+    #[test]
+    fn test_extract_enum_and_type_alias() {
+        let plugin = TypeScriptPlugin::new().unwrap();
+        let source = br#"
+enum Status { Pending, Done }
+type Id = string | number;
+"#;
+        let symbols = plugin
+            .extract_symbols(Path::new("types.ts"), source)
+            .unwrap();
+        let en = symbols
+            .iter()
+            .find(|s| s.name == "Status" && s.symbol_type == SymbolType::Enum)
+            .expect("Status enum");
+        assert!(
+            en.fields.iter().any(|f| f.name == "Pending"),
+            "enum members: {:?}",
+            en.fields
+        );
+        let alias = symbols
+            .iter()
+            .find(|s| s.name == "Id" && s.symbol_type == SymbolType::TypeAlias)
+            .expect("Id type alias");
+        assert!(
+            alias
+                .signature
+                .as_deref()
+                .is_some_and(|s| s.contains("string")),
+            "alias signature: {:?}",
+            alias.signature
+        );
     }
 
     #[test]

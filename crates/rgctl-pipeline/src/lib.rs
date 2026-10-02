@@ -9,7 +9,9 @@ pub use parallel::{
     with_large_stack, with_pool,
 };
 pub use pipeline::{PipelineConfig, PipelineStats, ProcessingPipeline};
-pub use stream::{DEFAULT_STREAM_CHANNEL_CAPACITY, stream_into_graph};
+pub use stream::{
+    DEFAULT_STREAM_CHANNEL_CAPACITY, ExtractPhaseTimings, StreamStats, stream_into_graph,
+};
 
 use rgctl_error::Result;
 use rgctl_graph::CodeGraph;

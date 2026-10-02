@@ -14,7 +14,7 @@ Programmatic reference for parsing rgctl output. Every structured CLI command em
 2. [Schema versioning](#2-schema-versioning)
 3. [Command index](#3-command-index)
 4. [`discover`](#4-discover)
-5. [`gql`](#5-gql)
+5. [Structured query verbs](#5-structured-query-verbs)
 6. [`blast-radius`](#6-blast-radius)
 7. [`metrics`](#7-metrics)
 8. [`check`](#8-check)
@@ -43,7 +43,7 @@ Programmatic reference for parsing rgctl output. Every structured CLI command em
 
 ```bash
 export REPO=/path/to/coolstore
-rgctl -r "$REPO" -f json gql 'MATCH (n:Function) RETURN n LIMIT 5' | jq .
+rgctl -r "$REPO" -f json find --type function --limit 5 | jq .
 rgctl -r "$REPO" -f json blast-radius ShoppingCartService -o /tmp/blast.json
 ```
 
@@ -78,7 +78,7 @@ if (doc.schema_version !== 2) {
 |---------|------------------------:|------------------|
 | `discover` | **2** | v2 introduced structured `metrics` block |
 | `blast-radius` | **2** | v2 added `target.language`, `target.canonical_fqn`, `metrics.caller_depth_limit` |
-| `gql` | **1** | — |
+| `find` / `callers` / `callees` / `relations` / `inventory` / `status` | **2** (find/neighbors/relations/inventory); **1** (`status`) | — |
 | `metrics` | **1** | — |
 | `check` | **1** | — |
 | `slice` | **1** | — |
@@ -101,7 +101,8 @@ if (doc.schema_version !== 2) {
 | Command | `-f json` | Primary keys | Typical use |
 |---------|:---------:|--------------|-------------|
 | `discover` | ✅ | `metrics` | CI ingestion gates, timing |
-| `gql` | ✅ | `rows`, `count` | Graph queries, inventory |
+| `find` / `callers` / `callees` / `relations` / `inventory` | ✅ | `entities`, `edges`, `counts` | Symbol lookup, call graph, inventories |
+| `status` | ✅ | `status`, `nodes`, `edges` | Session snapshot health |
 | `blast-radius` | ✅ | `target`, `metrics`, `topology` | Change-impact automation |
 | `metrics` | ✅ | `pagerank`, `betweenness`, `communities` | Hotspot ranking |
 | `check` | ✅ | `passed`, `violations` | CI policy gate |
@@ -112,7 +113,7 @@ if (doc.schema_version !== 2) {
 | `cpg` | ✅ | varies by subcommand | Hybrid CPG façade |
 | `install` | ✅ | `writes` | Install bundled agent pack (skills + optional commands) |
 | `export` | ❌ (file) | — | Full-graph serialization |
-| `serve` | ❌ | — | HTTP dashboard + `/api/query` (foreground) |
+| `serve` | ❌ | — | HTTP dashboard + semantic API (foreground) |
 
 ---
 
@@ -170,81 +171,131 @@ rgctl -f json discover . | jq '.metrics | {nodes: .nodes_generated, ms: .duratio
 
 ---
 
-## 5. `gql`
+## 5. Structured query verbs
+
+Agent-facing graph exploration: `find`, `callers`, `callees`, `relations`, `inventory`, and `status`. Guide: [structured-query.md](guides/structured-query.md).
+
+**Source:** `crates/rgctl-graph/src/structured_query.rs`, `src/cli/structured_query.rs`, `src/cli/session_status.rs`
+
+### `find`
 
 ```bash
-rgctl -f json gql "<QUERY>" [--macro-name NAME] [--explain]
+rgctl -f json find [PATTERN] [--type TYPE] [--file GLOB] [--scope PREFIX] [--exact] [--limit N] [--count-only]
 ```
-
-### TypeScript shape
 
 ```typescript
-interface GqlResponse {
+interface FindResult {
+  schema_version: 2;
+  returned: number;
+  total: number;
+  entities?: EntityRow[];
+}
+
+interface EntityRow {
+  id: string;
+  name: string;
+  type: string;              // lowercase CLI form, e.g. "function"
+  qualified_name?: string;
+  file?: string;
+  line?: number;
+  attributes?: string;       // with --show-attributes + --annotation
+}
+```
+
+Ambiguous symbols return `error: "ambiguous_symbol"` with `candidates[]` (stdout JSON, exit non-zero).
+
+### `callers` / `callees`
+
+```bash
+rgctl -f json callers SYMBOL [--depth N] [--file GLOB] [--limit N]
+rgctl -f json callees SYMBOL [--depth N]
+```
+
+```typescript
+interface CallNeighborsResult {
+  schema_version: 2;
+  target: EntityRow;
+  callers?: EntityRow[];     // `callers` subcommand
+  callees?: EntityRow[];     // `callees` subcommand
+  hops: number[];
+  returned: number;
+  total: number;
+  depth: number;
+  direction: "callers" | "callees";
+}
+```
+
+### `relations`
+
+```bash
+rgctl -f json relations [SYMBOL] --edge EDGE [--direction out|in|both] [--from-type T] [--to-type T] [--depth N]
+```
+
+```typescript
+interface RelationsResult {
+  schema_version: 2;
+  target?: EntityRow;
+  edges: EdgeRow[];
+  returned: number;
+  total: number;
+}
+
+interface EdgeRow {
+  source: EntityRow;
+  edge: string;
+  direction: string;
+  target: EntityRow;
+  hops?: number;
+  occurrences: number;
+}
+```
+
+### `inventory`
+
+```bash
+rgctl -f json inventory --by type|edge|lang|file|community|import-prefix [--file GLOB] [--scope PREFIX]
+```
+
+```typescript
+interface InventoryResult {
+  schema_version: 2;
+  by: string;
+  counts: { key: string; count: number; occurrences?: number }[];
+}
+```
+
+### `status`
+
+```bash
+rgctl -f json status
+```
+
+```typescript
+interface SessionStatus {
   schema_version: 1;
-  rows: GqlRow[];       // one entry per MATCH result row
-  count: number;        // always rows.length
-  explain: boolean;     // mirrors --explain (plan is text-only)
-}
-
-interface GqlRow {
-  binding: string;      // variable name from MATCH (e.g. "n", "a")
-  node: string;         // bare symbol name (or community label)
-  type: string;         // node type label, e.g. "Function" or "Community"
-  file: string | null;  // source path when indexed
-  community_id?: number; // present on :Community rows; optional on functions when joined
-  label?: string;        // :Community label
-  member_count?: number; // :Community size
+  command: "status";
+  status: "ok" | "missing";
+  repo: string;
+  snapshot?: string;
+  digest?: string;
+  nodes?: number;
+  edges?: number;
+  kantra_findings: boolean;
+  kantra_findings_path?: string;
+  message?: string;
 }
 ```
 
-Each `rows[i]` is an **array** of bindings (one object per variable in the `RETURN` clause).
-
-Virtual `:Community` nodes and `f.community_id` filters join `.rgctl/analysis_results.bin`
-(see [community-query-and-naming-plan.md](design/community-query-and-naming-plan.md)).
-
-### Example
-
-```json
-{
-  "schema_version": 1,
-  "rows": [
-    [
-      {
-        "binding": "n",
-        "node": "ShoppingCartService",
-        "type": "Function",
-        "file": "src/main/java/com/redhat/coolstore/service/ShoppingCartService.java"
-      }
-    ]
-  ],
-  "count": 1,
-  "explain": false
-}
-```
-
-### jq
+### jq examples
 
 ```bash
-# All function names
-rgctl -f json gql 'MATCH (n:Function) RETURN n' \
-  | jq -r '.rows[][].node'
-
-# Multi-binding row (a,b) from a CALLS query
-rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a,b LIMIT 5' \
-  | jq '.rows[] | map({binding, node, file})'
-
-# Named communities
-rgctl -f json gql --macro-name all_communities unused \
-  | jq '.rows[:5][][] | {id: .community_id, label, member_count}'
-```
-
-### Macros
-
-When `--macro-name` is set, the positional query string is ignored:
-
-```bash
-rgctl -f json gql --macro-name all_functions 'unused'
-# Macros: all_functions | direct_calls | call_chain | all_communities
+rgctl -f json find --type function --count-only | jq '.total'
+rgctl -f json find clearCart --type function --exact | jq '.entities[].file'
+rgctl -f json callers clearCart | jq '.callers[].name'
+rgctl -f json relations clearCart --edge calls --direction in | jq '.edges[].source.name'
+rgctl -f json inventory --by community | jq '.counts[:5]'
+rgctl -f json communities list | jq '.communities[:5]'
+rgctl -f json find --type kantrarule --limit 5 | jq '.entities[].name'
 ```
 
 ---
@@ -649,7 +700,7 @@ rgctl export --export-format mermaid --export-output clearCart.mmd --query 'name
 
 `obsidian` and `okf` export **doc heading modules** from the graph; use `--query all`. Output for `obsidian` is a **directory** (`--export-output "$REPO/vault"`), not a single file.
 
-`--query` uses **filter syntax** (`all`, `name:Foo`, `type:Function`, `functions`) — not GQL `MATCH`. The summary line reports the filtered node/edge counts (or note count for Obsidian).
+`--query` uses **filter syntax** (`all`, `name:Foo`, `type:Function`, `functions`) — not `find` patterns. The summary line reports the filtered node/edge counts (or note count for Obsidian).
 
 ---
 
@@ -802,7 +853,7 @@ Incremental filecontent results are cached under `.rgctl/kantra_cache/` (content
 | `cache_hits` | number? | Per-file cache hits (`builtin.filecontent` warmup); omitted when zero |
 | `cache_misses` | number? | Stale cache entries re-evaluated; omitted when zero |
 
-Query violation edges: `MATCH (r:KantraRule)-[:VIOLATES]->(n) RETURN r, n LIMIT 20`.
+Query violation edges: `rgctl -f json relations --edge violates --from-type kantrarule --limit 20`.
 
 Fixture override (`--kantra-rules`) omits full Konveyor `catalog_id` unless the ruleset was compiled from the submodule.
 
@@ -815,7 +866,7 @@ Binary artifacts (`graph.snapshot.bin`, `graph_payload.bin`, `blast_engine.snaps
 | Command | `0` | `1` |
 |---------|-----|-----|
 | `discover` | Success | Failure |
-| `gql` | Success | Query/IO error |
+| `find` / `callers` / `relations` / … | Success | Query/IO error |
 | `blast-radius` | Success, or policy skipped | `--policy-file` + `policy_status == "VIOLATED"` (JSON still on stdout) |
 | `check` | `passed == true` | `passed == false` |
 | `slice` / `inspect` / `metrics` / `export` | Success | Error |
@@ -861,8 +912,8 @@ function rgctlJson(repo, ...args) {
   return JSON.parse(out);
 }
 
-const gql = rgctlJson(process.env.REPO, "gql", "MATCH (n:Function) RETURN n");
-const names = gql.rows.flat().map((b) => b.node);
+const inv = rgctlJson(process.env.REPO, "find", "--type", "function", "--count-only");
+const total = inv.total;
 ```
 
 ### CI ingestion gate
@@ -877,7 +928,7 @@ test "$nodes" -gt 100
 
 ```bash
 rgctl -f json discover . | tee discover.json
-rgctl -f json gql --macro-name all_functions x | jq '.count'
+rgctl -f json find --type function --count-only | jq '.total'
 ```
 
 ---
@@ -1006,7 +1057,7 @@ rgctl -r "$REPO" -f json communities list | jq '.communities[:10]'
 rgctl -r "$REPO" -f json communities list | jq '{modularity, n: (.communities|length)}'
 ```
 
-GQL alternative: `--macro-name all_communities` (see User Guide §6).
+See also `inventory --by community` (User Guide §6).
 
 ---
 
@@ -1079,14 +1130,34 @@ rgctl -r "$REPO" -f json cpg calls priceShoppingCart | jq '.edges[:10]'
 
 ---
 
-## 18. `install`
+## 18. `vuln triage` / `deps check` / `vuln analyze` / `taint`
 
-Install the embedded **agent pack** (workflow skills, optional commands, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **2**.
-
-Human-readable install reference: [Agent commands guide](guides/agent-commands.md).
+OSV supply-chain + reachability (does **not** run on discover). Parse uses the [`osv`](https://crates.io/crates/osv) schema crate; OpenVEX via [`openvex`](https://crates.io/crates/openvex). Types: `rgctl-security`. Analyze `schema_version` is **1**.
 
 ```bash
-rgctl -r "$REPO" -f json install --skill [--with-commands] [--with-policy] \
+rgctl -f json vuln triage --osv ./advisory.json
+rgctl -r "$REPO" -f json deps check --osv ./advisory.json --include-jars lib
+rgctl -r "$REPO" -f json find --package 'com.fasterxml.jackson.core:jackson-databind' -t import
+rgctl -r "$REPO" -f json callers ObjectMapper --methods readValue,writeValueAsString
+rgctl -r "$REPO" -f json blast-radius <Symbol> --classify-boundary
+rgctl -r "$REPO" -f json taint --sink ObjectMapper.readValue --source external   # needs discover --with-cfg
+rgctl -r "$REPO" -f json vuln analyze --osv ./advisory.json --include-jars lib
+```
+
+`deps check` verdict: `not_affected` | `affected_candidate`. Analyze `exploitability`: `not_affected` | `not_exploitable` | `exploitable` | `under_investigation`. Bundled JAR / `node_modules` scans are **opt-in**. Sink-first requires CFG artifacts.
+
+Human guide: [Agent pack](guides/agent-skill.md) · skill workflow `vuln`.
+
+---
+
+## 19. `install`
+
+Install the embedded **agent pack** (single skill `rgctl`, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **3**.
+
+Human-readable install reference: [Agent pack walkthrough](guides/agent-skill.md).
+
+```bash
+rgctl -r "$REPO" -f json install --skill [] [--with-policy] \
   [--tools cursor,claude,codex,agents|all] [-g] [--force]
 rgctl -f json install --list-agents
 ```
@@ -1110,16 +1181,15 @@ type ListAgentsResponse = {
 
 ```typescript
 type InstallWriteStatus = "created" | "unchanged" | "overwritten" | "skipped_exists";
-type InstallWriteKind = "skill" | "command" | "policy" | "meta";
+type InstallWriteKind = "skill" | "policy" | "meta";
 
 type InstallResponse = {
-  schema_version: 2;
+  schema_version: 3;
   command: "install";
   skill: "rgctl";
   repo: string; // absolute install prefix (repo or home for -g)
   scope: "local" | "global";
   agents: string[];
-  with_commands: boolean;
   with_policy: boolean;
   force: boolean;
   writes: Array<{
@@ -1136,7 +1206,7 @@ type InstallResponse = {
 Pass `--skill` and/or `--with-policy`. `--host` is deprecated (use `--tools`). Workflow markdown is authored under `skills/rgctl/workflows/`; installed `references/workflows.md` is assembled at rgctl build time. If any write is `skipped_exists`, JSON is still printed and the process exits 1.
 
 ```bash
-rgctl -r "$REPO" -f json install --skill --with-commands | jq '.writes[] | {agent, workflow, kind, status}'
+rgctl -r "$REPO" -f json install --skill | jq '.writes[] | {agent, workflow, kind, status}'
 ```
 
 ---
@@ -1157,7 +1227,7 @@ See [cli-io-sanity-qe.md](cli-io-sanity-qe.md) for the full coverage matrix.
 
 - [user-guide.md](user-guide.md) — install, ecommerce-java walkthrough (CoolStore dual API), CLI examples
 - Field catalogs — exhaustive tables later in this document (formerly `cli-output-schemas.md`)
-- [http-api.md](http-api.md) — `rgctl serve` and `/api/query`
+- [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) — `rgctl serve`, dashboard, semantic HTTP API
 - [cli-io-sanity-qe.md](cli-io-sanity-qe.md) — subprocess JSON contract and release perf gates
 
 ---
@@ -1166,10 +1236,10 @@ See [cli-io-sanity-qe.md](cli-io-sanity-qe.md) for the full coverage matrix.
 
 ## Conventions matrix
 
-| Convention | blast-radius | discover | gql | metrics | check | slice | inspect | semantic | communities | cpg | install |
-|------------|:------------:|:--------:|:---:|:-------:|:-----:|:-----:|:-------:|:--------:|:-----------:|:---:|:-------:|
-| `schema_version` | ✅ v2 | ✅ v2 | ✅ v1 | ✅ v1 | ✅ v1 | ✅ v1 | ✅ v1 | ✅ v2/v3 | ✅ v1 | ✅ v1 | ✅ v1 |
-| Typed `*_output.rs` / analysis types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Convention | blast-radius | discover | structured query | metrics | check | slice | inspect | semantic | communities | cpg | install |
+|------------|:------------:|:--------:|:----------------:|:-------:|:-----:|:-----:|:-------:|:--------:|:-----------:|:---:|:-------:|
+| `schema_version` | ✅ v2 | ✅ v2 | ✅ v2 (v1 status) | ✅ v1 | ✅ v1 | ✅ v1 | ✅ v1 | ✅ v2/v3 | ✅ v1 | ✅ v1 | ✅ v1 |
+| Typed `*_output.rs` / analysis types | ✅ | ✅ | ✅ (graph crate) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Explicit empty arrays | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Omitted optional keys | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — |
 | Composable graph topology | ✅ | — | — | — | — | ✅ | ✅ | — | — | — | — |
@@ -1209,7 +1279,7 @@ rgctl -f json blast-radius <SYMBOL> [--depth N] [--policy-file PATH] [--with-sli
 | `--with-slices` | Populate `gatekeeping.handoffs` (requires full graph path) |
 | `--class` / `--file` | Disambiguate overloads |
 
-**Optional warm path:** foreground `rgctl serve` is `POST /api/query` on `127.0.0.1:8080`. Daemon HTTP uses `/{reponame}/api/query`. See [http-api.md](http-api.md).
+**Optional warm path:** foreground `rgctl serve` is `POST /api/query` on `127.0.0.1:8080`. Daemon HTTP uses `/{reponame}/api/query`. See [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
 
 **Source:** `src/cli/blast_radius_output.rs`  
 **Cache enrichment:** `crates/rgctl-analysis/src/macro_call_index.rs`, `macro_call_lookup.rs`
@@ -1377,7 +1447,7 @@ rgctl -f json blast-radius <SYMBOL> [--depth N] [--policy-file PATH] [--with-sli
 rgctl serve -r REPO [--open]
 ```
 
-Binds `http://127.0.0.1:8080/` — dashboard at `/`, GQL at `POST /api/query`. See [http-api.md](http-api.md).
+Binds `http://127.0.0.1:8080/` — dashboard at `/`, semantic search at `POST /api/semantic/query`. See [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
 
 **Requires:** prior `discover` producing `graph.snapshot.bin` under `{repo}/.rgctl/`.
 
@@ -1438,55 +1508,13 @@ Without `-f json`, discover remains human-readable text progress (unchanged).
 
 ---
 
-## 3. `gql` — schema v1
+## 3. Structured query — schema v2 (field catalog)
 
-**Command:**
+**Commands:** `find`, `callers`, `callees`, `relations`, `inventory` (`schema_version` **2**); `status` (`schema_version` **1**).
 
-```bash
-rgctl -f json gql "<QUERY>" [--explain] [--macro NAME]
-```
+**Source:** `crates/rgctl-graph/src/structured_query.rs`, `src/cli/structured_query.rs`, `src/cli/session_status.rs`
 
-**Source:** `src/cli/gql_output.rs`
-
-```json
-{
-  "schema_version": 1,
-  "rows": [
-    [
-      {
-        "binding": "string",
-        "node": "string",
-        "type": "string",
-        "qualified_name": "string (optional)",
-        "file": "string | null",
-        "community_id": "number (optional)",
-        "label": "string (optional)",
-        "member_count": "number (optional)",
-        "properties": "object (optional, allowlisted keys)"
-      }
-    ]
-  ],
-  "count": 0,
-  "explain": false
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `rows` | array | One element per result row; each row is an array of bindings |
-| `count` | integer | Always equals `rows.length` |
-| `explain` | boolean | Mirrors `--explain` flag |
-| `binding` | string | Variable name from the `MATCH` pattern |
-| `node` | string | Matched node bare name (or community label) |
-| `type` | string | `NodeType` debug name, or `"Community"` for virtual overlay nodes |
-| `qualified_name` | string \| omitted | Graph FQN when present; filter with `WHERE n.qualified_name = '...'` (not `n.name`) |
-| `file` | string \| null | Source path when present on the node |
-| `community_id` | number \| omitted | Community id on `:Community` rows |
-| `label` | string \| omitted | Heuristic community label |
-| `member_count` | number \| omitted | Community size |
-| `properties` | object \| omitted | Allowlisted extract properties (`is_lambda`, `throws`, …) |
-
-**Note:** The explain **plan** is not included in JSON; it prints to text mode only. Virtual `:Community` / `community_id` require `.rgctl/analysis_results.bin` after `discover`.
+See [§5 Structured query verbs](#5-structured-query-verbs) for TypeScript shapes and jq recipes. `EntityRow.id` is the stable graph UUID (use with `blast-radius` and export filters).
 
 ---
 

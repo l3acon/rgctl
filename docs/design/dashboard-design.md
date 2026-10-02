@@ -276,7 +276,7 @@ _Update this table when a phase lands._
 | `tests/dashboard_harness.rs` | 8 | **done** | phase 8 + `taint_index.json` |
 | `tests/dashboard_metasfresh.rs` | 8+ | **manual** | metasfresh `discover --with-cfg --with-security --with-taint`; `./scripts/test-dashboard-metasfresh.sh` |
 | Query Guide tab | 9 | **done** | `GuideView.tsx` + `guideCliWorkflows.ts`; validated by `validate-guide-cli-gbuilder.sh` |
-| HTTP `serve` integration | 9 | **done** | `rgctl serve` serves bundle + `/api/query`; see [http-api.md](http-api.md) |
+| HTTP `serve` integration | 9 | **done** | `rgctl serve` serves bundle + `/api/query`; see [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | Migration tab live weights | 9 | **done** | `MigrationView.tsx` mirrors Rust scoring; exports in `.rgctl/dashboard/` |
 
 ### Removed (Phase 0)

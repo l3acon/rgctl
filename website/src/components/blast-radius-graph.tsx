@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 export type GraphSceneId =
   | "blast-radius"
-  | "gql"
+  | "find"
   | "semantic"
   | "cpg"
   | "metrics"
@@ -118,10 +118,10 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
     ],
   },
 
-  gql: {
-    aria: "GQL inventory query highlighting matched functions",
-    fig: "Fig. gql · all_functions",
-    stats: "MATCH · typed edges",
+  find: {
+    aria: "Structured find inventory highlighting matched functions",
+    fig: "Fig. find · --type function",
+    stats: "find · typed inventory",
     dimEdges: [
       "M80,80 C140,60 200,60 260,80",
       "M260,80 C320,100 360,140 380,200",
@@ -145,8 +145,8 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
       },
     ],
     nodes: [
-      { x: 80, y: 80, r: 9, label: ":Function", lx: 96, ly: 76, role: "dim" },
-      { x: 260, y: 80, r: 8, label: ":Class", lx: 274, ly: 76, role: "dim" },
+      { x: 80, y: 80, r: 9, label: "Function", lx: 96, ly: 76, role: "dim" },
+      { x: 260, y: 80, r: 8, label: "Class", lx: 274, ly: 76, role: "dim" },
       {
         x: 240,
         y: 200,
@@ -156,9 +156,9 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
         ly: 190,
         role: "focus",
       },
-      { x: 360, y: 180, r: 9, label: "CALLS→", lx: 374, ly: 176, role: "hit" },
-      { x: 160, y: 280, r: 8, label: "rows[]", lx: 174, ly: 276, role: "hit" },
-      { x: 380, y: 200, r: 8, label: "schema_v1", lx: 340, ly: 230, role: "dim" },
+      { x: 360, y: 180, r: 9, label: "callers→", lx: 374, ly: 176, role: "hit" },
+      { x: 160, y: 280, r: 8, label: "entities[]", lx: 174, ly: 276, role: "hit" },
+      { x: 380, y: 200, r: 8, label: "schema_v2", lx: 340, ly: 230, role: "dim" },
     ],
   },
 

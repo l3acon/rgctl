@@ -251,6 +251,7 @@ pub fn resolve_symbol_uuid(candidates: &[MacroIndexEntry], parsed: &ParsedSymbol
             Err(Error::AmbiguousSymbol {
                 name: parsed.target_name.clone(),
                 count,
+                candidates: vec![],
             })
         }
     }
@@ -806,6 +807,7 @@ impl MacroCallLookupDb {
             count => Err(Error::AmbiguousSymbol {
                 name: symbol.to_string(),
                 count,
+                candidates: vec![],
             }),
         }
     }

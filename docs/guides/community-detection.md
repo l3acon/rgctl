@@ -18,8 +18,10 @@ Communities reveal the implicit architecture of your code -- groups of functions
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` first:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover
+rgctl -r example/coolstore discover -l java
 ```
 
 ## Step-by-Step
@@ -38,34 +40,29 @@ rgctl -r example/coolstore -f json communities list
 {
   "communities": [
     {
-      "id": 4391,
-      "label": "bower_components.lodash (26)",
-      "member_count": 120
+      "id": 187,
+      "label": "ArrayList",
+      "member_count": 16
     },
     {
-      "id": 14763,
+      "id": 591,
       "label": "Infrastructure / Common Library",
-      "member_count": 60
+      "member_count": 13
     },
     {
-      "id": 10878,
-      "label": "bower_components.angular (105)",
-      "member_count": 53
+      "id": 499,
+      "label": "Order",
+      "member_count": 12
     },
     {
-      "id": 4983,
-      "label": "Serializable",
-      "member_count": 53
+      "id": 174,
+      "label": "coolstore.service::getProductId",
+      "member_count": 10
     },
     {
-      "id": 12715,
-      "label": "coolstore.model::length",
-      "member_count": 34
-    },
-    {
-      "id": 10882,
-      "label": "coolstore.model::APPLICATION_JSON",
-      "member_count": 30
+      "id": 301,
+      "label": "coolstore.service::CatalogItemEntity",
+      "member_count": 9
     }
   ],
   "schema_version": 1
@@ -74,22 +71,21 @@ rgctl -r example/coolstore -f json communities list
 
 **What this tells you:**
 
-- **`id`** -- the community's unique identifier, usable in GQL queries.
+- **`id`** -- the community's unique identifier (use with `inventory --by community` and scoped `find`).
 - **`label`** -- a heuristic label generated from the most representative member names and paths.
 - **`member_count`** -- how many functions belong to this community.
-- The largest community (120 members) is the lodash utility library. The second largest (60 members) is labeled "Infrastructure / Common Library" -- rgctl detected it as shared infrastructure code.
-- The `coolstore.model` communities contain the domain model (entities, serialization).
+- Largest communities on the Java-only CoolStore index are small domain clusters (e.g. `ArrayList` stubs, `Order`, `coolstore.service::*`) plus an **Infrastructure / Common Library** bucket — not vendor JS.
 
-### 2. Query Community Members with GQL
+### 2. Explore community members
 
-Once you have a community ID, use GQL to list its members:
+Community labels are heuristics (often `package::symbol`). Use the label’s package prefix as a `--scope` on `find`:
 
 ```bash
-rgctl -r example/coolstore -f json gql \
-  "MATCH (f:Function) WHERE f.community_id = '12715' RETURN f LIMIT 20"
+rgctl -r example/coolstore -f json find --type function \
+  --scope com.redhat.coolstore.model --limit 20
 ```
 
-This returns all functions in the `coolstore.model::length` community (ID 12715), showing you which functions the algorithm grouped together.
+Pair with `communities list` to map ids → labels, and `inventory --by community` for sizes.
 
 ### 3. Refresh Community Labels
 
@@ -101,45 +97,11 @@ rgctl -r example/coolstore communities label --write
 
 The `--write` flag persists the updated labels into the analysis results, so subsequent `communities list` calls use the new labels.
 
-### 4. Find Communities via GQL Macro
-
-You can also list communities using the GQL macro:
+### 4. Community inventory
 
 ```bash
-rgctl -r example/coolstore -f json gql --macro-name all_communities unused
+rgctl -r example/coolstore -f json inventory --by community | jq '.counts[:5]'
 ```
-
-**Output (truncated):**
-
-```json
-{
-  "count": 10902,
-  "rows": [
-    [
-      {
-        "binding": "c",
-        "community_id": 4391,
-        "label": "bower_components.lodash (26)",
-        "member_count": 120,
-        "node": "bower_components.lodash (26)",
-        "type": "Community"
-      }
-    ],
-    [
-      {
-        "binding": "c",
-        "community_id": 14763,
-        "label": "Infrastructure / Common Library",
-        "member_count": 60,
-        "type": "Community"
-      }
-    ]
-  ],
-  "schema_version": 1
-}
-```
-
-This returns the same information as `communities list` but through the GQL interface, which allows additional filtering.
 
 ### 5. Semantic Search by Community
 
@@ -161,7 +123,7 @@ rgctl generates community labels heuristically from member names and file paths:
 |---------------|---------|
 | `coolstore.model::length` | Functions from the `coolstore.model` package, anchored by `length` |
 | `Infrastructure / Common Library` | Cross-cutting utility functions without a dominant package |
-| `bower_components.lodash (26)` | Functions from a third-party library, numbered for disambiguation |
+| `coolstore.service::getProductId` | Package-prefix heuristic from member names/paths |
 | `coolstore.model::APPLICATION_JSON` | Domain model functions related to JSON serialization |
 
 ## Benefits
@@ -170,12 +132,12 @@ rgctl generates community labels heuristically from member names and file paths:
 - **Data-driven boundaries.** Communities are based on actual call relationships, not directory layout or naming conventions.
 - **Microservice candidates.** Well-separated communities with clear labels are natural extraction targets.
 - **Coupling visibility.** Large or oddly-named communities surface unexpected coupling between modules.
-- **Composable with other commands.** Community IDs work in GQL queries, semantic search, and migration planning.
+- **Composable with other commands.** Community labels work with scoped `find`, semantic search, and migration planning.
 
 ## Related Guides
 
 - [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- `discover` runs community detection
 - [Graph Metrics](graph-metrics.md) -- community modularity score via `metrics --communities`
 - [Semantic Search](semantic-search.md) -- community-scoped semantic queries
-- [Graph Query Language](graph-query-language.md) -- query community members with GQL
+- [Structured graph queries](structured-query.md) -- `find`, `inventory`, and `communities list`
 - [Migration Planning](migration-planning.md) -- communities define migration extraction steps

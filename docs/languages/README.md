@@ -14,4 +14,4 @@ The **website** builds `/docs/languages/` (and `/docs/languages/{id}/`) from tho
 - [Tier 1 language support](../tier-1-language-support.md) — Layers A–F contributor bar
 - [Markdown context](../markdown-context.md) — doc markup plugin (also has a coverage JSON)
 - Honesty notes (where present): `docs/*-extract-honesty.md`
-- GQL smoke scripts: `rgctl-tests/gql-verification-smoke/`
+- Langfeature / structured-query smoke harnesses under `rgctl-tests/` (per-language ecommerce fixtures).

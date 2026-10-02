@@ -147,7 +147,11 @@ fn resolve_symbol_function(
                 let source = fs::read_to_string(&file)?;
                 return Ok((node, source));
             }
-            Err(rgctl_error::Error::AmbiguousSymbol { name, count }) => {
+            Err(rgctl_error::Error::AmbiguousSymbol {
+                name,
+                count,
+                candidates: _,
+            }) => {
                 anyhow::bail!(
                     "Symbol '{name}' is ambiguous. Found {count} matches. \
                      Refine with path syntax: rgctl inspect \"path/to/file.ts::{name}\" cfg"

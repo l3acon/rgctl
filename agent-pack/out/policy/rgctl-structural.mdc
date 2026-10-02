@@ -4,7 +4,7 @@ globs:
 alwaysApply: true
 rgctl-managed: true
 metadata:
-  generatedBy: "rgctl 0.4.13"
+  generatedBy: "rgctl 0.0.0-dev"
 ---
 
 # rgctl structural policy (best-effort)

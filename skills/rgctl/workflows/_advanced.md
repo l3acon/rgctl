@@ -6,8 +6,8 @@
 
 ```bash
 rgctl -r "$REPO" serve --open
-# POST http://127.0.0.1:8080/api/query
-# {"query":"MATCH (n:Function) RETURN n LIMIT 5"}
+# Dashboard UI for exploration; agents should still prefer CLI structured verbs:
+#   rgctl -f json find|callers|relations|inventory|status …
 ```
 
-See [docs/http-api.md](../../docs/http-api.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for repeated HTTP queries on one repo.
+See [docs/guides/http-server-and-dashboard.md](../../docs/guides/http-server-and-dashboard.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.

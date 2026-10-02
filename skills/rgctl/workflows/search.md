@@ -7,7 +7,7 @@ rgctl -r "$REPO" semantic index                    # opt-in; default vocab. extr
 rgctl -r "$REPO" -f json semantic query "checkout flow" --limit 10
 ```
 
-Fusion is on by default for semantic query; use GQL for exact graph patterns.
+Fusion is on by default for semantic query. For exact graph patterns use structured verbs (`find`, `callers`, `relations`, `inventory`) — not freeform Cypher.
 
 ### NL function search
 
@@ -25,12 +25,12 @@ rgctl -r "$REPO" -f json semantic query "checkout" --scope community --limit 10
 
 Hits are pooled **community** results (same `hits[]` contract).
 
-### Concept search with 0 LIKE hits
+### Concept search with empty hits
 
-If GQL LIKE returns 0 for a concept (e.g., "ingress", "gateway"):
+If `find` / name globs return 0 for a concept (e.g., "ingress", "gateway"):
 
 1. Try `communities list` and grep labels
 2. Try `semantic query "<concept>"`
-3. Broaden LIKE to non-Function node types (Modules, Classes)
+3. Broaden with `find '*Gateway*' --type class` or `inventory --by type`
 
 Concepts often live in package/directory paths or type names, not bare function names.

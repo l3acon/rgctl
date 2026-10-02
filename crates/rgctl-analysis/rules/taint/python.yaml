@@ -1,0 +1,89 @@
+schema_version: 1
+id: python-builtins
+languages:
+- python
+rules:
+- id: py-src-http
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - request.GET
+    - request.POST
+- id: py-src-file
+  role: source
+  kind: FileInput
+  match:
+    type: substring
+    value: open(
+- id: py-src-argv
+  role: source
+  kind: CommandLineArg
+  match:
+    type: substring
+    value: sys.argv
+- id: py-src-env
+  role: source
+  kind: EnvironmentVar
+  match:
+    type: substring
+    value: os.environ
+- id: py-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - execute(
+    - executemany(
+- id: py-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - os.system(
+    - subprocess.
+- id: py-sink-eval
+  role: sink
+  kind: CodeEval
+  match:
+    type: any_substring
+    values:
+    - eval(
+    - exec(
+- id: py-sink-html
+  role: sink
+  kind: HtmlRender
+  cwe: CWE-79
+  match:
+    type: any_substring
+    values:
+    - render(
+    - .html
+- id: py-san-num
+  role: sanitizer
+  kind: TypeCast
+  detail: numeric
+  match:
+    type: any_substring
+    values:
+    - int(
+    - float(
+- id: py-san-html
+  role: sanitizer
+  kind: HtmlEscape
+  match:
+    type: any_substring
+    values:
+    - escape(
+    - html.escape
+- id: py-san-shell
+  role: sanitizer
+  kind: ShellEscape
+  match:
+    type: substring
+    value: shlex.quote

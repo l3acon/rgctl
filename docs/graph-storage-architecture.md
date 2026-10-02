@@ -34,7 +34,7 @@ v2 uses fixed-width rows (64 B node, 40 B edge) + string pool. BLAKE3 `content_d
 
 ## SQLite (blast-radius only)
 
-rgctl does **not** store the knowledge graph in SQLite. The only SQLite usage is `macro_call_index.db` in `rgctl-analysis` — a precomputed **blast-radius lookup cache** written at `discover` and read by `blast-radius` T0 (`MacroCallLookupDb`). GQL, export, and metrics use the columnar mmap graph.
+rgctl does **not** store the knowledge graph in SQLite. The only SQLite usage is `macro_call_index.db` in `rgctl-analysis` — a precomputed **blast-radius lookup cache** written at `discover` and read by `blast-radius` T0 (`MacroCallLookupDb`). Structured query verbs, export, and metrics use the columnar mmap graph.
 
 ## Downstream
 

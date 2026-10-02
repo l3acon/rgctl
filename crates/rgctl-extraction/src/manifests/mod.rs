@@ -26,22 +26,26 @@ pub struct DependencyDeclaration {
     pub unresolved: bool,
 }
 
-/// Extract Dependency symbols and File→Dependency `DependsOn` relations.
-pub fn extract_manifest(path: &Path, source: &[u8]) -> (Vec<Symbol>, Vec<Relation>) {
+/// Parse a known build manifest into dependency declarations (no graph emit).
+pub fn extract_declarations(path: &Path, source: &[u8]) -> Vec<DependencyDeclaration> {
     let basename = path
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let decls = match basename.as_str() {
+    match basename.as_str() {
         "pom.xml" => maven::extract(path, source),
         "cargo.toml" => cargo::extract(path, source),
         "package.json" => npm::extract(path, source),
         "go.mod" => go_mod::extract(path, source),
         "build.gradle" | "build.gradle.kts" => gradle::extract(path, source),
         _ => Vec::new(),
-    };
-    declarations_to_graph(path, decls)
+    }
+}
+
+/// Extract Dependency symbols and File→Dependency `DependsOn` relations.
+pub fn extract_manifest(path: &Path, source: &[u8]) -> (Vec<Symbol>, Vec<Relation>) {
+    declarations_to_graph(path, extract_declarations(path, source))
 }
 
 fn declarations_to_graph(

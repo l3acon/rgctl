@@ -105,6 +105,9 @@ pub struct BlastRadiusResponse {
     pub metrics: BlastRadiusMetrics,
     pub topology: BlastRadiusTopology,
     pub gatekeeping: BlastRadiusGatekeeping,
+    /// Boundary labels when `--classify-boundary` is set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boundaries: Vec<serde_json::Value>,
 }
 
 /// Read-only node lookup for building symbol contexts.
@@ -277,6 +280,7 @@ pub fn build_from_engine_result(
             impact_zone: contexts_from_ids(impact_ids, &lookup),
         },
         gatekeeping,
+        boundaries: vec![],
     }
 }
 
@@ -314,6 +318,7 @@ pub fn build_from_cache_entry(
             impact_zone,
         },
         gatekeeping,
+        boundaries: vec![],
     }
 }
 
@@ -471,6 +476,7 @@ pub fn fixture_response() -> BlastRadiusResponse {
             ],
         },
         gatekeeping: skipped_gatekeeping(),
+        boundaries: vec![],
     }
 }
 

@@ -4,7 +4,29 @@
 //! We use `thiserror` for ergonomic error definitions with automatic trait implementations.
 
 use std::path::PathBuf;
+use serde::Serialize;
 use thiserror::Error;
+
+/// Lean candidate row when a symbol name matches multiple nodes.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SymbolCandidate {
+    /// Node UUID
+    pub id: String,
+    /// Bare name
+    pub name: String,
+    /// Fully qualified name when present
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qualified_name: Option<String>,
+    /// Node type (lowercase CLI form)
+    #[serde(rename = "type")]
+    pub node_type: String,
+    /// Source file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// Definition line
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+}
 
 /// Main error type for rgctl operations
 #[derive(Error, Debug)]
@@ -73,9 +95,16 @@ pub enum Error {
     #[error("Resource not found: {0}")]
     NotFound(String),
 
-    /// Symbol name matched multiple graph nodes
+    /// Symbol name matched multiple graph nodes.
+    ///
+    /// `candidates` carries lean rows for agent recovery (may be empty for legacy call sites).
+    /// Prefer emitting them under `-f json` as an `ambiguous_symbol` envelope.
     #[error("Ambiguous symbol '{name}': {count} matches")]
-    AmbiguousSymbol { name: String, count: usize },
+    AmbiguousSymbol {
+        name: String,
+        count: usize,
+        candidates: Vec<SymbolCandidate>,
+    },
 
     /// Generic error with context
     #[error("{0}")]

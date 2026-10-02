@@ -1,34 +1,25 @@
 //! C++ language plugin using Tree-sitter.
 
 use rgctl_plugin_api::*;
+use rgctl_plugin_helpers::parse_source;
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// C++ language plugin.
-pub struct CppPlugin {
-    _parser: Parser,
-}
+pub struct CppPlugin;
 
 impl CppPlugin {
     /// Create a new C++ plugin.
     pub fn new() -> Result<Self> {
-        let mut parser = Parser::new();
+        let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&tree_sitter_cpp::LANGUAGE.into())
             .map_err(|e| Error::PluginError(format!("Failed to set C++ grammar: {e}")))?;
-        Ok(Self { _parser: parser })
+        Ok(Self)
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_cpp::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set C++ grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse C++ source".to_string(),
-        })
+        parse_source(source, file_path, tree_sitter_cpp::LANGUAGE.into())
     }
 
     fn extract_function(
