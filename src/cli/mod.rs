@@ -287,6 +287,10 @@ pub enum Commands {
         #[arg(long = "class", value_name = "NAME")]
         class: Option<String>,
 
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+
         #[arg(long = "scope", value_name = "PREFIX")]
         scope: Option<String>,
 
@@ -313,6 +317,10 @@ pub enum Commands {
 
         #[arg(long = "class", value_name = "NAME")]
         class: Option<String>,
+
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
 
         #[arg(long = "scope", value_name = "PREFIX")]
         scope: Option<String>,
@@ -357,6 +365,10 @@ pub enum Commands {
 
         #[arg(long = "class", value_name = "NAME")]
         class: Option<String>,
+
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
 
         #[arg(long = "scope", value_name = "PREFIX")]
         scope: Option<String>,
@@ -703,6 +715,8 @@ pub enum QueryCommands {
         file: Option<String>,
         #[arg(long = "class")]
         class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
         #[arg(long = "scope")]
         scope: Option<String>,
         #[arg(long = "scope-mode")]
@@ -721,6 +735,8 @@ pub enum QueryCommands {
         file: Option<String>,
         #[arg(long = "class")]
         class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
         #[arg(long = "scope")]
         scope: Option<String>,
         #[arg(long = "scope-mode")]
@@ -747,6 +763,8 @@ pub enum QueryCommands {
         file: Option<String>,
         #[arg(long = "class")]
         class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
         #[arg(long = "scope")]
         scope: Option<String>,
         #[arg(long = "scope-mode")]
@@ -1177,6 +1195,7 @@ impl Cli {
                 structured_query::SharedQueryArgs {
                     file,
                     class: None,
+                    line: None,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1191,6 +1210,7 @@ impl Cli {
                 depth,
                 file,
                 class,
+                line,
                 scope,
                 scope_mode,
                 exclude_scope,
@@ -1203,6 +1223,7 @@ impl Cli {
                 structured_query::SharedQueryArgs {
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1215,6 +1236,7 @@ impl Cli {
                 depth,
                 file,
                 class,
+                line,
                 scope,
                 scope_mode,
                 exclude_scope,
@@ -1227,6 +1249,7 @@ impl Cli {
                 structured_query::SharedQueryArgs {
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1243,6 +1266,7 @@ impl Cli {
                 depth,
                 file,
                 class,
+                line,
                 scope,
                 scope_mode,
                 exclude_scope,
@@ -1258,6 +1282,7 @@ impl Cli {
                 structured_query::SharedQueryArgs {
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1277,6 +1302,7 @@ impl Cli {
                 structured_query::SharedQueryArgs {
                     file,
                     class: None,
+                    line: None,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1303,6 +1329,7 @@ impl Cli {
                     structured_query::SharedQueryArgs {
                         file,
                         class: None,
+                        line: None,
                         scope,
                         scope_mode,
                         exclude_scope,
@@ -1317,6 +1344,7 @@ impl Cli {
                     depth,
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1329,6 +1357,7 @@ impl Cli {
                     structured_query::SharedQueryArgs {
                         file,
                         class,
+                        line,
                         scope,
                         scope_mode,
                         exclude_scope,
@@ -1341,6 +1370,7 @@ impl Cli {
                     depth,
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1353,6 +1383,7 @@ impl Cli {
                     structured_query::SharedQueryArgs {
                         file,
                         class,
+                        line,
                         scope,
                         scope_mode,
                         exclude_scope,
@@ -1369,6 +1400,7 @@ impl Cli {
                     depth,
                     file,
                     class,
+                    line,
                     scope,
                     scope_mode,
                     exclude_scope,
@@ -1384,6 +1416,7 @@ impl Cli {
                     structured_query::SharedQueryArgs {
                         file,
                         class,
+                        line,
                         scope,
                         scope_mode,
                         exclude_scope,
@@ -1403,6 +1436,7 @@ impl Cli {
                     structured_query::SharedQueryArgs {
                         file,
                         class: None,
+                        line: None,
                         scope,
                         scope_mode,
                         exclude_scope,

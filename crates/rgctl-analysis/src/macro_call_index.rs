@@ -381,6 +381,7 @@ impl MacroCallIndex {
             count => Err(rgctl_error::Error::AmbiguousSymbol {
                 name: symbol.to_string(),
                 count,
+                candidates: vec![],
             }),
         }
     }
