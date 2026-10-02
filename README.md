@@ -35,8 +35,9 @@
 
 ```bash
 rgctl discover .
+rgctl -f json find --type function --limit 20
+rgctl -f json callers MyService --depth 1
 rgctl -f json blast-radius MyService
-rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b) RETURN a,b LIMIT 20'
 
 # Use with your favorite LLM agent
 rgctl install --skill --tools cursor,claude,codex,agents
@@ -82,13 +83,15 @@ Artifacts land in `{repo}/.rgctl/`. Re-run `discover` after large code changes.
 
 ```bash
 # Inventory
-rgctl -f json gql 'MATCH (n:Function) RETURN n LIMIT 10'
+rgctl -f json inventory --by type
+rgctl -f json find --type function --limit 10
+
+# Callers / callees
+rgctl -f json callers ProductService --depth 1
+rgctl -f json relations --edge calls --limit 20
 
 # Impact before you edit a symbol
 rgctl -f json blast-radius ProductService
-
-# Call edges
-rgctl -f json gql 'MATCH (a)-[:CALLS]->(b) RETURN a,b LIMIT 20'
 ```
 
 Always prefer **`-f json`** for agents and scripts ([JSON API](docs/json-api.md)). Do not scrape stderr.
@@ -113,9 +116,11 @@ For *your* application repo, optionally paste [USER_AGENTS_TEMPLATE.md](docs/age
 | You need… | Command |
 |-----------|---------|
 | Build the graph | `discover` |
-| Exact structure queries | `gql` |
+| Find symbols / inventory | `find`, `inventory`, `status` |
+| Callers / edges | `callers`, `callees`, `relations` |
 | “What breaks if I change X?” | `blast-radius` |
-| CFG / data-flow / taint | `slice`, `inspect`, `cpg` (need `discover --with-cfg`) |
+| CFG / data-flow / taint | `slice`, `inspect`, `cpg`, `taint` (need `discover --with-cfg`) |
+| OSV / deps / OpenVEX | `vuln triage`, `deps check`, `vuln analyze` |
 | Hotspots / clusters | `metrics`, `communities` |
 | NL search over functions | `semantic` (opt-in index) |
 | CI gates | `check`, `pr-check` |
