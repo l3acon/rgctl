@@ -189,9 +189,23 @@ impl ProcessingPipeline {
         let edges_created = builder.edge_count();
         let content_store = builder.take_content_store();
         let node_path_mapping = builder.take_tracker_mapping();
+        let annotation_args = builder.take_annotation_args();
         let spill_start = Instant::now();
         let finished = builder.finish_spill()?;
         let digest = write_columnar_from_spill(finished, snapshot_path)?;
+        if !annotation_args.is_empty()
+            && let Some(parent) = snapshot_path.parent()
+        {
+            let args_path = parent.join("annotation_args.json");
+            let payload = serde_json::json!({
+                "schema_version": 1,
+                "command": "annotation_args",
+                "entries": annotation_args,
+            });
+            if let Ok(json) = serde_json::to_string_pretty(&payload) {
+                let _ = std::fs::write(&args_path, json);
+            }
+        }
         let spill_elapsed = spill_start.elapsed();
         tracing::info!(
             resolution_index_secs = index_elapsed.as_secs_f64(),

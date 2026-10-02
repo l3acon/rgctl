@@ -219,13 +219,7 @@ See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) a
 
 ### Migrating from daemon cache
 
-If you previously used the background daemon, artifacts may still be under `~/.rgctl/cache/{reponame}/.rgctl/`. Copy them into the repo:
-
-```bash
-cd /path/to/repo
-rgctl migrate-cache              # uses repo directory name as cache key
-rgctl migrate-cache --name coolstore --force   # explicit cache name
-```
+Background daemon mode is retired. Artifacts live only under `{repo}/.rgctl/`. If you still have files under `~/.rgctl/cache/{reponame}/.rgctl/`, copy that directory into the repo as `.rgctl/` manually (or re-run `rgctl discover .`).
 
 ---
 
@@ -364,7 +358,7 @@ If empty, revisit [Add to PATH](#add-to-path). For GUI apps (Cursor, VS Code), n
 
 ### Queries fail with "no graph found"
 
-Run `discover` first on the repo you mean to query. Artifacts should appear at `{repo}/.rgctl/`. If you still have a legacy daemon cache, run `rgctl migrate-cache`.
+Run `discover` first on the repo you mean to query. Artifacts should appear at `{repo}/.rgctl/`. Old daemon caches under `~/.rgctl/cache/` can be copied into the repo by hand, or just rediscover.
 
 ### Slow `discover` on large repositories
 

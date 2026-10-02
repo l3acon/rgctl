@@ -48,7 +48,7 @@ export REPO=/path/to/repo
 rgctl -r "$REPO" -f json find --type function --limit 20
 ```
 
-Upgrading from an old daemon install: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/` into the repo (see [installation.md](../installation.md)).
+Upgrading from an old daemon install: copy `~/.rgctl/cache/{name}/.rgctl/` into the repo as `.rgctl/` manually, or re-run `rgctl discover .` (see [installation.md](../installation.md)).
 
 ---
 

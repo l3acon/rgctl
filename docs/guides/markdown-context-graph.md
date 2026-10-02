@@ -41,7 +41,7 @@ Maintainers who already fetch profile corpora can skip the clone: `./scripts/fet
 
 **Prerequisites:** `rgctl` on your `PATH`. For large exports (17k+ Obsidian notes), use a **release** binary — [download the latest release](https://github.com/sshaaf/rgctl/releases) or [build from source](../installation.md) (`cargo build --release --bin rgctl`). See [Installation](../installation.md).
 
-Artifacts are written to `{repo}/.rgctl/` next to the checkout. If you still have a legacy daemon cache under `~/.rgctl/cache/`, run `rgctl migrate-cache`. See [Installation — Migrating from daemon cache](../installation.md#migrating-from-daemon-cache).
+Artifacts are written to `{repo}/.rgctl/` next to the checkout. See [Installation](../installation.md).
 
 ## What rgctl indexes
 

@@ -118,8 +118,9 @@ rgctl -f json inventory --by type   # includes zero-count kinds
 rgctl -f json inventory --by edge
 rgctl -f json inventory --by import-prefix   # javax.ejb / javax.jms / org.eclipse …
 rgctl -f json status                # snapshot presence, digest, node/edge counts
-rgctl -f json resources             # persistence.xml + weblogic/jboss/web/beans (no Kantra)
+rgctl discover . --find '*coolstore*'   # locate candidate project roots (no index)
 rgctl -f json rules run ./rules/ [--target quarkus]   # post-index Kantra eval
+rgctl -f json find --annotation @Resource --show-attributes  # needs annotation_args.json from discover
 rgctl -f json query find …          # alias namespace
 ```
 
@@ -130,15 +131,14 @@ rgctl -f json query find …          # alias namespace
 2. `inventory --by import-prefix` — EE surface census
 3. `find --annotation @MessageDriven|@SessionScoped|…` — blockers without package guess
 4. `find '*MDB*'` / `'*Remote*'` — suffix scan before reading files
-5. `resources` — persistence provider, JNDI DS, weblogic/jboss bindings
-6. `rules run ./rules/` or `discover --with-kantra` — fire `when:` catalog (M2)
-7. `callers InitialContext` — JNDI usage sites
+5. `rules run ./rules/` or `discover --with-kantra` — fire `when:` catalog (M2)
+6. `callers InitialContext` — JNDI usage sites
 
-**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`). `resources` / `status` do not rediscover. `rules run` requires a snapshot; Kantra stays opt-in.
+**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`). `status` does not rediscover. `rules run` requires a snapshot; Kantra stays opt-in.
 
 **Flags:** `--annotation` inverts `AnnotatedWith` (OR list; `@` optional). `--show-attributes` needs annotation-arg indexing (errors honestly until indexed). `--scope` + `--scope-mode inside|outside|crossing` (or `--exclude-scope`). `--file` / `--class` / `--line` disambiguate. Edge rows use keyed `source`/`target` (never positional). Omit `SYMBOL` on `relations` for set-wide typed-edge scans.
 
-**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Ambiguous symbols emit candidates (`error: ambiguous_symbol` JSON under `-f json`). Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout. Do not treat Kantra as the only search path — use annotation/import/resources first.
+**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Ambiguous symbols emit candidates (`error: ambiguous_symbol` JSON under `-f json`). Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout. Do not treat Kantra as the only search path — use annotation/import first.
 
 **Agent should report:** counts, lean names/files, keyed edge pairs — not full node dumps.
 

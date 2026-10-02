@@ -4,7 +4,7 @@ Short answers for common first-hour questions. Commands → [User Guide](user-gu
 
 ### Where are `.rgctl/` artifacts stored?
 
-**Default:** `{repo}/.rgctl/` next to the source tree. Legacy background-daemon caches under `~/.rgctl/cache/{reponame}/` can be copied with `rgctl migrate-cache`. See [Installation — Migrating from daemon cache](installation.md#migrating-from-daemon-cache).
+**Default:** `{repo}/.rgctl/` next to the source tree. See [Installation](installation.md).
 
 ### I ran `discover` but queried the wrong repo
 
