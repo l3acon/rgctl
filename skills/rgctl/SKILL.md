@@ -37,7 +37,7 @@ rgctl -r "$REPO" -f json <command> …
 
 **Critical:** Parse `schema_version` + payload from **stdout**. **Never use `2>/dev/null`** — it swallows rgctl errors.
 
-For many queries in one session, optional: `rgctl serve` + `POST /api/query` (see [HTTP API](../../docs/http-api.md)).
+For interactive exploration, optional: `rgctl serve --open` (dashboard). Agents should still spawn CLI structured verbs (`find` / `callers` / `relations` / `inventory` / …).
 
 Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` in the repo to build `{repo}/.rgctl/`.
 
@@ -45,7 +45,7 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 
 ```text
 1. USER PROMPT     → natural language (not a CLI string)
-2. SUBPROCESS      → rgctl -f json <command>  (or HTTP /api/query)
+2. SUBPROCESS      → rgctl -f json <structured command>
 3. GRAPH FACTS     → parse schema_version + payload
 4. LLM REASONING   → summarize using "what to report" guidelines
 5. ACTION          → edit / plan / check — re-query if graph may be stale
@@ -94,8 +94,8 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | Filter by migration target | `discover . --with-kantra --kantra-target quarkus` / `rules run ./rules/ --target quarkus` |
 | CI / custom ruleset | `discover . --with-kantra --kantra-rules PATH` / `rules run PATH` |
 | Index rules only | `discover . --with-kantra --kantra-index-only` |
-| List indexed rules (GQL) | `gql "MATCH (r:KantraRule) RETURN r LIMIT 20"` |
-| Rules for one target label | `gql` with `` r.`konveyor.io/target` `` property (backticks) |
+| List indexed rules | `find --type kantrarule --limit 50` / `inventory --by type` |
+| Rule → code links | `relations --edge violates --from-type kantrarule` |
 | Read violations artifact | `.rgctl/kantra_findings.json` |
 
 **See:** [User guide — Kantra](../../docs/user-guide.md#kantra-migration-rules---with-kantra), [JSON — kantra_findings](../../docs/json-api.md#kantra_findingsjson)
@@ -122,12 +122,12 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | List communities | `communities list` |
 | Subsystem ownership | `semantic query "X" --scope community` |
 | Refresh community labels | `communities label --write` |
-| Ad-hoc Cypher (experimental) | `gql "MATCH …"` — uncanny valley; prefer verbs above |
+| Community census | `inventory --by community` |
 
 **Migration probe order:** `status` → `inventory --by import-prefix` → `find --annotation …` / suffix globs → `rules run` / `--with-kantra` → `callers InitialContext`.
 
-**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) are not indexed yet (`--show-attributes` errors until they are).
-**See:** [Command Encyclopedia](references/command-encyclopedia.md) (find/callers/relations/inventory), [GQL Reference](references/gql-reference.md) (legacy), [Semantic Search Guide](../../docs/guides/semantic-search.md)
+**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) need `--show-attributes` when `annotation_args.json` is present.
+**See:** [Command Encyclopedia](references/command-encyclopedia.md) (find/callers/relations/inventory/status), [Semantic Search Guide](../../docs/guides/semantic-search.md)
 
 ### 3. Impact & Safety
 
@@ -192,7 +192,7 @@ Needs `discover --with-cfg`. `--function` is method name, not class.
 | Ambiguous symbol | Add `--class` or `--file` on callers/find |
 | `check` exit 1 | Report violations (JSON still on stdout) |
 | find/relations empty | Run `inventory --by type` / `--by edge` (zeros mean unpopulated schema); check `--scope` |
-| GQL LIKE returns 0 | Prefer structured verbs; or `semantic query` / `communities list` |
+| Name glob returns 0 | Try `semantic query` / `communities list` / broader `find '*X*'` types |
 
 ## Artifacts
 
@@ -221,7 +221,6 @@ rgctl -r "$REPO" -f json <command> …
 
 - **[Command Encyclopedia](references/command-encyclopedia.md)** — Full command reference
 - **[Workflows](references/workflows.md)** — Worked scenarios
-- **[GQL Reference](references/gql-reference.md)** — GQL patterns
 - **[Communities & Policy](references/communities-and-policy.md)** — CI policy checks
 
 ## External Documentation
@@ -236,7 +235,7 @@ rgctl -r "$REPO" -f json <command> …
 ## Installation
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …), meta-skill `rgctl`, and slash commands for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-commands.md](../../docs/guides/agent-commands.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.
+Installs workflow skills (`rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, …) and meta-skill `rgctl` for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See [docs/guides/agent-commands.md](../../docs/guides/agent-commands.md). Workflow source: `skills/rgctl/workflows/`; keep `references/workflows.md` in sync via `cargo test -p rgctl-agent-pack-codegen workflows_reference_matches_fragments`.

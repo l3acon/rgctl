@@ -5,7 +5,7 @@
 > **Preferred (automated):** install the agent pack instead of (or in addition to) pasting this file:
 >
 > ```bash
-> rgctl -r "$REPO" install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+> rgctl -r "$REPO" install --skill --tools cursor,claude,codex,antigravity,agents
 > ```
 >
 > See [Agent commands](../guides/agent-commands.md). This template is a fallback / complementary channel — skills remain the canonical runtime guidance.
@@ -28,7 +28,7 @@ Default for agents: spawn **`rgctl -f json`** subprocesses (or use foreground **
 Install the agent pack once (limit `--tools` to the IDEs you use; default is all registry adapters):
 
 ```bash
-rgctl -r "$REPO" install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+rgctl -r "$REPO" install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
 ---
@@ -69,8 +69,7 @@ Upgrading from an old daemon install: copy `~/.rgctl/cache/{name}/.rgctl/` into 
 | Community semantic search | `rgctl -f json semantic query "checkout" --scope community --limit 10` |
 | Impact before editing | `rgctl -f json blast-radius <Symbol> [--depth N]` |
 | Architectural hotspots | `rgctl -f json metrics --pagerank` |
-| Experimental Cypher | `rgctl -f json gql 'MATCH …'` — prefer find/callers/relations |
-| Doc headings / cross-links | `discover` indexes `.md` / `.mdx` by default; GQL on `:Module` with `kind=heading` and `REFERENCES` — see [markdown-context.md](../markdown-context.md) |
+| Doc headings / cross-links | `discover` indexes `.md` / `.mdx` by default; use `find` / `relations` on Module/REFERENCES — see [markdown-context.md](../markdown-context.md) |
 | Obsidian vault from docs | `rgctl -r "$REPO" discover -l markdown` then `export --export-format obsidian --export-output "$REPO/vault" --query all` — see [markdown-context.md](../markdown-context.md#obsidian-vault-export) |
 | Doc section semantic search | `rgctl semantic index --scope docs --embedder hash` then `rgctl -f json semantic query "checkout flow" --scope docs --limit 10` (query scope does not filter — index must be doc-scoped) |
 | Hybrid CPG status / CALL / PDG / slice | `rgctl -f json cpg status` then `cpg function\|calls\|pdg\|slice` (needs `discover --with-cfg` for PDG/slice) |
@@ -118,7 +117,7 @@ See [http-api.md](../http-api.md).
 3. **Use `-f json`** — stable `schema_version` fields; see [json-api.md](../json-api.md).
 4. **`inspect` takes a symbol only** — no `--class` (use `blast-radius` for disambiguation).
 5. **`slice --function`** is the **method/function name**, not the class name.
-6. **`export --query`** uses filter syntax (`name:Foo`, `type:Function`, `all`) — not full GQL `MATCH`.
+6. **`export --query`** uses filter syntax (`name:Foo`, `type:Function`, `all`) — not Cypher `MATCH`.
 7. **Deep analysis** needs `discover --with-cfg` (and `--with-taint` for discover-time taint).
 8. **Semantic search** needs `semantic index` (separate from discover). Default embedder is **vocab**.
 9. **Dashboard is optional** — only when a human wants a UI.

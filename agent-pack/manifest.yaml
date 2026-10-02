@@ -9,8 +9,6 @@ workflows:
     title: Data flow and slices
   - id: search
     title: Semantic and structural search
-  - id: gql
-    title: Graph query language
   - id: migrate
     title: Migration roadmap
   - id: kantra

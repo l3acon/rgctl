@@ -3,7 +3,7 @@
 **What rgctl is** and how a **code knowledge graph** works — concepts before commands.
 
 **Hands-on:** [Installation](installation.md) · [Guides](guides/README.md) (CoolStore) · [User Guide](user-guide.md) (ecommerce-java).  
-**Agents:** [agent-commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill --with-commands`.  
+**Agents:** [agent-commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill`.  
 **Contribute to rgctl:** [AGENTS.md](../AGENTS.md). **JSON:** [json-api.md](json-api.md).
 
 ---
@@ -48,7 +48,7 @@ You do not need graph theory to use the CLI: **indexing builds the map; commands
 
 1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](guides/discovering-and-indexing.md) for `-r` vs `.` pitfalls.  
 2. **Many times:** query commands read `{repo}/.rgctl/`. Prefer **`-f json`** and never scrape stderr ([JSON API](json-api.md)).  
-3. **Agents:** install the pack (`rgctl install --skill --with-commands --tools …`) — meta skill + workflow skills + slash commands ([agent-commands](guides/agent-commands.md)).  
+3. **Agents:** install the pack (`rgctl install --skill --tools …`) — meta skill + workflow skills ([agent-commands](guides/agent-commands.md)).  
 4. **Dashboard:** optional UI after `discover --with-dashboard` + `serve` — not required for structural answers.
 
 Capability designs for contributors: [design/](design/README.md).
@@ -90,7 +90,7 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 | **diff** | Compare two columnar snapshots (digest + `diff_snapshots`) |
 | **migration hints** | Package roadmap JSON (`--export-migration-hints`) |
 | **Kantra** | Migration-rule findings during discover (`--with-kantra`) |
-| **install** | Bundle agent skills / slash commands / optional policy into IDEs |
+| **install** | Bundle agent skills / optional policy into IDEs |
 | **serve** | Foreground HTTP dashboard + `/api/query` for one repository |
 
 **Markdown / docs:** `discover` indexes `.md` / `.mdx` by default (headings, links, frontmatter). GQL on `:Module` (`kind=heading`) and `REFERENCES`; function semantic search stays separate. See [markdown-context.md](markdown-context.md) · [guide](guides/markdown-context-graph.md).
@@ -115,7 +115,7 @@ Current Tier 1 ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP
 | Install / verify the binary | [Installation](installation.md) |
 | Feature how-tos on CoolStore | [Guides](guides/README.md) |
 | Full CLI + ecommerce-java | [User Guide](user-guide.md) |
-| Agent pack + slash commands | [agent-commands](guides/agent-commands.md) · [agent-skill](guides/agent-skill.md) |
+| Agent pack (skills) | [agent-commands](guides/agent-commands.md) · [agent-skill](guides/agent-skill.md) |
 | Paste into *another* repo | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Language support matrix | [languages/README.md](languages/README.md) (JSON SSOT → website) |
 | JSON fields / `schema_version` | [json-api.md](json-api.md) |

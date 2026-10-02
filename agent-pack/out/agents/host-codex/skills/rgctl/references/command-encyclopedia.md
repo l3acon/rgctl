@@ -7,7 +7,7 @@ Samples below are truncated where noted. Field names match live CLI / `docs/json
 ## Table of Contents
 
 - [discover](#discover)
-- [gql](#gql)
+- [find / callers / callees / relations / inventory](#find--callers--callees--relations--inventory)
 - [blast-radius](#blast-radius)
 - [slice](#slice)
 - [inspect](#inspect)
@@ -90,9 +90,9 @@ Samples below are truncated where noted. Field names match live CLI / `docs/json
 }
 ```
 
-**GQL companion:** After discover, query indexed rules with `gql "MATCH (r:KantraRule) RETURN r"`. Konveyor labels are properties — filter with backticks: `` r.`konveyor.io/target` ``.
+**Structured companion:** After discover, list indexed rules with `find --type kantrarule` / `inventory --by type`. Rule→code links after full eval: `relations --edge violates --from-type kantrarule`. Prefer `kantra_findings.json` for line-level violations.
 
-**Pitfalls:** Full embedded catalog skips many rules (unsupported providers, Windup regex). Use `kantra_findings.json` for violation details; GQL `VIOLATES` edges link rules to code nodes after full eval (not `--kantra-index-only`).
+**Pitfalls:** Full embedded catalog skips many rules (unsupported providers, Windup regex). Use `kantra_findings.json` for violation details; `VIOLATES` edges exist after full eval (not `--kantra-index-only`).
 
 **Agent should report:** `catalog_id`, `target_filter`, violation count, representative hits, skip summary — not full JSON dump.
 
@@ -100,44 +100,49 @@ Samples below are truncated where noted. Field names match live CLI / `docs/json
 
 ---
 
-## gql
+## find / callers / callees / relations / inventory
 
-**Command:** `rgctl -f json gql '<MATCH…>'` or `rgctl -f json gql --macro-name <NAME> unused`
-
-**Purpose:** Inventory, callers/callees, communities, path/relationship queries.
-
-**Prerequisites:** `discover` done. Virtual `:Community` needs analysis overlay from discover.
-
-**Sample** (macro `all_functions`):
-
-```json
-{
-  "schema_version": 1,
-  "count": 260,
-  "rows": [
-    [{ "binding": "f", "node": "addItem", "type": "Function",
-       "file": "…/controller/CartController.java" }]
-  ],
-  "explain": false
-}
-```
-
-**Useful patterns:**
+**Commands:**
 
 ```bash
-# Incoming callers of X
-rgctl -f json gql "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = 'checkout' RETURN a,b LIMIT 20"
-# Outgoing callees of X
-rgctl -f json gql "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE a.name = 'checkout' RETURN a,b LIMIT 20"
-# Name search (prefix or suffix only — *middle* silently returns 0)
-rgctl -f json gql "MATCH (n:Function) WHERE n.name LIKE '*Service' RETURN n LIMIT 20"
-# Communities macro
-rgctl -f json gql --macro-name all_communities unused
+rgctl -f json find [PATTERN] --type function --scope pkg --limit 50
+rgctl -f json find --type function --count-only
+rgctl -f json find --annotation @MessageDriven --type class
+rgctl -f json find --annotation @Stateful,@Stateless,@Singleton --type class
+rgctl -f json find '*MDB*' --type class --limit 50          # bare-name suffix scan
+rgctl -f json callers <SYMBOL> --depth 1 --file PATH --class NAME --line N
+rgctl -f json callees <SYMBOL> --depth 1
+rgctl -f json relations [SYMBOL] --edge annotatedwith --from-type function --to-type annotation --scope pkg
+rgctl -f json relations --edge extends --from-type class   # seedless
+rgctl -f json inventory --by type   # includes zero-count kinds
+rgctl -f json inventory --by edge
+rgctl -f json inventory --by import-prefix   # javax.ejb / javax.jms / org.eclipse …
+rgctl -f json status                # snapshot presence, digest, node/edge counts
+rgctl discover . --find '*coolstore*'   # locate candidate project roots (no index)
+rgctl -f json rules run ./rules/ [--target quarkus]   # post-index Kantra eval
+rgctl -f json find --annotation @Resource --show-attributes  # needs annotation_args.json from discover
+rgctl -f json query find …          # alias namespace
 ```
 
-**Pitfalls:** `--macro-name` still needs a positional query arg — pass `unused`. `--explain` plan is text-mode only. rgctl GQL is a **subset of Cypher** — no `COUNT`, `ORDER BY`, `GROUP BY`, or aggregation functions. CALLS edges are static — interface / dynamic dispatch (receiver methods, virtual calls, trait impls) may not appear; if a `CALLS*1..N` query returns 0 edges for a method you know is called, fall back to `grep` for call sites. If LIKE on function names returns 0 for a concept (e.g. "ingress", "gateway"), it likely lives in package/directory names, type names, or community labels — try `communities list`, `semantic query`, or broaden the LIKE to non-Function node types before concluding nothing exists.
+**Purpose:** Deterministic mmap structured query (no Cypher, no `MemoryBackend` hydrate). **Agents must use these verbs** — do not invent MATCH strings. Relations `total` is distinct `(source,target,edge)`; duplicates collapse with `occurrences` (`schema_version` ≥ 2). `inventory --by edge` uses the same rule: `count` = distinct, `occurrences` = raw stored edges.
 
-**Agent should report:** matching symbols, files, hop relationships — not raw row dumps.
+**Migration probes (Coolstore-shaped):**
+1. `status` — is `.rgctl/` fresh?
+2. `inventory --by import-prefix` — EE surface census
+3. `find --annotation @MessageDriven|@SessionScoped|…` — blockers without package guess
+4. `find '*MDB*'` / `'*Remote*'` — suffix scan before reading files
+5. `rules run ./rules/` or `discover --with-kantra` — fire `when:` catalog (M2)
+6. `callers InitialContext` — JNDI usage sites
+
+**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`). `status` does not rediscover. `rules run` requires a snapshot; Kantra stays opt-in.
+
+**Flags:** `--annotation` inverts `AnnotatedWith` (OR list; `@` optional). `--show-attributes` needs annotation-arg indexing (errors honestly until indexed). `--scope` + `--scope-mode inside|outside|crossing` (or `--exclude-scope`). `--file` / `--class` / `--line` disambiguate. Edge rows use keyed `source`/`target` (never positional). Omit `SYMBOL` on `relations` for set-wide typed-edge scans.
+
+**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Ambiguous symbols emit candidates (`error: ambiguous_symbol` JSON under `-f json`). Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout. Do not treat Kantra as the only search path — use annotation/import first.
+
+**Agent should report:** counts, lean names/files, keyed edge pairs — not full node dumps.
+
+**See:** OpenSpec `add-migration-search-primitives` (+ `add-structured-query-cli`).
 
 ---
 
@@ -247,7 +252,7 @@ rgctl -f json slice src/main/java/com/example/ecommerce/service/CartService.java
 
 **Purpose:** Raw CFG / PDG / dominator view for one function.
 
-**Prerequisites:** `discover --with-cfg`. Symbol only — **no** `--class` (disambiguate via blast-radius / GQL first).
+**Prerequisites:** `discover --with-cfg`. Symbol only — **no** `--class` (disambiguate via `find` / `blast-radius` / `callers` first).
 
 **Layer flags:** `cfg --prune` drops unreachable blocks before display. `pdg --edge-layer data|control` filters to one dependence type (default `all`); `--def-use` adds def-use variable lists per node. `dom --frontiers` prints dominance frontiers instead of just the tree.
 
@@ -322,7 +327,7 @@ rgctl -f json cpg function '<uuid>'
 rgctl -f json blast-radius '<uuid>'
 ```
 
-Loop over `top[]` UUIDs and resolve each. GQL `WHERE n.id = '<uuid>'` does **not** work (node id is not a queryable property).
+Loop over `top[]` UUIDs and resolve each with `cpg function` / `blast-radius` (node id is not a `find` name).
 
 **Agent should report:** top hotspot symbols (resolve UUIDs first), modularity/community count when requested.
 
@@ -337,7 +342,7 @@ rgctl semantic index [--embedder vocab|hash|onnx|code-daemon] [--embed-bodies] [
   [--dimensions N] [--incremental] [--diffuse] [--diffuse-alpha F] [--diffuse-iters N] [--diffuse-bidirectional]
 rgctl semantic distill --matrix PATH [--embedder code-daemon|hash|onnx] [--tokens PATH] [--dimensions N]
 rgctl -f json semantic query "…" [--limit N] [--scope function|community] \
-  [--expand neighbors|blast|gql|all] [--expand-depth N] [--no-fusion] [--candidate-pool N] [--keyword-and]
+  [--expand neighbors|blast|all] [--expand-depth N] [--no-fusion] [--candidate-pool N] [--keyword-and]
 ```
 
 **Purpose:** Natural-language / keyword find of functions (and community-scoped search), with optional one-shot expansion into graph context.
@@ -346,7 +351,7 @@ rgctl -f json semantic query "…" [--limit N] [--scope function|community] \
 
 **Index tuning:** `--dimensions` (default 256, multiple of 8) trades index size for precision. `--incremental` (default true) reuses embeddings for unchanged `code_hash`. `--diffuse` blends each embedding toward its call-graph neighbors' mean (Jacobi iterations via `--diffuse-alpha`/`--diffuse-iters`; `--diffuse-bidirectional` includes callers, not just callees) — useful when bare-name/docstring signal is weak and callers/callees disambiguate intent; `--no-diffuse` forces it off.
 
-**Query expansion:** `--expand neighbors` pulls CALLS neighbors of top hits, `--expand blast` runs blast-radius on top hits, `--expand gql` returns a ready GQL query, `--expand all` does all three — use when the user's NL query implies "and show me what's connected," so you skip a manual follow-up call. `--expand-depth` controls hop depth for `neighbors`/`gql` expansion (default 1). `--no-fusion` returns pure Hamming top-k (skip late-fusion re-ranking — rarely needed). `--candidate-pool` widens/narrows the pre-fusion candidate set (default 256). `--keyword-and` requires all query keywords to match entry metadata (stricter than default OR).
+**Query expansion:** `--expand neighbors` pulls CALLS neighbors of top hits, `--expand blast` runs blast-radius on top hits, `--expand all` combines those — use when the user's NL query implies "and show me what's connected," so you skip a manual follow-up call. `--expand-depth` controls hop depth for `neighbors` expansion (default 1). Prefer follow-up `callers` / `blast-radius` over any Cypher expand mode. `--no-fusion` returns pure Hamming top-k (skip late-fusion re-ranking — rarely needed). `--candidate-pool` widens/narrows the pre-fusion candidate set (default 256). `--keyword-and` requires all query keywords to match entry metadata (stricter than default OR).
 
 **Sample** (default vocab, query `checkout cart`):
 
@@ -374,7 +379,7 @@ rgctl -f json semantic query "…" [--limit N] [--scope function|community] \
 
 **Pitfalls:** Query without index fails. Restart `serve` after rebuilding index for dashboard search. **Large repos (100K+ nodes):** `--scope community` may return only singleton communities because label-propagation produces very granular clusters. For subsystem ownership on large repos, prefer `communities list` + grep labels over `--scope community`.
 
-**Agent should report:** top hit names, files, scores (`score` / `fused_score`); keep `node_id` for follow-up GQL — not every hit.
+**Agent should report:** top hit names, files, scores (`score` / `fused_score`); keep `node_id` for follow-up `callers` / `blast-radius` — not every hit.
 
 ---
 
@@ -399,7 +404,7 @@ rgctl -f json semantic query "…" [--limit N] [--scope function|community] \
 }
 ```
 
-**Agent should report:** top labels + sizes; use GQL `community_id` for members.
+**Agent should report:** top labels + sizes; use `inventory --by community` for census; explore ownership via `semantic query --scope community` / `blast-radius` (responses may include `community_id`).
 
 ---
 
@@ -523,7 +528,7 @@ rgctl cpg export --format graphson --output cpg.json [--path-contains src/] \
 
 **Prerequisites:** `discover` done.
 
-**Pitfalls (critical):** `--query` uses **filter** syntax — `name:Foo`, `type:Function`, `all` — **not** GQL `MATCH … RETURN`. Agents must not pass MATCH strings to `--query`.
+**Pitfalls (critical):** `--query` uses **filter** syntax — `name:Foo`, `type:Function`, `all` — **not** Cypher `MATCH … RETURN`. Agents must not pass MATCH strings to `--query`.
 
 **Agent should report:** output path + format; confirm filter used.
 

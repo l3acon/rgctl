@@ -10,15 +10,8 @@ pub struct AgentDef {
     pub id: String,
     pub agent_dir: String,
     pub skills_subdir: String,
-    pub commands_subdir: String,
-    pub command_style: String,
-    #[serde(default)]
-    pub command_extension: String,
     pub invoke_prefix: String,
     pub supports_global: bool,
-    pub global_skills: String,
-    pub global_commands: String,
-    pub commands_enabled: bool,
 }
 
 /// Installed pack manifest written to `out/manifest.json`.
@@ -42,9 +35,7 @@ pub struct AgentManifestEntry {
     pub id: String,
     pub agent_dir: String,
     pub skills_subdir: String,
-    pub commands_subdir: Option<String>,
     pub skills_path: String,
-    pub commands_path: Option<String>,
     pub invoke_prefix: String,
     pub supports_global: bool,
 }
@@ -92,12 +83,6 @@ pub fn generate(pack_root: &Path, out_dir: &Path, rgctl_version: &str) -> Result
                 wf.id
             );
             write_agent_file(out_dir, agent, &skill_rel, skill_md)?;
-
-            if agent.commands_enabled && !agent.commands_subdir.is_empty() {
-                let cmd = render_command(agent, &wf.id, &wf.title, rgctl_version);
-                let cmd_rel = command_rel_path(agent, &wf.id);
-                write_agent_file(out_dir, agent, &cmd_rel, cmd)?;
-            }
         }
 
         // Meta router skill: copy tree from skills/rgctl if present
@@ -117,7 +102,6 @@ pub fn generate(pack_root: &Path, out_dir: &Path, rgctl_version: &str) -> Result
             fs::write(&ref_dest, &workflows_reference).map_err(|e| e.to_string())?;
             prepend_router_note(
                 &meta_dest.join("SKILL.md"),
-                agent,
                 &root.workflows,
                 rgctl_version,
             )?;
@@ -135,17 +119,7 @@ pub fn generate(pack_root: &Path, out_dir: &Path, rgctl_version: &str) -> Result
                 id: a.id.clone(),
                 agent_dir: a.agent_dir.clone(),
                 skills_subdir: a.skills_subdir.clone(),
-                commands_subdir: if a.commands_enabled && !a.commands_subdir.is_empty() {
-                    Some(a.commands_subdir.clone())
-                } else {
-                    None
-                },
                 skills_path: format!("{}/{}/", a.agent_dir, a.skills_subdir),
-                commands_path: if a.commands_enabled && !a.commands_subdir.is_empty() {
-                    Some(format!("{}/{}/", a.agent_dir, a.commands_subdir))
-                } else {
-                    None
-                },
                 invoke_prefix: a.invoke_prefix.clone(),
                 supports_global: a.supports_global,
             })
@@ -176,11 +150,6 @@ fn load_agents(agents_dir: &Path) -> Result<Vec<AgentDef>, String> {
         .map_err(|e| format!("read {}: {}", registry.display(), e))?;
     let file: AgentRegistryFile = toml::from_str(&s).map_err(|e| e.to_string())?;
     let mut out = file.agent;
-    for a in &mut out {
-        if a.command_extension.is_empty() {
-            a.command_extension = "md".to_string();
-        }
-    }
     out.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(out)
 }
@@ -258,63 +227,6 @@ metadata:
     )
 }
 
-fn invoke_for(agent: &AgentDef, workflow_id: &str) -> String {
-    if agent.command_style == "colon" {
-        format!(
-            "{}:{}",
-            agent.invoke_prefix.trim_start_matches('/'),
-            workflow_id
-        )
-    } else {
-        format!("{}-{}", agent.invoke_prefix, workflow_id)
-    }
-}
-
-fn render_command(agent: &AgentDef, workflow_id: &str, title: &str, version: &str) -> String {
-    let invoke = invoke_for(agent, workflow_id);
-    let name = if agent.command_style == "colon" {
-        format!("/{}", invoke)
-    } else {
-        invoke.clone()
-    };
-    format!(
-        r#"---
-name: {name}
-id: rgctl-{workflow_id}
-category: Analysis
-description: "{title} (rgctl workflow)"
-rgctl-managed: true
-metadata:
-  generatedBy: "rgctl {version}"
----
-
-Run the **rgctl {workflow_id}** workflow. Load skill `rgctl-{workflow_id}` if needed.
-
-User input after the command is natural-language intent; translate to `rgctl -f json` subprocesses.
-
-Invoke: `{invoke}`
-"#
-    )
-}
-
-fn command_ext(agent: &AgentDef) -> &str {
-    if agent.command_extension.is_empty() {
-        "md"
-    } else {
-        &agent.command_extension
-    }
-}
-
-fn command_rel_path(agent: &AgentDef, workflow_id: &str) -> String {
-    let ext = command_ext(agent);
-    let file = if agent.command_style == "colon" {
-        format!("{workflow_id}.{ext}")
-    } else {
-        format!("rgctl-{workflow_id}.{ext}")
-    };
-    format!("{}/{}", agent.commands_subdir, file)
-}
-
 /// Embed directory name (avoid `.cursor`/`.claude` gitignore collisions on case-insensitive FS).
 fn embed_agent_dir(agent_id: &str) -> String {
     format!("host-{agent_id}")
@@ -368,27 +280,25 @@ fn copy_meta_skill_tree(src: &Path, dest: &Path) -> Result<(), String> {
 
 fn prepend_router_note(
     skill_path: &Path,
-    agent: &AgentDef,
     workflows: &[WorkflowEntry],
     version: &str,
 ) -> Result<(), String> {
     let existing = fs::read_to_string(skill_path).map_err(|e| e.to_string())?;
     let mut lines = vec![
-        "## Workflow slash commands (generated)".to_string(),
+        "## Workflow skills (generated)".to_string(),
         String::new(),
-        "| Intent | Command |".to_string(),
-        "|--------|---------|".to_string(),
+        "| Intent | Skill |".to_string(),
+        "|--------|-------|".to_string(),
     ];
     for wf in workflows {
-        let inv = invoke_for(agent, &wf.id);
-        lines.push(format!("| {} | `{}` |", wf.title, inv));
+        lines.push(format!("| {} | `rgctl-{}` |", wf.title, wf.id));
     }
     lines.push(String::new());
     lines.push("**Migrate** (roadmap / `migration_plan.json`) and **Kantra** (rules / `kantra_findings.json`) are separate workflows — do not conflate.".to_string());
     lines.push(format!("rgctl-managed router note generatedBy rgctl {version}"));
     lines.push(String::new());
     let note = lines.join("\n");
-    if !existing.contains("Workflow slash commands (generated)") {
+    if !existing.contains("Workflow skills (generated)") {
         let updated = format!("{existing}\n\n{note}");
         fs::write(skill_path, updated).map_err(|e| e.to_string())?;
     }
@@ -425,7 +335,7 @@ mod codegen_tests {
     }
 
     #[test]
-    fn generate_is_deterministic_for_gql_cursor() {
+    fn generate_is_deterministic_for_search_cursor() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -437,8 +347,8 @@ mod codegen_tests {
         let b = repo.join("target/agent-pack-test-b");
         generate(&pack, &a, "test").expect("gen a");
         generate(&pack, &b, "test").expect("gen b");
-        let fa = a.join("agents/host-cursor/skills/rgctl-gql/SKILL.md");
-        let fb = b.join("agents/host-cursor/skills/rgctl-gql/SKILL.md");
+        let fa = a.join("agents/host-cursor/skills/rgctl-search/SKILL.md");
+        let fb = b.join("agents/host-cursor/skills/rgctl-search/SKILL.md");
         assert_eq!(
             fs::read(&fa).expect("read a"),
             fs::read(&fb).expect("read b")

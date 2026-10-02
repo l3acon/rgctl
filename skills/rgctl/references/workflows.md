@@ -8,7 +8,6 @@ Worked NL scenarios showing the discover → query → reason → act pattern fo
 - [Blast radius and impact](#impact-workflow)
 - [Data flow and slices](#flow-workflow)
 - [Semantic and structural search](#search-workflow)
-- [Graph query language](#gql-workflow)
 - [Migration roadmap](#migrate-workflow)
 - [Konveyor Kantra rules](#kantra-workflow)
 - [CI and policy gates](#gate-workflow)
@@ -131,7 +130,7 @@ rgctl -r "$REPO" semantic index                    # opt-in; default vocab. extr
 rgctl -r "$REPO" -f json semantic query "checkout flow" --limit 10
 ```
 
-Fusion is on by default for semantic query; use GQL for exact graph patterns.
+Fusion is on by default for semantic query. For exact graph patterns use structured verbs (`find`, `callers`, `relations`, `inventory`) — not freeform Cypher.
 
 ### NL function search
 
@@ -149,72 +148,15 @@ rgctl -r "$REPO" -f json semantic query "checkout" --scope community --limit 10
 
 Hits are pooled **community** results (same `hits[]` contract).
 
-### Concept search with 0 LIKE hits
+### Concept search with empty hits
 
-If GQL LIKE returns 0 for a concept (e.g., "ingress", "gateway"):
+If `find` / name globs return 0 for a concept (e.g., "ingress", "gateway"):
 
 1. Try `communities list` and grep labels
 2. Try `semantic query "<concept>"`
-3. Broaden LIKE to non-Function node types (Modules, Classes)
+3. Broaden with `find '*Gateway*' --type class` or `inventory --by type`
 
 Concepts often live in package/directory paths or type names, not bare function names.
-
-
----
-
-# GQL workflow
-
-**When:** Ad-hoc graph queries, inventories, call neighborhoods.
-
-Use **qualified_name** / FQN for classes, not bare `n.name` when disambiguating. Always use **LIMIT** on broad patterns. Explain macros before inventing raw GQL.
-
-### Function inventory
-
-**User intent:** *"Give me an inventory of functions … candidates to delete or shrink"*
-
-```bash
-rgctl -f json gql --macro-name all_functions unused
-```
-
-`all_functions` → full inventory (`count` + `rows`). `unused` is a **placeholder**. Cross-check with blast-radius / CALL queries before deletes.
-
-### Named communities
-
-**User intent:** *"What architectural communities / packages does the graph see?"*
-
-```bash
-rgctl -f json gql --macro-name all_communities unused
-# prefer for labels + modularity: rgctl -f json communities list
-```
-
-Lists communities — **not** "orphaned modules." Inspect members and call edges before proposing a prune.
-
-### Pattern search
-
-**User intent:** *"Find all Service classes … naming consistency"*
-
-```bash
-rgctl -f json gql "MATCH (n:Function) WHERE n.name LIKE '*Service' RETURN n LIMIT 20"
-```
-
-Suffix-only — `*middle*` silently returns 0. For contains-style search, use `semantic query "Service"` instead.
-
-### Community members
-
-**User intent:** *"List all the functions inside Community 12"*
-
-```bash
-rgctl -f json gql "MATCH (f:Function) WHERE f.community_id = '12' RETURN f LIMIT 20"
-```
-
-### Call neighborhood
-
-**User intent:** *"Show me the call stack surrounding `updateQuantity` up to 3 hops"*
-
-```bash
-rgctl -f json gql "MATCH (a:Function)-[:CALLS*1..3]->(b:Function)
-  WHERE a.name = 'updateQuantity' RETURN a,b LIMIT 50"
-```
 
 
 ---
@@ -316,7 +258,10 @@ Native evaluation of [Konveyor Kantra](https://github.com/konveyor/kantra) rules
 ```bash
 rgctl discover . -l java --with-kantra
 # violations: .rgctl/kantra_findings.json
-# rules in graph: KantraRule / KantraRuleset nodes (GQL)
+
+# Post-index (when snapshot already exists):
+rgctl -f json rules run ./rules/ --target quarkus
+# rules in graph: find --type kantrarule / inventory --by type
 ```
 
 Report `catalog_id`, `evaluated_rules`, violation count, sample hits (`rule_id`, `file`, `line`, `matched_by`), and top `skipped_rules` reasons.
@@ -332,17 +277,18 @@ rgctl discover . -l java --with-kantra --kantra-target quarkus
 
 `target_filter` appears in `kantra_findings.json`. Only rules with `konveyor.io/target=<NAME>` labels are evaluated.
 
-### Rules inventory (GQL)
+### Rules inventory
 
-**User intent:** *"List migration rules indexed in the graph" / "Which rules target Quarkus?"*
+**User intent:** *"List migration rules indexed in the graph" / "How many Kantra rules?"*
 
 ```bash
-rgctl -f json gql "MATCH (r:KantraRule) RETURN r LIMIT 20"
-# Konveyor labels are node properties — use backtick-quoted keys:
-rgctl -f json gql 'MATCH (r:KantraRule) WHERE r.`konveyor.io/target` = '\''quarkus'\'' RETURN r'
+rgctl -f json find --type kantrarule --limit 50
+rgctl -f json inventory --by type   # KantraRule / KantraRuleset counts
+# after full eval: rule → code links
+rgctl -f json relations --edge violates --from-type kantrarule --limit 50
 ```
 
-`KantraRuleset` nodes link to rules via `CONTAINS` edges. After full eval, `VIOLATES` edges connect rules to code nodes; `kantra_findings.json` has line-level detail and enrichment.
+Line-level detail and enrichment live in `kantra_findings.json` (preferred over edge dumps for violations).
 
 ### Fixture / CI override
 
@@ -362,7 +308,7 @@ Mutually exclusive with `--kantra-catalog`. Embedded catalog is the default when
 rgctl discover . --with-kantra --kantra-index-only
 ```
 
-Useful when you only need GQL rule inventory. Eval stage is skipped; `kantra_findings.json` is not written.
+Useful when you only need structured rule inventory (`find --type kantrarule`). Eval stage is skipped; `kantra_findings.json` is not written.
 
 **Pitfalls:**
 
@@ -409,11 +355,11 @@ Exit code 1 means violations. Parse JSON for violation details.
 
 ```bash
 rgctl -r "$REPO" serve --open
-# POST http://127.0.0.1:8080/api/query
-# {"query":"MATCH (n:Function) RETURN n LIMIT 5"}
+# Dashboard UI for exploration; agents should still prefer CLI structured verbs:
+#   rgctl -f json find|callers|relations|inventory|status …
 ```
 
-See [docs/http-api.md](../../docs/http-api.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for repeated HTTP queries on one repo.
+See [docs/http-api.md](../../docs/http-api.md). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.
 
 
 ---

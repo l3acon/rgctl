@@ -6,7 +6,7 @@
 
 **Your goal when contributing here:** preserve ingest scale, query correctness, memory discipline, and deterministic artifacts under `.rgctl/` — not add convenience at the cost of Tokio blocking, whole-repo clones, or ungated cold regressions.
 
-> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill --with-commands`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [docs/guides/agent-commands.md](docs/guides/agent-commands.md).
+> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [docs/guides/agent-commands.md](docs/guides/agent-commands.md).
 
 ---
 
@@ -197,7 +197,7 @@ cargo build --release
 
 Code-daemon / ONNX weights: `git lfs pull` when using that embedder feature.
 
-Dogfood fixtures: `rgctl-tests/` (e.g. ecommerce-*). Consumer agent pack: `rgctl install --skill --with-commands --tools cursor`.
+Dogfood fixtures: `rgctl-tests/` (e.g. ecommerce-*). Consumer agent pack: `rgctl install --skill --tools cursor`.
 
 ---
 

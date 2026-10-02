@@ -3,18 +3,30 @@ name: rgctl-impact
 description: "Blast radius and impact. Use for rgctl impact workflow. Spawn rgctl -f json; parse schema_version from stdout."
 rgctl-managed: true
 metadata:
-  generatedBy: "rgctl 0.4.13"
+  generatedBy: "rgctl 0.0.0-dev"
 ---
 
 # Impact workflow
 
 **When:** Before refactors, renames, or API changes.
 
+### Blast radius
+
+**User intent:** *"What's the impact if I change the signature of `updateQuantity`?"*
+
 ```bash
-rgctl -r "$REPO" -f json blast-radius SYMBOL [--depth N] [--class NAME] [--file PATH]
+rgctl -r "$REPO" -f json blast-radius updateQuantity --depth 2
 ```
 
-Disambiguate symbols with `--class` or `--file` when names collide. Report hop depth and top callers/callees from JSON payload.
+Report `metrics.score`, `topology.direct_callers`, impact size. Add `--class` / `--file` if ambiguous.
+
+### Relationship between two symbols
+
+**User intent:** *"What's the relationship between A and B?"*
+
+1. Resolve symbols → bounded CALLS/DEPENDSON traversal
+2. Report hops, shared neighbors, files
+3. If no direct path but asymmetric dependency, fall back to `blast-radius` on each
 
 
 ## Agent loop

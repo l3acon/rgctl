@@ -1,4 +1,4 @@
-# Agent pack (skills & commands)
+# Agent pack (skills)
 
 ## Introduction
 
@@ -7,13 +7,12 @@ The rgctl **agent pack** teaches AI coding agents (Claude Code, Antigravity, Cod
 | Piece | What it is | Example (Cursor, repo-local) |
 |-------|------------|------------------------------|
 | **Meta skill** | Router + `references/` | `.cursor/skills/rgctl/SKILL.md` |
-| **Workflow skills** (8) | Focused playbooks | `.cursor/skills/rgctl-gql/SKILL.md`, … |
-| **Slash / prompt commands** | Chat steers (optional `--with-commands`) | `.cursor/commands/rgctl-gql.md` → `/rgctl-gql` |
+| **Workflow skills** (7) | Focused playbooks | `.cursor/skills/rgctl-discover/SKILL.md`, … |
 | **Policy snippet** | Optional structural bias | `.cursor/rules/rgctl-structural.mdc` (`--with-policy`) |
 
-The pack is **embedded in the `rgctl` binary**. `rgctl install --skill --with-commands` copies it into per-product paths (see [Agent commands](agent-commands.md)). Agents map natural-language questions to a workflow skill or slash command, run `rgctl -f json`, and summarize — without the developer memorizing CLI syntax.
+The pack is **embedded in the `rgctl` binary**. `rgctl install --skill` copies it into per-product paths (see [Agent commands](agent-commands.md)). Agents load workflow skills and run `rgctl -f json` structured verbs — without the developer memorizing CLI syntax.
 
-Workflows: **discover**, **impact**, **flow**, **search**, **gql**, **migrate**, **kantra**, **gate**. Chat commands are steering wheels; the engine remains the terminal CLI.
+Workflows: **discover**, **impact**, **flow**, **search**, **migrate**, **kantra**, **gate**. Agents use structured verbs (`find` / `callers` / `relations` / `inventory` / `status`) — not Cypher.
 
 ## Use Cases
 
@@ -51,24 +50,23 @@ rgctl -r example/coolstore discover --with-cfg
 
 ### 1. Install the pack
 
-Install meta skill, workflow skills, and slash commands into your repository:
+Install meta skill and workflow skills into your repository:
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+rgctl -r example/coolstore install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
 Text mode lists each created or updated path. Typical layout (Cursor example):
 
 - `.cursor/skills/rgctl/SKILL.md` — meta router + `references/`
-- `.cursor/skills/rgctl-discover/` … `rgctl-gate/` — **eight** workflow skills
-- `.cursor/commands/rgctl-*.md` — **eight** slash command stubs (with `--with-commands`)
+- `.cursor/skills/rgctl-discover/` … `rgctl-gate/` — **seven** workflow skills
 
 **What happened:**
 
 - rgctl unpacked the embedded **agent pack** (generated at build time from `skills/rgctl/` and `skills/rgctl/workflows/`).
-- **Claude** uses `.claude/skills/` and colon-style commands (`/rgctl:gql`).
+- **Claude** uses `.claude/skills/`.
 - **Codex / agents / zed** share `.agents/skills/` (install dedupes).
-- **Cursor** uses `.cursor/skills/` and `/rgctl-gql` commands.
+- **Cursor** uses `.cursor/skills/`.
 - Workflow prose lives in `skills/rgctl/workflows/*.md`; installed `references/workflows.md` is assembled from those fragments.
 - No network — content matches your `rgctl` binary version.
 
@@ -79,21 +77,20 @@ See [Agent commands](agent-commands.md) for the full flag table and registry (`i
 Check the install status programmatically:
 
 ```bash
-rgctl -r example/coolstore -f json install --skill --with-commands --tools cursor \
-  | jq '{schema_version, scope, agents, with_commands, writes: [.writes[] | {agent, workflow, kind, status}]}'
+rgctl -r example/coolstore -f json install --skill --tools cursor \
+  | jq '{schema_version, scope, agents, writes: [.writes[] | {agent, workflow, kind, status}]}'
 ```
 
-**Output (schema version 2, abbreviated):**
+**Output (schema version 3, abbreviated):**
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "install",
   "skill": "rgctl",
   "repo": "/path/to/example/coolstore",
   "scope": "local",
   "agents": ["cursor"],
-  "with_commands": true,
   "with_policy": false,
   "force": false,
   "writes": [
@@ -106,9 +103,9 @@ rgctl -r example/coolstore -f json install --skill --with-commands --tools curso
     },
     {
       "agent": "cursor",
-      "workflow": "gql",
+      "workflow": "search",
       "kind": "skill",
-      "path": "/path/to/example/coolstore/.cursor/skills/rgctl-gql/SKILL.md",
+      "path": "/path/to/example/coolstore/.cursor/skills/rgctl-search/SKILL.md",
       "status": "created"
     }
   ]
@@ -126,10 +123,10 @@ The `status` field for each write is one of:
 Limit adapters with **`--tools`** (comma-separated registry ids):
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --tools claude
-rgctl -r example/coolstore install --skill --with-commands --tools codex,agents
-rgctl -r example/coolstore install --skill --with-commands --tools antigravity
-rgctl -r example/coolstore install --skill --with-commands --tools cursor
+rgctl -r example/coolstore install --skill --tools claude
+rgctl -r example/coolstore install --skill --tools codex,agents
+rgctl -r example/coolstore install --skill --tools antigravity
+rgctl -r example/coolstore install --skill --tools cursor
 rgctl install --list-agents   # all ids and paths
 ```
 
@@ -140,7 +137,7 @@ rgctl install --list-agents   # all ids and paths
 When you upgrade rgctl, the embedded skill may have changed. Update it with `--force`:
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --force
+rgctl -r example/coolstore install --skill --force
 ```
 
 This overwrites any existing skill files, even if they have been modified locally.
@@ -313,16 +310,12 @@ When the user asks: *"Tell me more about the coolstore model community"*
 The agent queries community members:
 
 ```bash
-rgctl -r example/coolstore -f json gql \
-  "MATCH (f:Function) WHERE f.community_id = '13' RETURN f LIMIT 20"
+rgctl -r example/coolstore -f json communities list
+rgctl -r example/coolstore -f json semantic query "coolstore model" --scope community --limit 20
+rgctl -r example/coolstore -f json blast-radius getShoppingCart --depth 3
 ```
 
-And checks blast radius on key functions:
-
-```bash
-rgctl -r example/coolstore blast-radius getShoppingCart --depth 3
-```
-
+And checks blast radius on key functions (already shown above).
 ---
 
 ## Use Case: Porting a Function to Another Language
@@ -491,11 +484,11 @@ The skill embeds a decision table that maps natural-language patterns to CLI com
 |------------------------|---------------------|
 | "Generate a migration plan" | `discover . --with-cfg --with-harmonic --export-migration-hints` |
 | "What are the bottlenecks?" | `metrics --pagerank` |
-| "List all functions" | `gql --macro-name all_functions unused` |
+| "List all functions" | `find --type function --count-only` / `find --type function --limit 50` |
 | "What communities exist?" | `communities list` |
 | "Where is the checkout flow?" | `semantic index` then `semantic query "checkout flow"` |
 | "What's the impact of changing X?" | `blast-radius X` |
-| "Show the call stack around X" | `gql "MATCH (a)-[:CALLS*1..3]->(b) WHERE a.name = 'X'"` |
+| "Show the call stack around X" | `callers X --depth 3` / `callees X` |
 | "Where is ShoppingCart mutated?" | `cpg mutations --type ShoppingCart` |
 | "Trace variable X forward" | `cpg flows FILE --line N --variable X --direction forward` |
 | "Validate against policies" | `check --policy-file policy.json` |
@@ -508,14 +501,13 @@ See **[Agent commands](agent-commands.md)** for the full table. Summary:
 
 | Option | Description |
 |--------|-------------|
-| `--skill` | Meta `rgctl` + eight workflow skills (required for skills unless only `--with-policy`) |
-| `--with-commands` | Slash / prompt files per adapter |
+| `--skill` | Meta `rgctl` + seven workflow skills (required for skills unless only `--with-policy`) |
 | `--with-policy` | Cursor structural rule snippet |
 | `--tools` | Registry ids or `all` (**default:** `cursor`, `claude`, `codex`, `agents`, `antigravity`) |
 | `-g` / `--global` | User home instead of repo |
 | `--force` | Overwrite differing rgctl-managed files |
 | `--list-agents` | Print registry; no install |
-| `-f json` | Schema version 2 install payload |
+| `-f json` | Schema version 3 install payload |
 
 ## How the pack is distributed
 
@@ -523,7 +515,7 @@ At **rgctl build** time, `rgctl-agent-pack-codegen` generates the pack from `age
 
 - No network access needed to install.
 - Pack version matches the CLI version.
-- Upgrading `rgctl` and running `install --skill --with-commands --force` refreshes skills and commands.
+- Upgrading `rgctl` and running `install --skill --force` refreshes skills.
 - Target repos do not need a checkout of the rgctl source tree.
 
 ## Benefits

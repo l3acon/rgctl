@@ -228,16 +228,15 @@ Background daemon mode is retired. Artifacts live only under `{repo}/.rgctl/`. I
 After `rgctl` is on your PATH, install the **embedded agent pack** into the **target repository** (same root you use for `discover`):
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
-rgctl -r /path/to/repo install --skill --with-commands --tools cursor
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
+rgctl -r /path/to/repo install --skill --tools cursor
 rgctl install --list-agents
 ```
 
 This copies from the binary (no network):
 
 - **Meta skill** `rgctl` — `SKILL.md`, `references/` (workflows assembled from `skills/rgctl/workflows/` at rgctl build time)
-- **Workflow skills** — `rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, … (eight workflows)
-- **Optional chat commands** — with `--with-commands` (e.g. `.cursor/commands/rgctl-gql.md`, Claude `/rgctl:gql` files)
+- **Workflow skills** — `rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, … (seven workflows)
 - **Optional policy** — `--with-policy` (Cursor structural rule snippet)
 
 Default **`--tools`** (omit flag) is **`cursor`, `claude`, `codex`, `agents`, `antigravity`**. Use **`--tools all`** for the full registry (~40 paths). Unknown tool ids warn on stderr; **`--global`** requires `supports_global: true` per agent. **`--host`** is deprecated. Use **`-g`** for a global install under your home directory. If a managed file differs from the bundle, the command exits **1** unless you pass **`--force`**.
@@ -286,7 +285,7 @@ rgctl --version
 After upgrading, refresh the agent pack in each repository:
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude --force
+rgctl install --skill --tools cursor,claude --force
 ```
 
 ### From source

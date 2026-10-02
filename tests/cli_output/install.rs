@@ -9,14 +9,13 @@ fn test_install_json_schema_sanity() {
         "/tmp/repo",
         "local",
         vec!["cursor".to_string()],
-        true,
         false,
         false,
         vec![InstallWrite {
             agent: "cursor".into(),
-            workflow: Some("gql".into()),
+            workflow: Some("search".into()),
             kind: InstallWriteKind::Skill,
-            path: "/tmp/repo/.cursor/skills/rgctl-gql/SKILL.md".into(),
+            path: "/tmp/repo/.cursor/skills/rgctl-search/SKILL.md".into(),
             status: InstallWriteStatus::Created,
             host: None,
         }],
@@ -27,9 +26,11 @@ fn test_install_json_schema_sanity() {
         doc.get("schema_version").and_then(|v| v.as_u64()),
         Some(INSTALL_SCHEMA_VERSION as u64)
     );
+    assert_eq!(INSTALL_SCHEMA_VERSION, 3);
     assert_eq!(doc.get("command").and_then(|v| v.as_str()), Some("install"));
     assert_eq!(doc.get("scope").and_then(|v| v.as_str()), Some("local"));
-    for key in ["repo", "force", "writes", "agents", "with_commands"] {
+    assert!(doc.get("with_commands").is_none());
+    for key in ["repo", "force", "writes", "agents", "with_policy"] {
         assert!(doc.get(key).is_some(), "install JSON missing '{key}'");
     }
     let writes = doc
@@ -39,7 +40,7 @@ fn test_install_json_schema_sanity() {
     assert!(!writes.is_empty());
     let write = &writes[0];
     assert_eq!(write.get("agent").and_then(|v| v.as_str()), Some("cursor"));
-    assert_eq!(write.get("workflow").and_then(|v| v.as_str()), Some("gql"));
+    assert_eq!(write.get("workflow").and_then(|v| v.as_str()), Some("search"));
 }
 
 #[test]
@@ -55,7 +56,6 @@ fn test_install_json_schema_hosts_serialization() {
             "/tmp/repo",
             "local",
             vec![agent.to_string()],
-            false,
             false,
             false,
             vec![InstallWrite {
@@ -78,7 +78,6 @@ fn test_install_json_schema_hosts_serialization() {
         "/tmp/repo",
         "local",
         vec!["antigravity".to_string()],
-        false,
         false,
         false,
         vec![InstallWrite {
