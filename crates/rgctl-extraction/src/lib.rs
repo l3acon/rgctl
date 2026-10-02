@@ -10,4 +10,4 @@ pub mod usage_detector;
 pub use discovery::{DiscoveryConfig, FileDiscoverer};
 pub use extractor::{ExtractionTail, Extractor, FileExtraction, SymbolPass1Prep};
 pub use graph_builder::{AnnotationArgEntry, GraphBuilder};
-pub use manifests::{DependencyDeclaration, extract_manifest};
+pub use manifests::{DependencyDeclaration, extract_declarations, extract_manifest};

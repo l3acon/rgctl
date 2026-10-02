@@ -41,6 +41,7 @@ mod stage_profile;
 mod structured_query;
 mod session_status;
 mod rules;
+mod vuln_deps;
 
 pub use args::OutputFormat;
 
@@ -681,6 +682,44 @@ pub enum Commands {
         /// Overwrite rgctl-managed files that differ from the bundle
         #[arg(long)]
         force: bool,
+    },
+
+    /// OSV vulnerability triage / analyze
+    Vuln {
+        #[command(subcommand)]
+        action: VulnCommands,
+    },
+
+    /// Dependency inventory match against OSV
+    Deps {
+        #[command(subcommand)]
+        action: DepsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VulnCommands {
+    /// Parse and normalize an OSV JSON document (no repo scan)
+    Triage {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DepsCommands {
+    /// Match OSV package against manifests and optional bundled artifacts
+    Check {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+        /// JAR/WAR roots to scan for embedded Maven poms (opt-in; e.g. `lib`)
+        #[arg(long = "include-jars", value_name = "DIR", num_args = 1..)]
+        include_jars: Vec<std::path::PathBuf>,
+        /// Roots containing `node_modules/` to scan (opt-in)
+        #[arg(long = "include-node-modules", value_name = "DIR", num_args = 1..)]
+        include_node_modules: Vec<std::path::PathBuf>,
     },
 }
 
@@ -1744,6 +1783,16 @@ impl Cli {
                     force,
                 },
             ),
+            Commands::Vuln { action } => match action {
+                VulnCommands::Triage { osv } => vuln_deps::run_vuln_triage(&ctx, osv),
+            },
+            Commands::Deps { action } => match action {
+                DepsCommands::Check {
+                    osv,
+                    include_jars,
+                    include_node_modules,
+                } => vuln_deps::run_deps_check(&ctx, osv, include_jars, include_node_modules),
+            },
             Commands::Diff { base, head } => diff::run(
                 &ctx,
                 diff::DiffArgs { base, head },
@@ -1826,6 +1875,12 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::PrCheck { .. } => "pr-check",
         Commands::Export { .. } => "export",
         Commands::Install { .. } => "install",
+        Commands::Vuln { action } => match action {
+            VulnCommands::Triage { .. } => "vuln triage",
+        },
+        Commands::Deps { action } => match action {
+            DepsCommands::Check { .. } => "deps check",
+        },
         Commands::Diff { .. } => "diff",
         Commands::Serve { .. } => "serve",
     }

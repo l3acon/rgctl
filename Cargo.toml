@@ -96,6 +96,12 @@ rgctl-lang-groovy = { path = "crates/rgctl-lang-groovy", version = "0.4.17" }
 rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.17" }
 rgctl-languages = { path = "crates/rgctl-languages", version = "0.4.17" }
 tree-sitter = "0.25"
+# OSV schema parse (no client); OpenVEX types for later VEX emission
+osv = { version = "0.3", default-features = false, features = ["schema"] }
+openvex = "0.1.1"
+walkdir = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+thiserror = "1"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

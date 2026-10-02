@@ -1130,7 +1130,24 @@ rgctl -r "$REPO" -f json cpg calls priceShoppingCart | jq '.edges[:10]'
 
 ---
 
-## 18. `install`
+## 18. `vuln triage` / `deps check`
+
+OSV supply-chain triage (does **not** require `discover`; does **not** run on discover). Parse uses the [`osv`](https://crates.io/crates/osv) schema crate. Types: `rgctl-security`. `schema_version` is **1**.
+
+```bash
+rgctl -f json vuln triage --osv ./advisory.json
+rgctl -r "$REPO" -f json deps check --osv ./advisory.json
+rgctl -r "$REPO" -f json deps check --osv ./advisory.json --include-jars lib
+rgctl -r "$REPO" -f json deps check --osv ./advisory.json --include-node-modules .
+```
+
+`deps check` verdict: `not_affected` | `affected_candidate`. Bundled JAR / `node_modules` scans are **opt-in**.
+
+Human guide: [Agent pack](guides/agent-skill.md) · skill workflow `vuln`.
+
+---
+
+## 19. `install`
 
 Install the embedded **agent pack** (single skill `rgctl`, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **3**.
 
