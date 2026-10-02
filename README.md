@@ -7,10 +7,10 @@
 
 [![Docs](https://img.shields.io/badge/docs-shaaf.dev%2Frgctl-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://shaaf.dev/rgctl)
 [![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl/website.yml?branch=main&style=flat-square&label=website)](https://shaaf.dev/rgctl)
-[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.99%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
-[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-commands/)
+[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-skill/)
 [![Tier 1](https://img.shields.io/badge/languages-14%20Tier%201-8b5cf6?style=flat-square)](https://shaaf.dev/rgctl/docs/languages/)
 
 [![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=black)](docs/languages/README.md)
@@ -39,7 +39,7 @@ rgctl -f json blast-radius MyService
 rgctl -f json gql 'MATCH (a:Function)-[:CALLS]->(b) RETURN a,b LIMIT 20'
 
 # Use with your favorite LLM agent
-rgctl install --skill --with-commands --tools cursor,claude,codex,agents
+rgctl install --skill --tools cursor,claude,codex,agents
 ```
 
 https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
@@ -57,7 +57,7 @@ https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
 rgctl --version
 ```
 
-**Or build from source** (Rust **1.88+**):
+**Or build from source** (Rust **1.99+**):
 
 ```bash
 git clone https://github.com/sshaaf/rgctl.git
@@ -97,13 +97,13 @@ Always prefer **`-f json`** for agents and scripts ([JSON API](docs/json-api.md)
 
 ## Use with coding agents
 
-Install the bundled pack (skills + slash commands) into your IDE tooling:
+Install the bundled pack (skills) into your IDE tooling:
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude,codex,agents
+rgctl install --skill --tools cursor,claude,codex,agents
 ```
 
-Then: **discover once → query with `-f json`**. See [Agent commands](docs/guides/agent-commands.md).  
+Then: **discover once → query with `-f json`**. See [Agent pack](docs/guides/agent-skill.md).  
 For *your* application repo, optionally paste [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) as `AGENTS.md`.
 
 ---

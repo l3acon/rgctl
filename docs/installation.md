@@ -27,7 +27,7 @@ Everything you need to install rgctl (`rgctl`), choose the right operating mode,
 | Requirement | Notes |
 |-------------|-------|
 | **OS** | macOS (Apple Silicon or Intel), Linux (x86_64), Windows (x86_64) |
-| **Rust 1.88+** | Only for building from source ([rustup.rs](https://rustup.rs/)). Pre-built binaries need no Rust toolchain. |
+| **Rust 1.99+** | Only for building from source ([rustup.rs](https://rustup.rs/)). Pre-built binaries need no Rust toolchain. |
 | **Git** | For cloning the repository (source builds) |
 | **Git LFS** | Optional. Only required if you use `semantic index --embedder code-daemon` (~206 MB ONNX weights). The default `vocab` embedder needs no LFS. |
 
@@ -71,7 +71,7 @@ Expand-Archive rgctl-*-x86_64-pc-windows-msvc.zip -DestinationPath .
 
 ### Option B -- Build from source
 
-Requires **Rust 1.88+** (workspace `rust-version`; edition 2024). Check with `rustc --version`.
+Requires **Rust 1.99+** (workspace `rust-version`; edition 2024). Check with `rustc --version`.
 
 ```bash
 git clone https://github.com/sshaaf/rgctl.git
@@ -159,7 +159,7 @@ Run a quick smoke test on any repository:
 ```bash
 cd /path/to/any/repo
 rgctl discover .
-rgctl gql 'MATCH (n:Function) RETURN n LIMIT 5'
+rgctl find --type function --limit 5
 ```
 
 If both commands produce output without errors, the installation is working.
@@ -176,7 +176,7 @@ The default. Run `discover` once (writes `{repo}/.rgctl/`), then issue queries a
 
 ```bash
 rgctl discover .
-rgctl -f json gql 'MATCH (n:Function) RETURN n LIMIT 10'
+rgctl -f json find --type function --limit 10 | jq '.returned'
 rgctl -f json blast-radius MyFunction
 ```
 
@@ -197,14 +197,15 @@ rgctl serve --no-pipeline       # serve existing artifacts, skip auto-pipeline
 Query the API:
 
 ```bash
-curl -s http://127.0.0.1:8080/api/query \
+curl -s http://127.0.0.1:8080/api/status | jq .
+curl -s -X POST http://127.0.0.1:8080/api/semantic/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "MATCH (f:Function) RETURN f LIMIT 5"}'
+  -d '{"query":"main entry","limit":5}'
 ```
 
 **Best for:** repeated queries in one session, team exploration, agent integration over HTTP, visual dashboard browsing.
 
-See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) and [HTTP API reference](http-api.md).
+See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) and [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md).
 
 ### Mode comparison
 
@@ -219,13 +220,7 @@ See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) a
 
 ### Migrating from daemon cache
 
-If you previously used the background daemon, artifacts may still be under `~/.rgctl/cache/{reponame}/.rgctl/`. Copy them into the repo:
-
-```bash
-cd /path/to/repo
-rgctl migrate-cache              # uses repo directory name as cache key
-rgctl migrate-cache --name coolstore --force   # explicit cache name
-```
+Background daemon mode is retired. Artifacts live only under `{repo}/.rgctl/`. If you still have files under `~/.rgctl/cache/{reponame}/.rgctl/`, copy that directory into the repo as `.rgctl/` manually (or re-run `rgctl discover .`).
 
 ---
 
@@ -234,23 +229,23 @@ rgctl migrate-cache --name coolstore --force   # explicit cache name
 After `rgctl` is on your PATH, install the **embedded agent pack** into the **target repository** (same root you use for `discover`):
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
-rgctl -r /path/to/repo install --skill --with-commands --tools cursor
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
+rgctl -r /path/to/repo install --skill --tools cursor
 rgctl install --list-agents
 ```
 
 This copies from the binary (no network):
 
-- **Meta skill** `rgctl` — `SKILL.md`, `references/` (workflows assembled from `skills/rgctl/workflows/` at rgctl build time)
-- **Workflow skills** — `rgctl-discover`, `rgctl-migrate`, `rgctl-kantra`, … (eight workflows)
-- **Optional chat commands** — with `--with-commands` (e.g. `.cursor/commands/rgctl-gql.md`, Claude `/rgctl:gql` files)
+- **Skill `rgctl`** — `SKILL.md`, `references/` (workflows assembled from `skills/rgctl/workflows/` at rgctl build time)
 - **Optional policy** — `--with-policy` (Cursor structural rule snippet)
+
+Install no longer writes separate `rgctl-discover` / `rgctl-impact` / … skill directories.
 
 Default **`--tools`** (omit flag) is **`cursor`, `claude`, `codex`, `agents`, `antigravity`**. Use **`--tools all`** for the full registry (~40 paths). Unknown tool ids warn on stderr; **`--global`** requires `supports_global: true` per agent. **`--host`** is deprecated. Use **`-g`** for a global install under your home directory. If a managed file differs from the bundle, the command exits **1** unless you pass **`--force`**.
 
 Install does **not** run `discover` — index the repo separately (`rgctl discover .`).
 
-**Full reference:** [Agent commands guide](guides/agent-commands.md) · [Agent pack walkthrough](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
+**Full reference:** [Agent pack walkthrough](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
 
 ---
 
@@ -292,7 +287,7 @@ rgctl --version
 After upgrading, refresh the agent pack in each repository:
 
 ```bash
-rgctl install --skill --with-commands --tools cursor,claude --force
+rgctl install --skill --tools cursor,claude --force
 ```
 
 ### From source
@@ -364,7 +359,7 @@ If empty, revisit [Add to PATH](#add-to-path). For GUI apps (Cursor, VS Code), n
 
 ### Queries fail with "no graph found"
 
-Run `discover` first on the repo you mean to query. Artifacts should appear at `{repo}/.rgctl/`. If you still have a legacy daemon cache, run `rgctl migrate-cache`.
+Run `discover` first on the repo you mean to query. Artifacts should appear at `{repo}/.rgctl/`. Old daemon caches under `~/.rgctl/cache/` can be copied into the repo by hand, or just rediscover.
 
 ### Slow `discover` on large repositories
 
@@ -372,7 +367,7 @@ Start with the default mode (no extra flags). Add `--with-cfg`, `--with-taint`, 
 
 ### Build from source fails
 
-- Confirm **Rust 1.88+** (workspace `rust-version`): `rustc --version`
+- Confirm **Rust 1.99+** (workspace `rust-version`): `rustc --version`
 - Update Rust: `rustup update`
 - Clean build: `cargo clean && cargo build --release --bin rgctl`
 - ONNX / `ort-sys` link errors: `cargo build --release --bin rgctl --no-default-features` (disables default `semantic-onnx`; default `vocab` semantic search still works)
@@ -386,9 +381,9 @@ Start with the default mode (no extra flags). Add `--with-cfg`, `--with-taint`, 
 |------|-------------|
 | Full CLI walkthrough | [User Guide](user-guide.md) |
 | Concepts and architecture | [Introduction](Introduction.md) |
-| Use rgctl with agents | [Agent commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
+| Use rgctl with agents | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) |
 | Step-by-step feature guides | [Guides](guides/README.md) |
 | JSON output reference | [JSON API](json-api.md) |
-| HTTP API details | [HTTP API](http-api.md) |
+| HTTP API details | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | Supported languages | [Languages](languages/README.md) |

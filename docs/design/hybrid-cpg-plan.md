@@ -19,7 +19,7 @@ L_query  = virtual CPG API joins L_repo ⟷ L_proc by function UUID (+ call site
 - Sound points-to / must–may alias as v1 (tier later; see DFG tiers)
 - Claiming absolute “100% safety” against reflection / frameworks / JNI
 
-**Related:** [analysis-architecture.md](../analysis-architecture.md), [cfg-design.md](cfg-design.md), [pdg-design.md](pdg-design.md), [program-slicing-design.md](program-slicing-design.md), [gql-design.md](gql-design.md), [taint-analysis-design.md](taint-analysis-design.md).
+**Related:** [analysis-architecture.md](../analysis-architecture.md), [cfg-design.md](cfg-design.md), [pdg-design.md](pdg-design.md), [program-slicing-design.md](program-slicing-design.md), [structured-query guide](../guides/structured-query.md), [taint-analysis-design.md](taint-analysis-design.md).
 
 ---
 
@@ -43,7 +43,7 @@ flowchart TB
     IDX[field_write.index.bin optional]
   end
   subgraph L_query["L_query — virtual CPG"]
-    API[cpg CLI / HTTP / GQL extensions]
+    API[cpg CLI / HTTP façade]
   end
   SNAP --> API
   ARC --> API
@@ -76,7 +76,7 @@ Ship **P0→P2** before P3/P4. P1 is the gate for the record-refactor agent stor
 ## 3. Phase 0 — Virtual CPG façade (no new IR)
 
 ### Problem
-Agents must stitch `gql` / `blast-radius` / `inspect` / `slice` and know `--with-cfg`. No single “CPG” entrypoint.
+Agents must stitch `find` / `blast-radius` / `inspect` / `slice` and know `--with-cfg`. No single “CPG” entrypoint.
 
 ### Design
 
@@ -156,7 +156,7 @@ Today:
 4. **Query API** — `cpg mutations --type OrderDTO [--exclude-ctors] [--member status]`:
    - Returns file/line/code JSON list
    - Filters `is_constructor` when requested
-5. **GQL (optional P1.5)** — Virtual pattern or macro `field_mutations(type, …)` documented as overlay (like `:Community`); not topology edges.
+5. **Structured query overlay (optional P1.5)** — Document `cpg mutations` / future helpers as analysis overlays; not topology edges.
 6. **Setter policy (P1b)** — Also list `Calls` into `setX` / known mutators on type (name heuristic + optional config). Document as **advisory**, not complete.
 7. **Fixture** — `OrderDTO` + `OrderProcessor` with `order.status = "PROCESSED"`; assert mutation query finds exactly that line; ctor assigns excluded.
 8. **Negative** — Unrelated class with `.status =` must not appear when type resolves; unresolved writes appear only with `--include-unresolved`.
@@ -279,7 +279,7 @@ rgctl -r "$REPO" -f json cpg calls OrderProcessor::process
 
 HTTP: `POST /api/cpg` with the same `op` + args; stdout/JSON only on success path (stderr diagnostics).
 
-GQL: keep topology pure; add macros or documented virtual ops rather than fake `ASSIGNMENT` topology edges in v1.
+Keep topology pure; expose derived facts via `cpg` / structured verbs rather than fake `ASSIGNMENT` topology edges in v1.
 
 ---
 
@@ -314,7 +314,7 @@ Bump archive / index **version** fields; reject stale with clear CLI errors. Inv
 | AGENTS.md | Hybrid CPG commands table |
 | agent-recipes.md | DTO→record ReAct recipe |
 | user-guide.md | `cpg` section; link CFG requirement |
-| http-api.md | `/api/cpg` |
+| HTTP Server and Dashboard | `/api/cpg` (if exposed) |
 | This plan → later | Split into `hybrid-cpg-design.md` after P2 ships (screenshots if UI) |
 
 Dashboard: **not required** for P0–P2 (CLI/HTTP agent-first). Optional later: mutations panel.
@@ -327,7 +327,7 @@ Dashboard: **not required** for P0–P2 (CLI/HTTP agent-first). Optional later: 
 |------|------------|
 | Type recovery too weak → false “safe” | Require `--exclude-unresolved` default off for “proof” mode; print unresolved count |
 | Index doubles archive I/O | Standalone mmap index; lazy per-type |
-| Agents expect Joern CPGQL | Document mapping table; do not pretend Scala DSL |
+| Agents expect Joern-style query DSL | Document mapping table; do not pretend Scala DSL |
 | Scope creep into unified store | Explicit non-goal; review any PR touching snapshot digest for CPG |
 
 ---

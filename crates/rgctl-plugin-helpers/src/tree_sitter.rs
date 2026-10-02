@@ -257,20 +257,32 @@ fn walk_extract(
 }
 
 /// Parse source with the given grammar and return the tree.
+///
+/// Reuses a thread-local [`Parser`] (one per Rayon worker). `Parser::new` + grammar
+/// setup is expensive; cold discover parses tens of thousands of files on the same
+/// workers, so this matters more than per-file micro-opts in pass-1.
 pub fn parse_source(
     source: &[u8],
     file_path: &Path,
     grammar: tree_sitter::Language,
 ) -> Result<Tree> {
     use rgctl_plugin_api::Error;
-    let mut parser = Parser::new();
-    parser
-        .set_language(&grammar)
-        .map_err(|e| Error::PluginError(format!("Failed to set grammar: {e}")))?;
-    parser.parse(source, None).ok_or_else(|| Error::ParseError {
-        file: file_path.to_string_lossy().to_string().into(),
-        line: 0,
-        message: "Failed to parse source".to_string(),
+    use std::cell::RefCell;
+
+    thread_local! {
+        static PARSER: RefCell<Parser> = RefCell::new(Parser::new());
+    }
+
+    PARSER.with(|cell| {
+        let mut parser = cell.borrow_mut();
+        parser
+            .set_language(&grammar)
+            .map_err(|e| Error::PluginError(format!("Failed to set grammar: {e}")))?;
+        parser.parse(source, None).ok_or_else(|| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: "Failed to parse source".to_string(),
+        })
     })
 }
 

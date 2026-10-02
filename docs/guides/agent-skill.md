@@ -1,19 +1,15 @@
-# Agent pack (skills & commands)
+# Agent pack (skills)
 
 ## Introduction
 
-The rgctl **agent pack** teaches AI coding agents (Claude Code, Antigravity, Codex, Cursor, …) how to answer structural questions with the rgctl CLI. It is **not a single skill file** — install writes:
+The rgctl **agent pack** teaches AI coding agents (Claude Code, Antigravity, Codex, Cursor, …) how to answer structural questions with the rgctl CLI. Install writes **one skill** named `rgctl`:
 
 | Piece | What it is | Example (Cursor, repo-local) |
 |-------|------------|------------------------------|
-| **Meta skill** | Router + `references/` | `.cursor/skills/rgctl/SKILL.md` |
-| **Workflow skills** (8) | Focused playbooks | `.cursor/skills/rgctl-gql/SKILL.md`, … |
-| **Slash / prompt commands** | Chat steers (optional `--with-commands`) | `.cursor/commands/rgctl-gql.md` → `/rgctl-gql` |
+| **Skill `rgctl`** | Single skill + `references/` (command encyclopedia, workflow scenarios) | `.cursor/skills/rgctl/SKILL.md` |
 | **Policy snippet** | Optional structural bias | `.cursor/rules/rgctl-structural.mdc` (`--with-policy`) |
 
-The pack is **embedded in the `rgctl` binary**. `rgctl install --skill --with-commands` copies it into per-product paths (see [Agent commands](agent-commands.md)). Agents map natural-language questions to a workflow skill or slash command, run `rgctl -f json`, and summarize — without the developer memorizing CLI syntax.
-
-Workflows: **discover**, **impact**, **flow**, **search**, **gql**, **migrate**, **kantra**, **gate**. Chat commands are steering wheels; the engine remains the terminal CLI.
+The pack is **embedded in the `rgctl` binary**. `rgctl install --skill` installs **one** skill named `rgctl` per adapter — not separate `rgctl-discover` / `rgctl-impact` / … skills. Agents load that skill and run `rgctl -f json` structured verbs. Scenario playbooks live under `references/workflows.md` inside the skill.
 
 ## Use Cases
 
@@ -43,57 +39,57 @@ With the pack installed, every code review conversation has access to architectu
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` first:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover --with-cfg
+rgctl -r example/coolstore discover -l java --with-cfg
 ```
 
 ## Step-by-Step
 
 ### 1. Install the pack
 
-Install meta skill, workflow skills, and slash commands into your repository:
+Install the `rgctl` skill into your repository:
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --tools cursor,claude,codex,antigravity,agents
+rgctl -r example/coolstore install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
 Text mode lists each created or updated path. Typical layout (Cursor example):
 
-- `.cursor/skills/rgctl/SKILL.md` — meta router + `references/`
-- `.cursor/skills/rgctl-discover/` … `rgctl-gate/` — **eight** workflow skills
-- `.cursor/commands/rgctl-*.md` — **eight** slash command stubs (with `--with-commands`)
+- `.cursor/skills/rgctl/SKILL.md` — the skill
+- `.cursor/skills/rgctl/references/` — command encyclopedia, workflows, communities & policy
 
 **What happened:**
 
-- rgctl unpacked the embedded **agent pack** (generated at build time from `skills/rgctl/` and `skills/rgctl/workflows/`).
-- **Claude** uses `.claude/skills/` and colon-style commands (`/rgctl:gql`).
+- rgctl unpacked the embedded **agent pack** (generated at build time from `skills/rgctl/`; workflow fragments under `workflows/` assemble into `references/workflows.md`).
+- **Claude** uses `.claude/skills/`.
 - **Codex / agents / zed** share `.agents/skills/` (install dedupes).
-- **Cursor** uses `.cursor/skills/` and `/rgctl-gql` commands.
+- **Cursor** uses `.cursor/skills/`.
 - Workflow prose lives in `skills/rgctl/workflows/*.md`; installed `references/workflows.md` is assembled from those fragments.
 - No network — content matches your `rgctl` binary version.
 
-See [Agent commands](agent-commands.md) for the full flag table and registry (`install --list-agents`).
+See [Install options reference](#install-options-reference) below for the full flag table and registry (`install --list-agents`).
 
 ### 2. Verify with JSON Output
 
 Check the install status programmatically:
 
 ```bash
-rgctl -r example/coolstore -f json install --skill --with-commands --tools cursor \
-  | jq '{schema_version, scope, agents, with_commands, writes: [.writes[] | {agent, workflow, kind, status}]}'
+rgctl -r example/coolstore -f json install --skill --tools cursor \
+  | jq '{schema_version, scope, agents, writes: [.writes[] | {agent, workflow, kind, status}]}'
 ```
 
-**Output (schema version 2, abbreviated):**
+**Output (schema version 3, abbreviated):**
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "install",
   "skill": "rgctl",
   "repo": "/path/to/example/coolstore",
   "scope": "local",
   "agents": ["cursor"],
-  "with_commands": true,
   "with_policy": false,
   "force": false,
   "writes": [
@@ -103,13 +99,6 @@ rgctl -r example/coolstore -f json install --skill --with-commands --tools curso
       "kind": "meta",
       "path": "/path/to/example/coolstore/.cursor/skills/rgctl/SKILL.md",
       "status": "unchanged"
-    },
-    {
-      "agent": "cursor",
-      "workflow": "gql",
-      "kind": "skill",
-      "path": "/path/to/example/coolstore/.cursor/skills/rgctl-gql/SKILL.md",
-      "status": "created"
     }
   ]
 }
@@ -126,10 +115,10 @@ The `status` field for each write is one of:
 Limit adapters with **`--tools`** (comma-separated registry ids):
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --tools claude
-rgctl -r example/coolstore install --skill --with-commands --tools codex,agents
-rgctl -r example/coolstore install --skill --with-commands --tools antigravity
-rgctl -r example/coolstore install --skill --with-commands --tools cursor
+rgctl -r example/coolstore install --skill --tools claude
+rgctl -r example/coolstore install --skill --tools codex,agents
+rgctl -r example/coolstore install --skill --tools antigravity
+rgctl -r example/coolstore install --skill --tools cursor
 rgctl install --list-agents   # all ids and paths
 ```
 
@@ -140,7 +129,7 @@ rgctl install --list-agents   # all ids and paths
 When you upgrade rgctl, the embedded skill may have changed. Update it with `--force`:
 
 ```bash
-rgctl -r example/coolstore install --skill --with-commands --force
+rgctl -r example/coolstore install --skill --force
 ```
 
 This overwrites any existing skill files, even if they have been modified locally.
@@ -152,7 +141,7 @@ Once installed, the agent follows a 5-step loop for every structural question:
 ```
 1. USER PROMPT     "What's the impact of changing priceShoppingCart?"
 2. TOOL CALL       rgctl -f json blast-radius priceShoppingCart
-3. GRAPH FACTS     Parse JSON: score 40.35, 5 callers, impact zone 7
+3. GRAPH FACTS     Parse JSON: score 40.6, 6 callers, impact zone 12
 4. LLM REASONING   Summarize: moderate risk, spans service and REST layers
 5. ACTION          Report findings, suggest next steps
 ```
@@ -188,7 +177,7 @@ rgctl -r example/coolstore -f json blast-radius priceShoppingCart
   },
   "target": {
     "canonical_fqn": "ShoppingCartService::priceShoppingCart",
-    "file_path": "example/coolstore/./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
+    "file_path": "src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
     "signature": "public void priceShoppingCart(ShoppingCart sc) {"
   },
   "topology": {
@@ -205,7 +194,7 @@ rgctl -r example/coolstore -f json blast-radius priceShoppingCart
 
 The agent then reports:
 
-> priceShoppingCart has a blast-radius score of 40.4/100 (moderate risk). It is called by 5 functions: checkOutShoppingCart in the service layer, and 4 REST endpoint methods (add, dedupeCartItems, delete, set). The total impact zone is 7 functions. If you change the signature, all 5 callers will need updating.
+> priceShoppingCart has a blast-radius score of 40.6/100 (moderate risk). It has 6 direct callers (checkOutShoppingCart, CartEndpoint add/set/delete/dedupeCartItems, and ShoppingCart.addShoppingCartItem). The impact zone is 12 functions. Changing the signature requires updating those callers.
 
 ### Going Deeper: Call Neighborhood
 
@@ -274,7 +263,7 @@ When you ask: *"Generate a migration plan for this codebase"*
 The agent follows the skill's decision table (row 1: "Generate a migration plan") and runs:
 
 ```bash
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-cfg --with-harmonic --export-migration-hints \
   --migration-preset hybrid_default --migration-order scheduled
 ```
@@ -288,15 +277,21 @@ Then reads the plan:
   "steps": [
     {
       "step": 1,
-      "label": "main.webapp.bower_components.matches-selector",
-      "max_blast": 0.0,
-      "avg_pagerank": 0.0000634
+      "label": "com.redhat.coolstore.persistence",
+      "priority_score": -0.17,
+      "max_blast": 0.0
     },
     {
       "step": 2,
-      "label": "com.redhat.coolstore.model",
-      "max_blast": 0.0,
-      "avg_pagerank": 0.0000532
+      "label": "com.redhat.coolstore.utils",
+      "priority_score": 0.417,
+      "max_blast": 0.0
+    },
+    {
+      "step": 3,
+      "label": "com.redhat.coolstore.rest",
+      "priority_score": 0.329,
+      "max_blast": 0.0
     }
   ]
 }
@@ -304,7 +299,7 @@ Then reads the plan:
 
 The agent reports:
 
-> The migration plan contains N steps using the hybrid_default preset (balanced weighting of PageRank, harmonic centrality, and blast radius). The first extraction targets are low-risk leaf modules with zero blast radius. Step 2 extracts the domain model (com.redhat.coolstore.model), which has no blast-radius impact and can be safely moved to a shared library.
+> The migration plan contains 5 scheduled steps using the hybrid_default preset (balanced weighting of PageRank, harmonic centrality, and blast radius). First extraction targets are low-coupling packages such as `com.redhat.coolstore.persistence`, then utilities and REST, before denser service/model communities.
 
 ### Investigating a Migration Step
 
@@ -313,16 +308,12 @@ When the user asks: *"Tell me more about the coolstore model community"*
 The agent queries community members:
 
 ```bash
-rgctl -r example/coolstore -f json gql \
-  "MATCH (f:Function) WHERE f.community_id = '13' RETURN f LIMIT 20"
+rgctl -r example/coolstore -f json communities list
+rgctl -r example/coolstore -f json semantic query "coolstore model" --scope community --limit 20
+rgctl -r example/coolstore -f json blast-radius getShoppingCart --depth 3
 ```
 
-And checks blast radius on key functions:
-
-```bash
-rgctl -r example/coolstore blast-radius getShoppingCart --depth 3
-```
-
+And checks blast radius on key functions (already shown above).
 ---
 
 ## Use Case: Porting a Function to Another Language
@@ -491,11 +482,11 @@ The skill embeds a decision table that maps natural-language patterns to CLI com
 |------------------------|---------------------|
 | "Generate a migration plan" | `discover . --with-cfg --with-harmonic --export-migration-hints` |
 | "What are the bottlenecks?" | `metrics --pagerank` |
-| "List all functions" | `gql --macro-name all_functions unused` |
+| "List all functions" | `find --type function --count-only` / `find --type function --limit 50` |
 | "What communities exist?" | `communities list` |
 | "Where is the checkout flow?" | `semantic index` then `semantic query "checkout flow"` |
 | "What's the impact of changing X?" | `blast-radius X` |
-| "Show the call stack around X" | `gql "MATCH (a)-[:CALLS*1..3]->(b) WHERE a.name = 'X'"` |
+| "Show the call stack around X" | `callers X --depth 3` / `callees X` |
 | "Where is ShoppingCart mutated?" | `cpg mutations --type ShoppingCart` |
 | "Trace variable X forward" | `cpg flows FILE --line N --variable X --direction forward` |
 | "Validate against policies" | `check --policy-file policy.json` |
@@ -504,18 +495,59 @@ The agent handles disambiguation (e.g., adding `--class` or `--file` when a symb
 
 ## Install options reference
 
-See **[Agent commands](agent-commands.md)** for the full table. Summary:
+```bash
+rgctl [-r REPO] install [FLAGS]
+```
 
-| Option | Description |
-|--------|-------------|
-| `--skill` | Meta `rgctl` + eight workflow skills (required for skills unless only `--with-policy`) |
-| `--with-commands` | Slash / prompt files per adapter |
-| `--with-policy` | Cursor structural rule snippet |
-| `--tools` | Registry ids or `all` (**default:** `cursor`, `claude`, `codex`, `agents`, `antigravity`) |
-| `-g` / `--global` | User home instead of repo |
-| `--force` | Overwrite differing rgctl-managed files |
-| `--list-agents` | Print registry; no install |
-| `-f json` | Schema version 2 install payload |
+You must pass at least one of **`--skill`** or **`--with-policy`**.
+
+| Flag | Effect |
+|------|--------|
+| **`--skill`** | Install the single skill **`rgctl`** (with `references/`). |
+| **`--with-policy`** | Structural bias snippet (e.g. `.cursor/rules/rgctl-structural.mdc`). Optional; does not replace skills. |
+| **`--tools id1,id2`** or **`--tools all`** | Which **registry adapters** receive files. **Default (omit flag):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. **`all`** = full registry (~40 products). Unknown ids: stderr warning; if none valid, exit **1**. |
+| **`-g` / `--global`** | Install under your **home** (e.g. `~/.cursor/skills/…`) instead of repo-local paths. Only agents with `supports_global: true` (see `--list-agents`). |
+| **`--list-agents`** | Print the registry table and exit (no install). |
+| **`--force`** | Overwrite rgctl-managed files that differ from the bundled version. |
+| **`--host`** | **Deprecated** — use **`--tools`**. |
+| **`-f json`** | Schema version **3** install payload (`scope`, `agents`, per-write `kind` / `status`). |
+
+### Typical installs
+
+```bash
+cd /path/to/your-app
+
+# Skills for common IDEs (repo-local)
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
+
+# Cursor only
+rgctl install --skill --tools cursor
+
+# Skills + Cursor structural policy
+rgctl install --skill --tools cursor --with-policy
+
+# User-home install (adapters that support -g)
+rgctl install --skill -g --tools cursor
+```
+
+Install does **not** run `discover`. Index separately (`rgctl discover .`), then query with `rgctl -f json …`.
+
+### What gets written
+
+Paths come from **`agent-pack/agents/registry.toml`**.
+
+| Kind | Example (Cursor, repo-local) |
+|------|------------------------------|
+| Skill | `.cursor/skills/rgctl/SKILL.md` + `references/` |
+| Policy | `.cursor/rules/rgctl-structural.mdc` (with `--with-policy`) |
+
+**Shared dedup:** `codex`, `agents`, and `zed` share `.agents/skills/` — install writes each destination once. Run `rgctl install --list-agents` for the full adapter table.
+
+### Scenarios inside the skill
+
+Intent → CLI mappings live in the skill’s NL routing table and `references/workflows.md` (discover, impact, flow, search, migrate, kantra, gate). There are **no** separate `rgctl-*` skill directories — one skill covers all of them.
+
+**Migrate** (roadmap / `migration_plan.json`) and **Kantra** (Konveyor findings) remain separate *topics* in that reference — do not conflate them.
 
 ## How the pack is distributed
 
@@ -523,7 +555,7 @@ At **rgctl build** time, `rgctl-agent-pack-codegen` generates the pack from `age
 
 - No network access needed to install.
 - Pack version matches the CLI version.
-- Upgrading `rgctl` and running `install --skill --with-commands --force` refreshes skills and commands.
+- Upgrading `rgctl` and running `install --skill --force` refreshes skills.
 - Target repos do not need a checkout of the rgctl source tree.
 
 ## Benefits
@@ -539,11 +571,12 @@ At **rgctl build** time, `rgctl-agent-pack-codegen` generates the pack from `age
 
 ## Related Guides
 
-- [Agent commands](agent-commands.md) — install flags, adapters, workflow ↔ CLI table
-- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- the `discover` step that all agent queries depend on
-- [Blast Radius Analysis](blast-radius-analysis.md) -- the most common agent query for refactoring safety
-- [Hybrid CPG](hybrid-cpg.md) -- mutations, flows, and call neighborhoods used in porting and testing
-- [Program Slicing](program-slicing.md) -- statement-level analysis for data-flow tracing
-- [Inspecting CFG, PDG, and Dominance](inspecting-cfg-pdg-dominance.md) -- the CFG data that drives test case generation
-- [Migration Planning](migration-planning.md) -- the migration roadmap the agent can generate and explain
-- [CI Policy Checks](ci-policy-checks.md) -- policy validation the agent runs for continuous architecture review
+- [USER_AGENTS_TEMPLATE](../agents/USER_AGENTS_TEMPLATE.md) — paste into *another* repo as `AGENTS.md`
+- [Installation](../installation.md) — binary install / PATH
+- [Structured graph queries](structured-query.md) — `find` / `callers` / `relations`
+- [Discovering and Indexing a Codebase](discovering-and-indexing.md) — the `discover` step that all agent queries depend on
+- [Blast Radius Analysis](blast-radius-analysis.md) — the most common agent query for refactoring safety
+- [Hybrid CPG](hybrid-cpg.md) — mutations, flows, and call neighborhoods used in porting and testing
+- [Migration Planning](migration-planning.md) — the migration roadmap the agent can generate and explain
+- [CI Policy Checks](ci-policy-checks.md) — policy validation the agent runs for continuous architecture review
+- [JSON API §18](../json-api.md#18-install) — install JSON schema

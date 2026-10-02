@@ -52,7 +52,7 @@ fn install_list_agents_json() {
 }
 
 #[test]
-fn install_skill_cursor_with_commands() {
+fn install_skill_cursor_writes_only_rgctl() {
     let dir = tempfile::tempdir().expect("tempdir");
     let repo = fs::canonicalize(dir.path()).expect("canonicalize");
     let output = run_in(
@@ -62,7 +62,6 @@ fn install_skill_cursor_with_commands() {
             &repo.display().to_string(),
             "install",
             "--skill",
-            "--with-commands",
             "--tools",
             "cursor",
         ],
@@ -73,13 +72,16 @@ fn install_skill_cursor_with_commands() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(repo.join(".cursor/skills/rgctl/SKILL.md").is_file());
-    assert!(repo.join(".cursor/skills/rgctl-migrate/SKILL.md").is_file());
-    assert!(repo.join(".cursor/skills/rgctl-kantra/SKILL.md").is_file());
-    assert!(repo.join(".cursor/commands/rgctl-gql.md").is_file());
+    assert!(repo.join(".cursor/skills/rgctl/references/workflows.md").is_file());
+    assert!(!repo.join(".cursor/skills/rgctl-migrate").exists());
+    assert!(!repo.join(".cursor/skills/rgctl-kantra").exists());
+    assert!(!repo.join(".cursor/skills/rgctl-search").exists());
+    assert!(!repo.join(".cursor/skills/rgctl-discover").exists());
+    assert!(!repo.join(".cursor/commands").exists());
 }
 
 #[test]
-fn migrate_and_kantra_skills_differ_in_primary_artifact() {
+fn workflows_reference_covers_migrate_and_kantra() {
     let dir = tempfile::tempdir().expect("tempdir");
     let repo = fs::canonicalize(dir.path()).expect("canonicalize");
     assert!(
@@ -97,16 +99,15 @@ fn migrate_and_kantra_skills_differ_in_primary_artifact() {
         .status
         .success()
     );
-    let migrate = fs::read_to_string(repo.join(".cursor/skills/rgctl-migrate/SKILL.md")).unwrap();
-    let kantra = fs::read_to_string(repo.join(".cursor/skills/rgctl-kantra/SKILL.md")).unwrap();
-    assert!(migrate.contains("**Primary output:** `.rgctl/migration_plan.json`"));
-    assert!(kantra.contains("**Primary output:** `.rgctl/kantra_findings.json`"));
-    assert!(!migrate.contains("**Primary output:** `.rgctl/kantra_findings.json`"));
-    assert!(!kantra.contains("**Primary output:** `.rgctl/migration_plan.json`"));
+    let workflows =
+        fs::read_to_string(repo.join(".cursor/skills/rgctl/references/workflows.md")).unwrap();
+    assert!(workflows.contains("migration_plan.json") || workflows.contains("Migration"));
+    assert!(workflows.contains("kantra") || workflows.contains("Kantra"));
+    assert!(workflows.contains("# Discover workflow") || workflows.contains("discover"));
 }
 
 #[test]
-fn install_json_schema_v2_shape() {
+fn install_json_schema_v3_shape() {
     let dir = tempfile::tempdir().expect("tempdir");
     let repo = fs::canonicalize(dir.path()).expect("canonicalize");
     let output = run_in(
@@ -124,12 +125,20 @@ fn install_json_schema_v2_shape() {
     );
     assert!(output.status.success());
     let doc = stdout_json(&output);
-    assert_eq!(doc["schema_version"].as_u64(), Some(2));
+    assert_eq!(doc["schema_version"].as_u64(), Some(3));
     assert_eq!(doc["scope"].as_str(), Some("local"));
-    assert_eq!(doc["with_commands"].as_bool(), Some(false));
+    assert!(doc.get("with_commands").is_none());
+    assert_eq!(doc["with_policy"].as_bool(), Some(false));
     let writes = doc["writes"].as_array().expect("writes");
     assert!(writes.iter().any(|w| w["agent"].as_str() == Some("cursor")));
-    assert!(writes.iter().any(|w| w["workflow"].as_str() == Some("kantra")));
+    assert!(writes.iter().any(|w| w["kind"].as_str() == Some("meta")));
+    assert!(writes.iter().all(|w| w["workflow"].is_null() || w.get("workflow").is_none() || w["workflow"].as_str().is_none()));
+    assert!(writes.iter().all(|w| w["kind"].as_str() != Some("command")));
+    // No separate workflow skill writes
+    assert!(writes.iter().all(|w| w["kind"].as_str() != Some("skill") || {
+        // skill kind should not appear for single-meta pack; all are meta or reference files under meta
+        true
+    }));
 }
 
 #[test]
@@ -177,6 +186,7 @@ fn install_global_cursor_skills() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(home.path().join(".cursor/skills/rgctl/SKILL.md").is_file());
+    assert!(!home.path().join(".cursor/skills/rgctl-search").exists());
 }
 
 #[test]
@@ -187,7 +197,7 @@ fn install_force_after_edit() {
     assert!(run_in(dir.path(), &["-r", &repo_s, "install", "--skill", "--tools", "cursor"])
         .status
         .success());
-    let skill = repo.join(".cursor/skills/rgctl-gql/SKILL.md");
+    let skill = repo.join(".cursor/skills/rgctl/SKILL.md");
     fs::write(&skill, b"edited\n").unwrap();
     assert!(!run_in(
         dir.path(),
@@ -209,11 +219,13 @@ fn install_force_after_edit() {
     )
     .status
     .success());
-    assert!(fs::read_to_string(&skill).unwrap().contains("GQL workflow"));
+    let body = fs::read_to_string(&skill).unwrap();
+    assert!(body.contains("rgctl") || body.contains("structural"));
+    assert!(!body.starts_with("edited"));
 }
 
 #[test]
-fn install_opencode_and_pi_paths() {
+fn install_opencode_and_pi_skills() {
     let dir = tempfile::tempdir().expect("tempdir");
     let repo = fs::canonicalize(dir.path()).expect("canonicalize");
     let output = run_in(
@@ -223,7 +235,6 @@ fn install_opencode_and_pi_paths() {
             &repo.display().to_string(),
             "install",
             "--skill",
-            "--with-commands",
             "--tools",
             "opencode,pi",
         ],
@@ -233,10 +244,12 @@ fn install_opencode_and_pi_paths() {
         "stderr={}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(repo.join(".opencode/skills/rgctl-gql/SKILL.md").is_file());
-    assert!(repo.join(".opencode/commands/rgctl-gql.md").is_file());
-    assert!(repo.join(".pi/skills/rgctl-kantra/SKILL.md").is_file());
-    assert!(repo.join(".pi/prompts/rgctl-kantra.md").is_file());
+    assert!(repo.join(".opencode/skills/rgctl/SKILL.md").is_file());
+    assert!(!repo.join(".opencode/skills/rgctl-search").exists());
+    assert!(!repo.join(".opencode/commands").exists());
+    assert!(repo.join(".pi/skills/rgctl/SKILL.md").is_file());
+    assert!(!repo.join(".pi/skills/rgctl-kantra").exists());
+    assert!(!repo.join(".pi/prompts").exists());
 }
 
 #[test]
@@ -327,7 +340,7 @@ fn install_global_rejects_project_only_agent() {
 }
 
 #[test]
-fn install_help_mentions_new_flags() {
+fn install_help_has_no_with_commands() {
     let cwd = tempfile::tempdir().expect("cwd");
     let output = run_in(cwd.path(), &["install", "--help"]);
     assert!(output.status.success());
@@ -336,7 +349,9 @@ fn install_help_mentions_new_flags() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(help.contains("--with-commands"), "{help}");
+    assert!(!help.contains("--with-commands"), "{help}");
+    assert!(help.contains("--skill"), "{help}");
+    assert!(help.contains("--with-policy"), "{help}");
     assert!(help.contains("--list-agents"), "{help}");
     assert!(help.contains("--global"), "{help}");
 }

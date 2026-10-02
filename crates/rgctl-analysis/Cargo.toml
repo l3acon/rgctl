@@ -1,6 +1,6 @@
 [package]
 name = "rgctl-analysis"
-version = "0.4.17"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Graph analysis algorithms for rgctl"
@@ -16,6 +16,8 @@ regex = "1"
 # `rc` serializes `Arc<T>` as `T` so FunctionAnalysis CFG/PDG stay wire-compatible.
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
+serde_yaml = "0.9"
+thiserror = { workspace = true }
 tree-sitter = "0.25"
 tree-sitter-java = "0.23"
 tree-sitter-rust = "0.24"

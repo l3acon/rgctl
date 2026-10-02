@@ -10,12 +10,12 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 | Step-by-step feature how-tos (CoolStore) | **[Guides](guides/README.md)** |
 | Per-language AST coverage (website from JSON) | **[Languages](languages/README.md)** · `*-ast-coverage.json` |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) — rules, cold profiles, tests/benches |
-| Use rgctl with LLM IDEs | [Agent commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [Agent recipes](agent-recipes.md) |
+| Use rgctl with LLM IDEs | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [Agent recipes](agent-recipes.md) |
 | JSON shapes (`schema_version`, fields) | [JSON API](json-api.md) |
 | CLI walkthrough (ecommerce-java) | [User Guide](user-guide.md) |
 | Concepts (what / why) | [Introduction](Introduction.md) |
 
-**Use rgctl (consumer agent loop):** install the agent pack (`--skill --with-commands`) → `discover` once → `gql` / `blast-radius` / `cpg` with `-f json` ([agent-commands](guides/agent-commands.md)).  
+**Use rgctl (consumer agent loop):** install the agent pack (`--skill`) → `discover` once → `find` / `callers` / `blast-radius` / `cpg` with `-f json` ([agent-skill](guides/agent-skill.md)).  
 **Contribute to this repo:** [AGENTS.md](../AGENTS.md).  
 **First hour (human):** [Install](installation.md) → User Guide §1–4 on [ecommerce-java](user-guide.md#3-example-project-ecommerce-java), then a [Guide](guides/README.md) for the feature you need.  
 **Latest release:** [v0.4.17 release notes](releases/v0.4.17.md) (Kotlin/Groovy/Puppet Tier 1, AST coverage SSOT, TS/JS named arrows).
@@ -29,9 +29,8 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 | Goal | Doc |
 |------|-----|
 | Supported languages | [Languages](languages/README.md) (SSOT: coverage JSON) |
-| Markdown / doc context graph | [Guide](guides/markdown-context-graph.md) (step-by-step) · [Reference](markdown-context.md) — `.md` / `.mdx`, GQL, Obsidian export, doc semantic index |
-| FAQ / glossary | [FAQ](faq.md) · [Glossary](glossary.md) |
-| HTTP `serve` query API | [HTTP API](http-api.md) |
+| Markdown / doc context graph | [Guide](guides/markdown-context-graph.md) (step-by-step) — `.md` / `.mdx`, structured queries, Obsidian export, doc semantic index |
+| HTTP server + dashboard | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | CI blast-radius policy | [Policy format](policy-format.md) |
 | Monolith migration (how-to) | [Building a migration plan](building-migration-plan.md) |
 | Research map | [Further reading](further-reading.md) |

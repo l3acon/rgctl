@@ -18,8 +18,8 @@ const capabilityRows = [
         body: "One Rust indexing pass builds the graph plus reachability caches. Later questions are lookups — not greps.",
       },
       {
-        title: "gql",
-        body: "Exact inventory and typed edges with macros (all_functions, communities). Stable -f json with schema_version.",
+        title: "find · callers",
+        body: "Exact inventory and typed edges (find, callers, relations, inventory). Stable -f json with schema_version.",
       },
       {
         title: "semantic",
@@ -88,7 +88,7 @@ export default function HomePage() {
             className="mt-8 max-w-3xl"
             lines={[
               "rgctl --version",
-              "rgctl install --skill --with-commands --tools cursor,claude,codex,antigravity,agents",
+              "rgctl install --skill --tools cursor,claude,codex,antigravity,agents",
             ]}
           />
           <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -180,9 +180,10 @@ export default function HomePage() {
             <p className="text-[var(--body)]">
               Install the agent pack (
               <code className="font-mono text-sm">
-                rgctl install --skill --with-commands
+                rgctl install --skill
               </code>
-              ) for a router skill, eight workflow skills, and slash commands —
+              ) for a single skill named{" "}
+              <code className="font-mono text-sm">rgctl</code> —
               or drop{" "}
               <Link
                 href="/agents/"
@@ -202,7 +203,7 @@ export default function HomePage() {
           <TerminalBlock
             lines={[
               "cd your-repo",
-              "rgctl install --skill --with-commands --tools cursor",
+              "rgctl install --skill --tools cursor",
               "rgctl discover .",
               'rgctl -f json blast-radius "priceShoppingCart" --depth 2',
             ]}

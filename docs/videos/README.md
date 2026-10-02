@@ -29,7 +29,7 @@ cargo build --release
 
 | File | Purpose |
 |------|---------|
-| [`markdown-context-cli.tape`](markdown-context-cli.tape) | `discover -l markdown,java` + GQL on `tests/fixtures/markdown-context` |
+| [`markdown-context-cli.tape`](markdown-context-cli.tape) | `discover -l markdown,java` + `find` on `tests/fixtures/markdown-context` |
 | [`record-markdown-context-cli.sh`](record-markdown-context-cli.sh) | Record → `markdown-context-cli-no-captions.{gif,mp4}` |
 
 ```bash

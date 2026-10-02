@@ -18,8 +18,10 @@ Semantic search is built on a separate opt-in index (`semantic_index.bin`) that 
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` first:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover
+rgctl -r example/coolstore discover -l java
 ```
 
 ## Step-by-Step
@@ -35,13 +37,13 @@ rgctl -r example/coolstore semantic index
 **Output:**
 
 ```
-Indexed 7526 functions (vocab-accumulate-v2, 256 dims) → example/coolstore/.rgctl/semantic_index.bin
-  incremental: 0 reused, 7526 embedded, 0 removed
+Indexed 152 functions (vocab-accumulate-v2, 256 dims) → .rgctl/semantic_index.bin
+  incremental: 0 reused, 152 embedded, 0 removed
 ```
 
 **What happened:**
 
-- rgctl embedded all 7,526 function symbols into 256-dimensional vectors using the **vocab-accumulate-v2** model (a compiled token-table embedder that requires no external model or ONNX runtime).
+- rgctl embedded all 152 function symbols into 256-dimensional vectors using the **vocab-accumulate-v2** model (a compiled token-table embedder that requires no external model or ONNX runtime).
 - The index was written to `.rgctl/semantic_index.bin`.
 - On subsequent runs, unchanged functions are reused (incremental indexing).
 
@@ -53,24 +55,40 @@ Search for functions related to "shopping cart checkout":
 rgctl -r example/coolstore -f json semantic query "shopping cart checkout" --limit 5
 ```
 
-**Output:**
+**Output (top hits):**
 
 ```json
 {
   "dimensions": 256,
   "hits": [
     {
-      "distance": 63,
-      "file_path": "example/coolstore/./src/main/webapp/bower_components/angular-animate/angular-animate.js",
-      "fused_score": 0.4749,
-      "name": "close",
-      "node_id": "5bda7d09-ac18-40c7-a90a-3a8876894947",
+      "distance": 126,
+      "file_path": "src/main/java/com/redhat/coolstore/service/ShoppingCartOrderProcessor.java",
+      "fused_score": 0.6000653020158653,
+      "name": "process",
+      "qualified_name": "com.redhat.coolstore.service.ShoppingCartOrderProcessor.process",
       "ranking": "fusion",
-      "score": 0.4749
+      "score": 0.6000653020158653
+    },
+    {
+      "distance": 111,
+      "file_path": "src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
+      "fused_score": 0.588396263733291,
+      "name": "checkOutShoppingCart",
+      "qualified_name": "com.redhat.coolstore.service.ShoppingCartService.checkOutShoppingCart",
+      "ranking": "fusion",
+      "score": 0.588396263733291
+    },
+    {
+      "distance": 109,
+      "file_path": "src/main/java/com/redhat/coolstore/rest/CartEndpoint.java",
+      "fused_score": 0.5404414112077187,
+      "name": "checkout",
+      "qualified_name": "com.redhat.coolstore.rest.CartEndpoint.checkout",
+      "ranking": "fusion",
+      "score": 0.5404414112077187
     }
   ],
-  "index_schema_version": 2,
-  "model_id": "vocab-accumulate-v2",
   "query": "shopping cart checkout",
   "schema_version": 3
 }
@@ -161,6 +179,6 @@ For most users, the default `vocab` embedder provides a good balance of quality 
 ## Related Guides
 
 - [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- must run `discover` before semantic index
-- [Graph Query Language](graph-query-language.md) -- use GQL for exact structural queries
+- [Structured graph queries](structured-query.md) -- use `find` / `relations` for exact structural lookups
 - [Community Detection](community-detection.md) -- understand community-scoped semantic search
 - [HTTP Server and Dashboard](http-server-and-dashboard.md) -- run semantic queries via the HTTP API

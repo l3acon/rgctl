@@ -65,11 +65,15 @@ rgctl -f json communities list
 
 #### Query Community Members
 
-Once you have a community ID, list its members:
+Once you have a community ID from `communities list`, explore ownership and members via structured verbs:
 
 **CLI:**
 ```bash
-rgctl -f json gql "MATCH (f:Function) WHERE f.community_id = '12715' RETURN f LIMIT 20"
+rgctl -f json inventory --by community
+rgctl -f json semantic query "<label or concept>" --scope community --limit 10
+# pick a seed symbol from hits, then:
+rgctl -f json blast-radius '<Symbol>' --depth 2   # may include community_id
+rgctl -f json callers '<Symbol>' --depth 2
 ```
 
 
@@ -120,17 +124,19 @@ rgctl -f json communities list
 rgctl -f json semantic query "checkout" --scope community
 ```
 
-**"List all functions in community 12"**
+**"List functions related to community 12"**
 ```bash
-rgctl -f json gql "MATCH (f:Function) WHERE f.community_id = '12' RETURN f"
+rgctl -f json communities list | jq '.communities[] | select(.id == 12)'
+rgctl -f json semantic query "<that community label>" --scope community
+rgctl -f json inventory --by community
 ```
 
-**"Why did LIKE return 0 for 'gateway'?"**
+**"Why did a name glob return 0 for 'gateway'?"**
 
 Concepts often live in package/directory paths or community labels, not function names:
 1. Try `communities list` and grep for "gateway" in labels
 2. Try `semantic query "gateway"`
-3. Broaden LIKE to all node types: `MATCH (n) WHERE n.name LIKE '*Gateway*'`
+3. Broaden: `find '*Gateway*' --type class` / `find '*gateway*' --type module`
 
 ---
 
@@ -284,7 +290,7 @@ The `gatekeeping` field in blast-radius response shows per-symbol policy status:
 **Forbidden crossings:**
 - Use specific patterns: `.*controller.*` not `.*`
 - Provide clear `reason` fields for developer guidance
-- Test patterns with `gql` before adding to policy
+- Test name patterns with `find` / `callers` before adding to policy
 
 ### Common Violations
 
@@ -309,12 +315,13 @@ rgctl -f json communities list
 # 2. Identify largest/notable communities
 # Look for labels like "Infrastructure", domain names
 
-# 3. Explore a community's members
-rgctl -f json gql "MATCH (f:Function) WHERE f.community_id = '<ID>' RETURN f LIMIT 50"
+# 3. Explore a community via semantic + impact
+rgctl -f json inventory --by community
+rgctl -f json semantic query "<community label>" --scope community --limit 20
 
-# 4. Find cross-community calls (coupling)
-rgctl -f json gql "MATCH (a:Function)-[:CALLS]->(b:Function) 
-  WHERE a.community_id = '<ID1>' AND b.community_id = '<ID2>' RETURN a,b"
+# 4. Probe coupling with callers / blast-radius on seed symbols from hits
+rgctl -f json callers '<KeyFunction>' --depth 2
+rgctl -f json blast-radius '<KeyFunction>' --depth 2
 ```
 
 **Report:**
@@ -330,14 +337,10 @@ rgctl -f json gql "MATCH (a:Function)-[:CALLS]->(b:Function)
 # 1. Find large cohesive communities
 rgctl -f json communities list
 
-# 2. For candidate community, check external dependencies
-rgctl -f json gql "MATCH (internal:Function)-[:CALLS]->(external:Function) 
-  WHERE internal.community_id = '<ID>' AND external.community_id != '<ID>' 
-  RETURN external"
-
-# 3. Analyze blast-radius of extracted community
-# (what breaks if we remove it?)
-rgctl -f json blast-radius <KeyFunction> --depth 3
+# 2. For candidate community, probe external impact from seed symbols
+rgctl -f json semantic query "<community label>" --scope community --limit 10
+rgctl -f json callers '<KeyFunction>' --depth 2 --scope-mode outside
+rgctl -f json blast-radius '<KeyFunction>' --depth 3
 ```
 
 **Report:**
@@ -425,7 +428,7 @@ rgctl -f json communities list | jq -r '.communities[] | "\(.id): \(.label)"' | 
 | No communities detected | Run `discover` (detection happens during analysis) |
 | Labels are stale/missing | Run `communities label --write` |
 | `--scope community` returns 0 | Large repos produce granular clusters; use `communities list` + grep instead |
-| Community ID not in GQL results | Run `communities list` first; ID only exists if analysis ran |
+| Community ID unknown | Run `communities list` first; ID only exists if analysis ran |
 
 ### Policy Checks
 
@@ -434,7 +437,7 @@ rgctl -f json communities list | jq -r '.communities[] | "\(.id): \(.label)"' | 
 | `check` exits 1 | Expected on violations; parse JSON for details |
 | Policy file not found | Use absolute path or relative to repo root |
 | All functions violate threshold | Threshold too strict; use `metrics --pagerank` to calibrate |
-| Forbidden crossing not triggering | Test regex pattern with `gql` first; ensure pattern matches actual function names |
+| Forbidden crossing not triggering | Test regex with `find` / `callers` first; ensure pattern matches actual function names |
 
 ---
 

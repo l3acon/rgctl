@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `discover` command is the foundation of every rgctl workflow. It parses your source code, builds a **code knowledge graph** of functions, classes, modules, and their relationships (calls, contains, imports), and runs configurable analytics on the result. Every other rgctl command — `gql`, `blast-radius`, `metrics`, and the rest — reads from the graph that `discover` produces.
+The `discover` command is the foundation of every rgctl workflow. It parses your source code, builds a **code knowledge graph** of functions, classes, modules, and their relationships (calls, contains, imports), and runs configurable analytics on the result. Every other rgctl command — `find`, `blast-radius`, `metrics`, and the rest — reads from the graph that `discover` produces.
 
 Think of `discover` as the indexing step: you run it once (or after significant code changes), and then query the graph as many times as you like without re-parsing.
 
@@ -15,7 +15,7 @@ Think of `discover` as the indexing step: you run it once (or after significant 
 
 ## Example Project
 
-This guide uses the **CoolStore** — a Java EE e-commerce application. It lives in `example/coolstore` and contains Java services, REST endpoints, JPA entities, and an AngularJS frontend.
+This guide uses the **CoolStore** — a Java EE e-commerce application. It lives in `example/coolstore` (local clone of [konveyor-ecosystem/coolstore](https://github.com/konveyor-ecosystem/coolstore); fetch scripts may place it at `example/coolstore-weblogic` — symlink or `-r` accordingly). Prefer **`-l java`** for the backend; the tree also ships a large Angular/bower frontend.
 
 ## Choosing what to index
 
@@ -27,9 +27,9 @@ This guide uses the **CoolStore** — a Java EE e-commerce application. It lives
 | `rgctl -r example/coolstore discover` | The `-r` path (no `PATH` arg) | Scripts, agents (`export REPO=…`) |
 | `rgctl discover /abs/path/to/coolstore` | Absolute path | One-shot from any cwd |
 
-**Pitfall:** `rgctl -r example/coolstore discover` does **not** index `example/coolstore`. The positional `.` becomes the session root (usually your **shell cwd**), so `-r` is ignored. That can scan the wrong tree and fail on large parent directories.
+**Pitfall:** `rgctl -r example/coolstore discover .` does **not** index `example/coolstore`. The positional `.` becomes the session root (usually your **shell cwd**), so `-r` is ignored. That can scan the wrong tree and fail on large parent directories.
 
-**Artifacts:** `discover` writes snapshots under **`{repo}/.rgctl/`**. Add `.rgctl/` to `.gitignore`. Legacy daemon caches under `~/.rgctl/cache/` can be copied with `rgctl migrate-cache`.
+**Artifacts:** `discover` writes snapshots under **`{repo}/.rgctl/`**. Add `.rgctl/` to `.gitignore`.
 
 ## Step-by-Step
 
@@ -39,75 +39,77 @@ From the repository root:
 
 ```bash
 cd example/coolstore
-rgctl discover .
+rgctl discover . -l java
 ```
 
 Or from anywhere, without a `PATH` argument:
 
 ```bash
-rgctl -r example/coolstore discover
+rgctl -r example/coolstore discover -l java
 ```
 
 ### Full pipeline
 
 ```bash
-rgctl -r example/coolstore discover --full
+rgctl -r example/coolstore discover -l java --full
 ```
 
 This prints a plan, finishes a basic (queryable) index, then runs CFG + dashboard + harmonic centrality and a vocab semantic index. `--full` does not enable taint or secret scanning.
+
+### Constrained / container discover
+
+```bash
+rgctl discover . --with-limits max-mem-mb=4096,threads=1
+```
+
+Or set `RGCTL_WITH_LIMITS=max-mem-mb=4096,threads=1`. Soft RSS budget (~95% abort), thread cap, and smaller spill buffers — default discover stays unconstrained.
 
 **Output:**
 
 ```
 [>] rgctl discover
-[!] Found 186 circular dependencies
-[✓] rgctl discover finished in 598ms
+[✓] rgctl discover finished in 320ms
 ```
 
 **What happened:**
 
-- rgctl scanned every supported source file (Java, JavaScript, and others) under the repository root.
-- It detected 186 circular dependency cycles in the codebase.
+- With `-l java`, rgctl indexed CoolStore’s Java sources only (about **152** functions / **591** nodes on the current tree).
 - The graph snapshot was written to `example/coolstore/.rgctl/graph.snapshot.bin`.
-- The entire process completed in under one second.
+- Basic discover finishes in well under a second on this corpus.
 
 ### 2. Discovery with Deep Analysis
 
 To enable control-flow graphs, PDGs, and dominance analysis for every function, add `--with-cfg`:
 
 ```bash
-rgctl -r example/coolstore discover --with-cfg
+rgctl -r example/coolstore discover -l java --with-cfg
 ```
 
 **Output:**
 
 ```
 [>] rgctl discover
-[!] Deep analysis enabled (--with-cfg / --with-taint).
-   CFG/PDG on large codebases (>50K functions) may take several minutes.
-Skipped files due to errors failed=1
-[!] Found 186 circular dependencies
 
 ✓ Control flow analysis:
-  Field writes indexed: 3299
-  CFG/PDG/Dominance: 6585 functions analyzed
-  Skipped: 941 functions (unsupported language or parse error)
-[✓] rgctl discover finished in 20.7s
+  Field writes indexed: 43
+  CFG/PDG/Dominance: 150 functions analyzed
+  Skipped: 2 functions (unsupported_language=0, missing_source=0, analysis_error=2)
+[✓] rgctl discover finished in 329ms
 ```
 
 **What happened:**
 
-- In addition to the basic graph, rgctl built a CFG (control-flow graph), PDG (program dependence graph), and dominator tree for each of the 6,585 parseable functions.
-- It indexed 3,299 field-write sites, enabling the `cpg mutations` command.
+- In addition to the basic graph, rgctl built a CFG, PDG, and dominator tree for each analyzed Java function (**150** on this tree).
+- It indexed **43** field-write sites, enabling `cpg mutations`.
 - The analysis archive was written to `.rgctl/analysis/cfg_pdg.archive.bin`.
-- 941 functions were skipped because they were in unsupported languages or had parse errors.
+- A small number of functions may be skipped for analysis errors.
 
 ### 3. Full Analysis with Dashboard and Migration
 
 For the most complete analysis, combine all the deep-analysis flags:
 
 ```bash
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-cfg \
   --with-dashboard \
   --with-harmonic \
@@ -125,17 +127,17 @@ This enables:
 
 ### 4. Filtering by Language
 
-If you only want to index Java files, use the `--languages` flag:
+CoolStore tutorials in these guides use `-l java` (same as `--languages java`) so the Angular/bower frontend is not indexed:
 
 ```bash
 rgctl -r example/coolstore discover --languages java
 ```
 
-This skips all JavaScript, TypeScript, and other files, producing a smaller, faster index focused on the backend code.
+Omit `-l` / `--languages` only when you intentionally want a multi-language index of the full tree (much larger; vendor JS dominates).
 
 ### 5. Excluding Directories
 
-To skip vendor or generated code:
+To skip vendor or generated code when indexing more than Java:
 
 ```bash
 rgctl -r example/coolstore discover --exclude bower_components
@@ -179,7 +181,7 @@ After discovery, artifacts live under **`{repo}/.rgctl/`**:
 
 ## Related Guides
 
-- [Graph Query Language](graph-query-language.md) — query the graph that `discover` builds
+- [Structured graph queries](structured-query.md) — query the graph that `discover` builds
 - [Graph Metrics](graph-metrics.md) — run PageRank, betweenness, and community detection
 - [Migration Planning](migration-planning.md) — use the `--export-migration-hints` output
 - [HTTP Server and Dashboard](http-server-and-dashboard.md) — serve the `--with-dashboard` output in a browser

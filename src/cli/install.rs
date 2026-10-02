@@ -16,7 +16,6 @@ use std::path::{Path, PathBuf};
 
 pub struct InstallArgs {
     pub skill: bool,
-    pub with_commands: bool,
     pub with_policy: bool,
     pub list_agents: bool,
     pub global_install: bool,
@@ -52,14 +51,8 @@ pub fn run(ctx: &CliContext, args: InstallArgs) -> Result<()> {
     let scope = if args.global_install { "global" } else { "local" };
     let prefix = install_prefix(ctx, args.global_install)?;
 
-    let artifacts = collect_artifacts(
-        &manifest,
-        &agent_ids,
-        args.skill,
-        args.with_commands,
-        args.with_policy,
-    )
-    .map_err(anyhow::Error::msg)?;
+    let artifacts = collect_artifacts(&manifest, &agent_ids, args.skill, args.with_policy)
+        .map_err(anyhow::Error::msg)?;
 
     if artifacts.is_empty() {
         bail!("no agent pack artifacts matched the requested flags");
@@ -74,7 +67,6 @@ pub fn run(ctx: &CliContext, args: InstallArgs) -> Result<()> {
         let status = classify_write(&dest, contents, args.force)?;
         let kind = match art.kind {
             PackArtifactKind::Skill => InstallWriteKind::Skill,
-            PackArtifactKind::Command => InstallWriteKind::Command,
             PackArtifactKind::Policy => InstallWriteKind::Policy,
             PackArtifactKind::Meta => InstallWriteKind::Meta,
         };
@@ -109,7 +101,6 @@ pub fn run(ctx: &CliContext, args: InstallArgs) -> Result<()> {
         &prefix.display().to_string(),
         scope,
         agent_ids,
-        args.with_commands,
         args.with_policy,
         args.force,
         writes,
@@ -149,10 +140,9 @@ fn emit_list_agents(ctx: &CliContext, manifest: &super::agent_pack::PackManifest
     let mut lines = vec!["rgctl agent registry:".to_string()];
     for a in &manifest.agents {
         lines.push(format!(
-            "  {}  skills={}  commands={}  global={}  invoke={}",
+            "  {}  skills={}  global={}  invoke={}",
             a.id,
             a.skills_path,
-            a.commands_path.as_deref().unwrap_or("(skills only)"),
             a.supports_global,
             a.invoke_prefix
         ));

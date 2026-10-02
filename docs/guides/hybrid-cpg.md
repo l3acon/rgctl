@@ -18,8 +18,10 @@ The "hybrid" in the name refers to the two-resolution architecture: the coarse-g
 
 This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` with `--with-cfg`:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover --with-cfg
+rgctl -r example/coolstore discover -l java --with-cfg
 ```
 
 ## Step-by-Step
@@ -36,14 +38,14 @@ rgctl -r example/coolstore -f json cpg status
 
 ```json
 {
-  "archive_path": "example/coolstore/.rgctl/analysis/cfg_pdg.archive.bin",
+  "archive_path": ".rgctl/analysis/cfg_pdg.archive.bin",
   "archive_present": true,
   "ast_skeleton_count": 0,
   "ast_skeleton_present": false,
-  "field_write_count": 3299,
+  "field_write_count": 43,
   "field_write_index_present": true,
-  "function_count": 6585,
-  "graph_digest": "98d77fdb4c9ecf4778c10ea2f2d78cc62ed0f21711f595f08127c071dabf76d3",
+  "function_count": 150,
+  "graph_digest": "252bb0b83b03b22faab3590a3644ae634d14f9f3ef42d8bc2fc75b2d61abee52",
   "schema_version": 1
 }
 ```
@@ -51,8 +53,8 @@ rgctl -r example/coolstore -f json cpg status
 **What this tells you:**
 
 - **`archive_present: true`** -- the CFG/PDG archive exists (from `discover --with-cfg`).
-- **`function_count: 6585`** -- 6,585 functions have been analyzed at the L_proc level.
-- **`field_write_count: 3299`** -- 3,299 field-write sites are indexed for mutation tracking.
+- **`function_count: 150`** -- 150 functions have been analyzed at the L_proc level.
+- **`field_write_count: 43`** -- 43 field-write sites are indexed for mutation tracking.
 - **`field_write_index_present: true`** -- the `cpg mutations` command is available.
 - **`ast_skeleton_present: false`** -- the AST skeleton archive is not present (requires `discover --with-ast-skeleton`).
 
@@ -68,9 +70,9 @@ rgctl -r example/coolstore -f json cpg function priceShoppingCart
 
 ```json
 {
-  "file_path": "example/coolstore/./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
+  "file_path": "src/main/java/com/redhat/coolstore/service/ShoppingCartService.java",
   "has_l_proc": true,
-  "id": "7b380647-19dc-49d3-96e5-11216a9fde32",
+  "id": "cac00c48-70f7-56ca-bdbc-667d7f51e916",
   "is_constructor": false,
   "name": "priceShoppingCart",
   "qualified_name": "com.redhat.coolstore.service.ShoppingCartService.priceShoppingCart",
@@ -97,17 +99,50 @@ rgctl -r example/coolstore -f json cpg calls priceShoppingCart
 
 ```json
 {
-  "edges": [
-    {"direction": "out", "id": "06f37e6d-...", "name": "setShippingTotal"},
-    {"direction": "out", "id": "21694893-...", "name": "getCartItemTotal"},
-    {"direction": "out", "id": "2eee3e96-...", "name": "setCartItemPromoSavings"},
-    {"direction": "out", "id": "49de8aad-...", "name": "getCartItemPromoSavings"},
-    {"direction": "out", "id": "5b4ce417-...", "name": "initShoppingCartForPricing"},
-    {"direction": "out", "id": "84eebe14-...", "name": "setCartTotal"},
-    {"direction": "out", "id": "8536ade9-...", "name": "getShoppingCartItemList"},
-    {"direction": "out", "id": "b6dd115f-...", "name": "setCartItemTotal"}
+  "schema_version": 1,
+  "edges_sample": [
+    {
+      "direction": "out",
+      "id": "281c6dc3-d156-5d3a-b6ca-08dcffcf36dd",
+      "name": "setCartItemPromoSavings"
+    },
+    {
+      "direction": "out",
+      "id": "283cc964-3bbf-5eb6-b857-a47f809a4690",
+      "name": "getCartItemTotal"
+    },
+    {
+      "direction": "out",
+      "id": "4c825d85-617c-5023-bf4c-d3bc7580ede4",
+      "name": "getCartItemPromoSavings"
+    },
+    {
+      "direction": "out",
+      "id": "5e40be66-d389-582c-8baa-ee884c7db5cf",
+      "name": "setShippingTotal"
+    },
+    {
+      "direction": "out",
+      "id": "68c5445d-20f5-5eaa-b6ff-5f90018b92fb",
+      "name": "getShippingTotal"
+    },
+    {
+      "direction": "out",
+      "id": "9439e1be-44c1-597a-9c9f-7a0b6adb111c",
+      "name": "initShoppingCartForPricing"
+    },
+    {
+      "direction": "out",
+      "id": "9d3089b9-e252-5fcd-afe8-0fb4ffc7c543",
+      "name": "setCartTotal"
+    },
+    {
+      "direction": "out",
+      "id": "9fccdd42-9641-5840-a49e-a0856314b9e8",
+      "name": "getPromoSavings"
+    }
   ],
-  "schema_version": 1
+  "returned": 24
 }
 ```
 
@@ -135,7 +170,7 @@ rgctl -r example/coolstore -f json cpg mutations \
   "mutations": [
     {
       "code": "this.shoppingCartItemList = shoppingCartItemList",
-      "file": "example/coolstore/./src/main/java/com/redhat/coolstore/model/ShoppingCart.java",
+      "file": "src/main/java/com/redhat/coolstore/model/ShoppingCart.java",
       "function": "setShoppingCartItemList",
       "is_constructor": false,
       "kind": "ThisField",
@@ -146,7 +181,7 @@ rgctl -r example/coolstore -f json cpg mutations \
     },
     {
       "code": "this.cartItemTotal = cartItemTotal",
-      "file": "example/coolstore/./src/main/java/com/redhat/coolstore/model/ShoppingCart.java",
+      "file": "src/main/java/com/redhat/coolstore/model/ShoppingCart.java",
       "function": "setCartItemTotal",
       "is_constructor": false,
       "kind": "ThisField",

@@ -1,6 +1,6 @@
 [package]
 name = "rgctl-security"
-version = "0.4.17"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Security analysis for rgctl"
@@ -9,10 +9,16 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 rgctl-analysis = { path = "../rgctl-analysis" }
 rgctl-error = { path = "../rgctl-error" }
+rgctl-extraction = { path = "../rgctl-extraction" }
 rgctl-graph = { path = "../rgctl-graph" }
+osv = { workspace = true }
+openvex = { workspace = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

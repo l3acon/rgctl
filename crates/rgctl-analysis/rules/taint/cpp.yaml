@@ -1,0 +1,29 @@
+schema_version: 1
+id: cpp-builtins
+languages:
+- cpp
+rules:
+- id: cpp-src-cin
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - 'std::getline'
+    - 'std::cin'
+- id: cpp-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: substring
+    value: 'std::system('
+- id: cpp-san-num
+  role: sanitizer
+  kind: TypeCast
+  detail: numeric
+  match:
+    type: any_substring
+    values:
+    - 'std::stoi'
+    - 'std::stol'

@@ -9,14 +9,14 @@ workflows:
     title: Data flow and slices
   - id: search
     title: Semantic and structural search
-  - id: gql
-    title: Graph query language
   - id: migrate
     title: Migration roadmap
   - id: kantra
     title: Konveyor Kantra rules
   - id: gate
     title: CI and policy gates
+  - id: vuln
+    title: OSV triage and deps check
 meta_skills:
   - id: rgctl
-    title: rgctl router
+    title: rgctl

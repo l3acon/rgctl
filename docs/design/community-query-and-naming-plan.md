@@ -4,7 +4,7 @@
 
 **Non-goals (this plan):** Leiden algorithm; stamping `community_id` / `MEMBER_OF` into `graph.snapshot.bin`; requiring an LLM for v1.
 
-**Related:** [graph-metrics-design.md](graph-metrics-design.md) (community detection naming), [gql-design.md](gql-design.md), [semantic-search-design.md](semantic-search-design.md), [analysis-architecture.md](../analysis-architecture.md).
+**Related:** [graph-metrics-design.md](graph-metrics-design.md) (community detection naming), [structured-query guide](../guides/structured-query.md), [semantic-search-design.md](semantic-search-design.md), [analysis-architecture.md](../analysis-architecture.md).
 
 ---
 
@@ -24,12 +24,12 @@ flowchart LR
   SNAP[graph.snapshot.bin]
   AR[analysis_results.bin]
   LABELS[community_labels / summary]
-  GQL[gql executor]
+  CLI[communities / find / inventory]
   UI[dashboard Graph tab]
 
-  SNAP --> GQL
-  AR --> GQL
-  LABELS --> GQL
+  SNAP --> CLI
+  AR --> CLI
+  LABELS --> CLI
   AR --> LABELS
   LABELS --> UI
   SNAP --> UI
@@ -42,7 +42,7 @@ flowchart LR
 | Phase | Outcome | User-visible |
 |-------|---------|--------------|
 | **P0** | Wire existing heuristic labels into export | Dashboard shows real names, not `Community N` |
-| **P1** | Virtual `community_id` + `:Community` in GQL | Agents/CLI can list and filter communities |
+| **P1** | `communities list` + `inventory --by community` | Agents/CLI can list communities and scoped `find` |
 | **P2** | Macros + docs/recipes | One-liner discoverability |
 | **P3** | Optional embedding-assisted / LLM naming | Graphify-quality thematic labels |
 | **P4** | Community semantic search (optional) | “Find communities like checkout” |
@@ -76,58 +76,38 @@ Ship P0→P2 before investing in LLM naming.
 
 ---
 
-## 4. Phase 1 — GQL: virtual community surface
+## 4. Phase 1 — Agent-facing community queries (shipped)
 
 ### Design rules
 - Do **not** mutate `graph.snapshot.bin`.
-- `gql` loads topology + `analysis_results.bin` (graceful degrade if analysis missing: property absent / empty `:Community`).
-- `community_id` is a **virtual property** resolved via UUID → compact id → `CommunityTable::assignments`.
+- Community assignments live in `analysis_results.bin`; labels surface via `communities list` and `inventory --by community`.
+- Membership exploration uses **scoped `find`** (package prefix from heuristic label) — not topology `MEMBER_OF` edges.
 
-### Steps
+### Steps (implemented)
 
-1. **Analysis context for GQL**
-   - Add optional `CommunityQueryContext` (assignments + id→label + member counts) built from `AnalysisResults` (+ labels from P0).
-   - Thread into executor from `src/cli/gql.rs` and HTTP `/api/query` (same path as `serve`).
-2. **Property resolution**
-   - In property match / WHERE evaluation, when key is `community_id`, resolve from context (stringify id for equality with existing string matchers, or add numeric compare if cheap).
-   - Ensure `RETURN` bindings for Function nodes can expose `community_id` in JSON output (extend `gql_result_to_json` / binding serialization).
-3. **Virtual node type `:Community`**
-   - Register `Community` as a **query-only** label (not in `NodeType` enum of the code graph — avoid polluting schema digest).
-   - Executor synthesizes rows from label summary: `id`, `label`, `member_count`, `modularity` (graph-level ok as query attr or omit per-row).
-   - Reject unknown real graph types as today; document `Community` as virtual in gql-design.
-4. **Optional: membership without edges**
-   - Prefer filter form: `MATCH (f:Function) WHERE f.community_id = 12 RETURN f`
-   - Defer `MATCH (f)-[:MEMBER_OF]->(c)` unless product insists — that pattern tempts people to think membership is topology.
-5. **Tests**
-   - Fixture graph + fake `CommunityTable` → filter returns expected functions.
-   - `MATCH (c:Community) RETURN c` → count matches `num_communities` (or filtered size ≥ 2 policy — match dashboard).
-   - No analysis file → clear empty / warning, not panic.
-6. **Perf**
-   - Build inverted index `community_id → Vec<Uuid>` once per query session if WHERE filters by id (avoid O(N) full scans repeatedly within one query).
-   - Listing communities is O(#communities), tiny.
+1. **`communities list` / `label --write`** — JSON with `id`, `label`, `member_count`.
+2. **`inventory --by community`** — bucket sizes per community id.
+3. **Scoped `find`** — `--scope` on qualified-name prefix derived from the community label.
+4. **Tests** — dashboard export labels; CLI `communities` JSON; ecommerce-java fixture asserts non-placeholder labels.
+5. **Perf** — listing communities is O(#communities); inventories mmap the snapshot once per command.
 
 ### Acceptance
 ```bash
-rgctl -r "$REPO" -f json gql 'MATCH (c:Community) RETURN c'
-rgctl -r "$REPO" -f json gql "MATCH (f:Function) WHERE f.community_id = 12 RETURN f LIMIT 20"
+rgctl -r "$REPO" -f json communities list | jq '.communities[:10]'
+rgctl -r "$REPO" -f json find --type function --scope com.example.pkg --limit 20
 ```
 Both work after normal `discover` (analysis present). Snapshot size / content digest unchanged when only community labels change.
 
 ---
 
-## 5. Phase 2 — Macros, HTTP, agent docs
+## 5. Phase 2 — Agent docs
 
 ### Steps
 
-1. **Macros** in `crates/rgctl-gql/src/macros.rs`:
-   - `all_communities` → `MATCH (c:Community) RETURN c`
-   - `community_members` — needs a parameter story; if macros are string-only today, document literal form or add `--macro-arg` later. v1: document the WHERE pattern in recipes only if params unsupported.
-2. **HTTP** — Confirm `/api/query` uses the same analysis-aware executor; document in [http-api.md](../http-api.md).
-3. **Docs**
-   - [AGENTS.md](../../AGENTS.md) / [agent-recipes.md](../agent-recipes.md): “list communities”, “members of community”
-   - [gql-design.md](gql-design.md): virtual labels section
-   - [user-guide.md](../user-guide.md): short community query subsection
-4. **CLI help** — `gql --help` or macro list mentions new macros.
+1. **Docs**
+   - [structured-query.md](../guides/structured-query.md) + [user-guide.md](../user-guide.md) §6: `communities list`, `inventory --by community`, scoped `find`
+   - [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md): dashboard + semantic HTTP; structural queries stay on CLI
+2. **Skills** — the `rgctl` skill calls `communities` / `find`, not graph pattern languages.
 
 ### Acceptance
 Agent recipe copy-paste works on ecommerce-java; JSON schema_version stable.
@@ -148,7 +128,7 @@ Layer on P0 heuristics; keep labels in the community summary sidecar.
 
 1. Improve label builder inputs: package paths from metagraph, centrality from analysis.
 2. Deduplicate colliding labels (`auth`, `auth (2)`).
-3. Persist labels; dashboard + GQL both read same source.
+3. Persist labels; dashboard + `communities list` both read same source.
 4. (3b) Optional: write `community_embedding` rows keyed by id; do not block P1.
 5. (3c) CLI subcommand mirroring Graphify’s `label` / `--no-label` split — agent can rename; CLI can call a backend later.
 
@@ -162,7 +142,7 @@ On a mid-size app repo, sidebar names are mostly domain words; placeholders &lt;
 Only after P1 + semantic index maturity.
 
 1. Build community vectors (pool function embeddings of members).
-2. `semantic query --scope community "shopping cart"` or GQL-adjacent API.
+2. `semantic query --scope community "shopping cart"`.
 3. Still no topology mutation.
 
 ---
@@ -175,11 +155,10 @@ Only after P1 + semantic index maturity.
 | Analysis schema | `crates/rgctl-analysis/src/results.rs` (+ migrate/version if new columns) |
 | Dashboard export | `crates/rgctl-dashboard/src/communities.rs`, export bundle entry |
 | Discover write path | `src/cli/discover_impl.rs` (fill labels when community table written) |
-| GQL executor | `crates/rgctl-gql/src/*` (virtual type, property join) |
-| CLI / HTTP | `src/cli/gql.rs`, serve query handler |
-| Macros | `crates/rgctl-gql/src/macros.rs` |
-| Docs | `docs/design/gql-design.md`, `AGENTS.md`, `agent-recipes.md`, user-guide |
-| Tests | analysis unit tests; gql integration; dashboard harness community label assert |
+| Structured query | `crates/rgctl-graph/src/structured_query.rs`, `src/cli/structured_query.rs` |
+| Communities CLI | `src/cli/communities.rs` |
+| Docs | `docs/guides/structured-query.md`, `AGENTS.md`, user-guide |
+| Tests | analysis unit tests; `communities` JSON; dashboard harness community label assert |
 
 ---
 
@@ -191,16 +170,15 @@ Only after P1 + semantic index maturity.
 - [x] Fixture test + manual check on ecommerce-java
 - [x] Dashboard user-guide blurb
 
-### P1 — GQL join
-- [x] Load `AnalysisResults` in `gql` / `/api/query`
-- [x] Virtual `community_id` on Function (WHERE + RETURN)
-- [x] Virtual `:Community` listing
+### P1 — Structured community queries
+- [x] `communities list` + `inventory --by community`
+- [x] Scoped `find` recipes in user guide
 - [x] Missing-analysis behavior
 - [x] Integration tests
 
 ### P2 — Discoverability
-- [x] `all_communities` macro
-- [x] AGENTS + agent-recipes + http-api + gql-design updates
+- [x] [structured-query.md](../guides/structured-query.md) + agent skills
+- [x] AGENTS + http-api updates
 
 ### P3 — Naming quality
 - [x] Heuristic v2 (package / hub-aware)
@@ -229,7 +207,7 @@ Only after P1 + semantic index maturity.
 
 ## 11. Success metrics (UX)
 
-- Users can answer “what are the subsystems?” via dashboard legend **or** one GQL/macro call.
+- Users can answer “what are the subsystems?” via dashboard legend **or** `communities list` / scoped `find`.
 - Names read as domain language more often than `Community N`.
 - Discover wall time / snapshot size unchanged for P0–P2 (no second graph rewrite).
 - Agents use recipes without opening `communities.json` by hand.

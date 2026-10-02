@@ -4,24 +4,25 @@ A skill for answering structural questions about codebases using the rgctl CLI g
 
 ## Quick Stats
 
-- **Main skill:** 352 lines (57% reduction from original 814 lines)
-- **Total documentation:** 1,505 lines (85% more comprehensive coverage)
-- **Files:** 5 reference files + main skill
-- **Workflow families:** 6 + Kantra rules
-- **NL routing examples:** 25+ common user utterances
+- **One skill:** `rgctl` (router + structured verb tables + references)
+- **Reference files:** command encyclopedia, workflows (assembled), communities & policy
+- **Workflow families (docs only):** discover, impact, flow, search, migrate, kantra, gate
+- **Agent query path:** `find` / `callers` / `callees` / `relations` / `inventory` / `status` (no Cypher)
 
 ## Structure
 
 ```
 skills/rgctl/
-├── SKILL.md                              # Main skill (352 lines)
+├── SKILL.md                              # Main skill
 ├── README.md                             # This file
+├── workflows/                            # Fragments assembled into references/workflows.md at build
 └── references/
-    ├── command-encyclopedia.md           # All commands with JSON samples (19KB)
-    ├── workflows.md                      # Migration, Kantra rules, refactor, audit scenarios
-    ├── gql-reference.md                  # GQL patterns & limitations (4.7KB)
-    └── communities-and-policy.md         # Community detection + CI policy (13KB)
+    ├── command-encyclopedia.md           # All commands with JSON samples
+    ├── workflows.md                      # Generated from workflows/ at build (do not edit by hand)
+    └── communities-and-policy.md         # Community detection + CI policy
 ```
+
+`rgctl install --skill` writes **only** this skill tree (e.g. `.cursor/skills/rgctl/`). It does **not** create separate `rgctl-discover` / `rgctl-impact` / … skill directories.
 
 ## What's Covered
 
@@ -29,76 +30,59 @@ skills/rgctl/
 
 - When to use rgctl
 - **CLI subprocess workflow** — spawn `rgctl -f json` for agents
-- **6 workflow families:**
+- **Workflow families:**
   1. Discovery & Indexing
   1b. Konveyor Kantra rules (`--with-kantra`)
-  2. Query & Search (includes communities + KantraRule GQL)
+  2. Query & Search (structured verbs + communities)
   3. Impact & Safety (includes policy checks)
   4. Metrics & Analysis
   5. Code Analysis (CFG/PDG/slicing)
   6. Export & Visualization
-- **NL routing table** (20+ user utterances → commands)
-- Common scenarios (migration, pre-refactor safety)
+- **NL routing table** (user utterances → commands)
 - Failure playbook
 
 ### References (Loaded On-Demand)
 
 #### command-encyclopedia.md
-- All 15+ commands with full details
+- Structured query verbs and domain commands
 - JSON sample responses
 - Prerequisites and pitfalls
 - "What to report" guidelines
 
-#### workflows.md
-- Migration & audit workflows (incl. Konveyor Kantra `--with-kantra`)
-- Intent discovery & subsystem mapping
-- Pre-refactor safety analysis
-- CI gates & policy
-- Advanced patterns
-
-#### gql-reference.md
-- Cypher subset capabilities
-- Macros (all_functions, all_communities)
-- Valid edge types
-- LIKE pattern matching limitations
-- Common patterns & troubleshooting
+#### workflows.md (generated)
+- Assembled from `workflows/*.md` when the agent pack is built (`cargo build`)
+- Edit fragments under `workflows/` (e.g. `migrate.md`, `kantra.md`); order comes from `agent-pack/manifest.yaml`
 
 #### communities-and-policy.md
-- **Community Detection:**
-  - What communities are (implicit architecture)
-  - Commands (list, query, label, semantic scope)
-  - Use cases (microservice extraction, ownership)
-  - 5 complete workflows
-- **CI Policy Checks:**
-  - Policy schema (max_impact_nodes, centrality, forbidden_crossings)
-  - CI integration (GitHub Actions, GitLab)
-  - Crafting policies (calibration, gradual tightening)
-  - 4 complete workflows
-- Combined workflows using both features
+- **Community Detection:** list, semantic scope, ownership workflows
+- **CI Policy Checks:** schema, CI integration, calibration
 
 ## Design Principles
 
-✅ **Progressive disclosure** - Main skill <500 lines, details in references
+✅ **Progressive disclosure** - Main skill lean, details in references
 ✅ **Workflow-centric** - Organized by user intent, not commands
-✅ **CLI-first** - Agents use `rgctl -f json` subprocesses (optional `serve` HTTP)
-✅ **Clear routing** - Natural language → tool mapping
-✅ **Comprehensive** - All features documented with examples
-✅ **Integration** - Shows how features work together
+✅ **CLI-first** - Agents use `rgctl -f json` structured verbs
+✅ **Clear routing** - Natural language → command mapping
+✅ **No Cypher in skill surface** - Agents must not invent MATCH strings
 
 ## Installation
 
-From another repo:
+From a target repository (not the rgctl source tree unless you are dogfooding):
 
 ```bash
-rgctl install --skill
+rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-This writes `.claude/skills/rgctl/`, `.agents/skills/rgctl/`, and `.cursor/skills/rgctl/` from the embedded skill.
+Installs a single skill named `rgctl`. See [Agent pack walkthrough](../../docs/guides/agent-skill.md).
+
+If an older pack left `rgctl-discover` / `rgctl-impact` / … directories behind, delete them manually — install no longer writes those folders.
+
+**Maintainers:** edit workflow bodies under `workflows/`; regenerate `references/workflows.md` with `assemble_workflows_reference` (see `rgctl-agent-pack-codegen` test `workflows_reference_matches_fragments`).
 
 ## See Also
 
 - [User Guide](../../docs/user-guide.md) - Complete CLI tutorial
 - [Agent recipes](../../docs/agent-recipes.md) - Copy-paste CLI workflows
-- [HTTP API](../../docs/http-api.md) - Optional `rgctl serve` for repeated queries
+- [HTTP Server and Dashboard](../../docs/guides/http-server-and-dashboard.md) - Optional `rgctl serve` for dashboard
 - [JSON API](../../docs/json-api.md) - Schema specifications
 - [All Guides](../../docs/guides/README.md) - Feature-specific guides

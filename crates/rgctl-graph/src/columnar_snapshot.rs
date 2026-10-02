@@ -263,12 +263,26 @@ impl ColumnarGraphMmap {
         &self.digest_hex
     }
 
+    /// Shared Arc to lazy-parsed name/type indexes (no HashMap clone).
+    ///
+    /// Prefer this for structured query hot paths. [`Self::name_index`] / [`Self::type_index`]
+    /// clone the maps and are intended for hydration / one-shot tooling only.
+    pub fn indexes_shared(
+        &self,
+    ) -> Result<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>> {
+        self.parsed_indexes()
+    }
+
     /// Name → node id index (lazy-parsed from mmap on first access).
+    ///
+    /// Clones the map — prefer [`Self::indexes_shared`] on query hot paths.
     pub fn name_index(&self) -> Result<HashMap<String, Vec<Uuid>>> {
         Ok(self.parsed_indexes()?.0.clone())
     }
 
     /// Node type → node id index (lazy-parsed from mmap on first access).
+    ///
+    /// Clones the map — prefer [`Self::indexes_shared`] on query hot paths.
     pub fn type_index(&self) -> Result<HashMap<NodeType, Vec<Uuid>>> {
         Ok(self.parsed_indexes()?.1.clone())
     }

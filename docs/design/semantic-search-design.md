@@ -197,5 +197,5 @@ DASHBOARD_URL=http://127.0.0.1:8080/ node dashboard/scripts/record-feature-demo.
 
 - [Blast radius design](blast-radius-design.md) — fusion blast term + hybrid `--expand blast`
 - [Graph metrics design](graph-metrics-design.md) — PageRank centrality term
-- [HTTP API](../http-api.md) — `/api/semantic/*`
+- [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md) — `/api/semantic/*`
 - [CLI / JSON API](../json-api.md) — semantic JSON shapes

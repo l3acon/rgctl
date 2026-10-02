@@ -14,6 +14,7 @@ mod diff;
 mod discover;
 mod discover_cfg;
 mod discover_impl;
+mod discover_limits;
 mod kantra_discover;
 pub mod discover_output;
 mod export;
@@ -31,13 +32,16 @@ pub mod metrics_output;
 mod pipeline_session;
 pub mod pipeline_status;
 mod policy_file;
-mod migrate_cache;
 mod semantic;
 mod semantic_api;
 pub mod semantic_output;
 mod slice;
 pub mod slice_output;
 mod stage_profile;
+mod structured_query;
+mod session_status;
+mod rules;
+mod vuln_deps;
 
 pub use args::OutputFormat;
 
@@ -97,6 +101,10 @@ pub enum Commands {
         #[arg(value_name = "PATH")]
         path: Option<String>,
 
+        /// Locate candidate project roots under PATH matching a glob (e.g. `*coolstore*`); no full index
+        #[arg(long = "find", value_name = "GLOB")]
+        find_roots: Option<String>,
+
         #[arg(short = 'l', long = "languages")]
         languages: Option<String>,
 
@@ -122,6 +130,11 @@ pub enum Commands {
         /// Off by default. On-demand: `slice ... --taint`.
         #[arg(long = "with-taint")]
         with_taint: bool,
+
+        /// Extra taint rule pack (YAML file or directory). Merged after built-ins and
+        /// `.rgctl/taint-rules.d/` (see docs). Only used with `--with-taint`.
+        #[arg(long = "taint-rules", value_name = "PATH")]
+        taint_rules: Option<String>,
 
         /// Classify loop-carried data dependencies on the PDG (implies CFG).
         #[arg(long = "with-dfg-loops")]
@@ -177,6 +190,17 @@ pub enum Commands {
         #[arg(long = "full")]
         full: bool,
 
+        /// Constrain resource use for containers / small machines.
+        /// Spec: `max-mem-mb=4096,threads=1` (comma-separated). Flag alone enables limits
+        /// mode with no overrides. Env: `RGCTL_WITH_LIMITS`.
+        #[arg(
+            long = "with-limits",
+            value_name = "SPEC",
+            num_args = 0..=1,
+            default_missing_value = ""
+        )]
+        with_limits: Option<String>,
+
         /// Strategy preset for migration plan export.
         #[arg(
             long = "migration-preset",
@@ -206,7 +230,7 @@ pub enum Commands {
         extra: Vec<String>,
     },
 
-    /// Execute graph query language
+    /// Execute graph query language (experimental; prefer find/callers/relations/inventory)
     Gql {
         query: String,
 
@@ -215,6 +239,213 @@ pub enum Commands {
 
         #[arg(long)]
         macro_name: Option<String>,
+    },
+
+    /// Find symbols by name/type over the mmap graph index (no GQL)
+    Find {
+        /// Name or glob (`Foo`, `User*`, `*Service*`). Omit with `--type` to list by type.
+        #[arg(value_name = "PATTERN")]
+        pattern: Option<String>,
+
+        /// Filter by node type (function, class, import, annotation, …)
+        #[arg(short = 't', long = "type", value_name = "TYPE")]
+        type_name: Option<String>,
+
+        /// Path glob filter
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+
+        /// Language filter (java, rust, …)
+        #[arg(short = 'l', long = "lang", value_name = "LANG")]
+        lang: Option<String>,
+
+        /// qualified_name prefix scope
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        /// Scope mode: inside (default), outside, crossing
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        /// Alias for `--scope-mode outside`
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        /// Exact name match (disable glob)
+        #[arg(long = "exact")]
+        exact: bool,
+
+        /// Max results [default: 50]
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+
+        /// Return counts only
+        #[arg(long = "count-only")]
+        count_only: bool,
+
+        /// Invert AnnotatedWith: entities carrying this annotation (`@Foo` or `Foo[,Bar…]`)
+        #[arg(long = "annotation", value_name = "NAME[,NAME…]")]
+        annotation: Option<String>,
+
+        /// Include annotation argument text when indexed (requires --annotation)
+        #[arg(long = "show-attributes")]
+        show_attributes: bool,
+
+        /// Package coordinates (PURL / GAV / crate) → import prefix filter
+        #[arg(long = "package", value_name = "COORDS")]
+        package: Option<String>,
+    },
+
+    /// Incoming CALLS neighbors for a symbol
+    Callers {
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+
+        /// Package coordinates for facade / import-scope filtering
+        #[arg(long = "package", value_name = "COORDS")]
+        package: Option<String>,
+
+        /// Filter / seed by method names (comma-separated; e.g. OSV affected_methods)
+        #[arg(long = "methods", value_name = "NAME[,NAME…]", value_delimiter = ',')]
+        methods: Vec<String>,
+    },
+
+    /// Outgoing CALLS neighbors for a symbol
+    Callees {
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+    },
+
+    /// Typed edge traversal; omit SYMBOL for seedless set-wide scan
+    Relations {
+        /// Optional seed symbol (omit for seedless typed-edge scan)
+        #[arg(value_name = "SYMBOL")]
+        symbol: Option<String>,
+
+        /// Edge type (calls, uses, extends, implements, annotatedwith, …)
+        #[arg(short = 'e', long = "edge", value_name = "TYPE")]
+        edge: String,
+
+        /// in | out | both [default: out]
+        #[arg(long = "direction", default_value = "out")]
+        direction: String,
+
+        /// Filter edge source node type (seedless / seeded)
+        #[arg(long = "from-type", value_name = "TYPE")]
+        from_type: Option<String>,
+
+        /// Filter edge target node type
+        #[arg(long = "to-type", value_name = "TYPE")]
+        to_type: Option<String>,
+
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+
+        #[arg(long = "class", value_name = "NAME")]
+        class: Option<String>,
+
+        /// Definition line (disambiguates same-name overloads)
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+    },
+
+    /// Aggregate symbol/edge counts (includes zero-count schema kinds for type/edge)
+    Inventory {
+        /// Aggregation dimension: type | edge | lang | file | community | import-prefix
+        #[arg(long = "by", default_value = "type")]
+        by: String,
+
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+    },
+
+    /// Session graph status (snapshot presence, digest, node/edge counts; no rediscover)
+    Status,
+
+    /// Evaluate Konveyor-shaped rules against the session (Kantra engine)
+    Rules {
+        #[command(subcommand)]
+        action: RulesCommands,
+    },
+
+    /// Alias namespace for structured query verbs (`query find`, `query callers`, …)
+    Query {
+        #[command(subcommand)]
+        action: QueryCommands,
     },
 
     /// Line-level program slice or taint trace
@@ -270,6 +501,29 @@ pub enum Commands {
 
         #[arg(long)]
         no_policy: bool,
+
+        /// Label impact nodes using boundary catalogs (REST / messaging / …)
+        #[arg(long = "classify-boundary")]
+        classify_boundary: bool,
+
+        /// Restrict boundaries to kinds/methods (`REST_ENDPOINT`, `POST`, …); repeatable
+        #[arg(long = "boundary", value_name = "KIND", action = clap::ArgAction::Append)]
+        boundary: Vec<String>,
+    },
+
+    /// Sink-first taint (`--sink` + `--source external`); requires `discover --with-cfg`
+    Taint {
+        /// Sink symbol / method (e.g. `ObjectMapper.readValue`)
+        #[arg(long = "sink", value_name = "SYMBOL")]
+        sink: String,
+
+        /// Source mode (v1: `external` only)
+        #[arg(long = "source", default_value = "external")]
+        source: String,
+
+        /// Max call/dataflow depth
+        #[arg(long = "depth", default_value_t = 8)]
+        depth: usize,
     },
 
     /// Inspect raw CFG / PDG / dominance for a function symbol
@@ -428,21 +682,6 @@ pub enum Commands {
         dashboard_only: bool,
     },
 
-    /// Copy daemon-era cache artifacts into `{repo}/.rgctl/`
-    MigrateCache {
-        /// Cache entry name under `~/.rgctl/cache/` (default: repo directory name)
-        #[arg(long)]
-        name: Option<String>,
-
-        /// Explicit cache `.rgctl/` source directory
-        #[arg(long, value_name = "PATH")]
-        from: Option<std::path::PathBuf>,
-
-        /// Overwrite existing `{repo}/.rgctl/`
-        #[arg(long)]
-        force: bool,
-    },
-
     /// Diff two columnar graph snapshots (cold diff profiling / compare path)
     Diff {
         /// Base snapshot file or directory containing `graph.snapshot.bin`
@@ -454,15 +693,11 @@ pub enum Commands {
         head: std::path::PathBuf,
     },
 
-    /// Install bundled agent pack (skills, optional commands, optional policy)
+    /// Install bundled agent pack (skills, optional policy)
     Install {
-        /// Install workflow skills and meta-skill `rgctl`
+        /// Install the `rgctl` skill (references include workflow playbooks)
         #[arg(long = "skill")]
         skill: bool,
-
-        /// Install slash-command / prompt files per agent adapter
-        #[arg(long = "with-commands")]
-        with_commands: bool,
 
         /// Install structural policy snippet (Cursor rules; best-effort)
         #[arg(long = "with-policy")]
@@ -487,6 +722,186 @@ pub enum Commands {
         /// Overwrite rgctl-managed files that differ from the bundle
         #[arg(long)]
         force: bool,
+    },
+
+    /// OSV vulnerability triage / analyze
+    Vuln {
+        #[command(subcommand)]
+        action: VulnCommands,
+    },
+
+    /// Dependency inventory match against OSV
+    Deps {
+        #[command(subcommand)]
+        action: DepsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VulnCommands {
+    /// Parse and normalize an OSV JSON document (no repo scan)
+    Triage {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+    },
+    /// Reachability pipeline → OpenVEX (triage → deps → package/callers → taint)
+    Analyze {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+        /// JAR/WAR roots (opt-in)
+        #[arg(long = "include-jars", value_name = "DIR", num_args = 1..)]
+        include_jars: Vec<std::path::PathBuf>,
+        /// node_modules roots (opt-in)
+        #[arg(long = "include-node-modules", value_name = "DIR", num_args = 1..)]
+        include_node_modules: Vec<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DepsCommands {
+    /// Match OSV package against manifests and optional bundled artifacts
+    Check {
+        /// Path to OSV JSON file
+        #[arg(long = "osv", value_name = "PATH")]
+        osv: std::path::PathBuf,
+        /// JAR/WAR roots to scan for embedded Maven poms (opt-in; e.g. `lib`)
+        #[arg(long = "include-jars", value_name = "DIR", num_args = 1..)]
+        include_jars: Vec<std::path::PathBuf>,
+        /// Roots containing `node_modules/` to scan (opt-in)
+        #[arg(long = "include-node-modules", value_name = "DIR", num_args = 1..)]
+        include_node_modules: Vec<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RulesCommands {
+    /// Evaluate a ruleset directory (or catalog) against the current session graph
+    Run {
+        /// Ruleset directory (`ruleset.yaml` + `*.yaml`), like `--kantra-rules`
+        #[arg(value_name = "DIR")]
+        rules_dir: std::path::PathBuf,
+
+        /// Filter by `konveyor.io/target` label
+        #[arg(long = "target", value_name = "NAME")]
+        target: Option<String>,
+
+        /// Override with a rulesets tree (mutually exclusive with DIR as single ruleset when set)
+        #[arg(long = "catalog", value_name = "ROOT")]
+        catalog: Option<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum QueryCommands {
+    /// Alias for `rgctl find`
+    Find {
+        #[arg(value_name = "PATTERN")]
+        pattern: Option<String>,
+        #[arg(short = 't', long = "type", value_name = "TYPE")]
+        type_name: Option<String>,
+        #[arg(long = "file", value_name = "GLOB")]
+        file: Option<String>,
+        #[arg(short = 'l', long = "lang", value_name = "LANG")]
+        lang: Option<String>,
+        #[arg(long = "scope", value_name = "PREFIX")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode", value_name = "MODE")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "exact")]
+        exact: bool,
+        #[arg(long = "limit", value_name = "N")]
+        limit: Option<usize>,
+        #[arg(long = "count-only")]
+        count_only: bool,
+        #[arg(long = "annotation", value_name = "NAME[,NAME…]")]
+        annotation: Option<String>,
+        #[arg(long = "show-attributes")]
+        show_attributes: bool,
+    },
+    /// Alias for `rgctl callers`
+    Callers {
+        symbol: String,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl callees`
+    Callees {
+        symbol: String,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl relations`
+    Relations {
+        symbol: Option<String>,
+        #[arg(short = 'e', long = "edge")]
+        edge: String,
+        #[arg(long = "direction", default_value = "out")]
+        direction: String,
+        #[arg(long = "from-type")]
+        from_type: Option<String>,
+        #[arg(long = "to-type")]
+        to_type: Option<String>,
+        #[arg(long = "depth", default_value_t = 1)]
+        depth: usize,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "class")]
+        class: Option<String>,
+        #[arg(long = "line", value_name = "N")]
+        line: Option<usize>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
+        #[arg(long = "limit")]
+        limit: Option<usize>,
+    },
+    /// Alias for `rgctl inventory`
+    Inventory {
+        #[arg(long = "by", default_value = "type")]
+        by: String,
+        #[arg(long = "file")]
+        file: Option<String>,
+        #[arg(long = "scope")]
+        scope: Option<String>,
+        #[arg(long = "scope-mode")]
+        scope_mode: Option<String>,
+        #[arg(long = "exclude-scope")]
+        exclude_scope: bool,
     },
 }
 
@@ -766,12 +1181,14 @@ impl Cli {
         let result = match self.command {
             Commands::Discover {
                 path,
+                find_roots,
                 languages,
                 exclude,
                 verbose: _,
                 with_security,
                 with_cfg,
                 with_taint,
+                taint_rules,
                 with_dfg_loops,
                 with_ast_skeleton,
                 write_json_graph,
@@ -784,6 +1201,7 @@ impl Cli {
                 kantra_target,
                 kantra_index_only,
                 mut full,
+                with_limits,
                 migration_preset,
                 migration_order,
                 files,
@@ -797,11 +1215,13 @@ impl Cli {
                     &ctx,
                     discover::DiscoverArgs {
                         path,
+                        find_roots,
                         languages,
                         exclude: join_exclude_patterns(&exclude),
                         with_security,
                         with_cfg,
                         with_taint,
+                        taint_rules,
                         with_dfg_loops,
                         with_ast_skeleton,
                         write_json_graph,
@@ -814,6 +1234,7 @@ impl Cli {
                         kantra_target,
                         kantra_index_only,
                         full,
+                        with_limits,
                         migration_preset,
                         migration_order,
                         artifact_root: None,
@@ -864,6 +1285,8 @@ impl Cli {
                 with_slices,
                 class,
                 file,
+                classify_boundary,
+                boundary,
             } => blast_radius::run(
                 &ctx,
                 blast_radius::BlastRadiusArgs {
@@ -874,8 +1297,326 @@ impl Cli {
                     with_slices,
                     class,
                     file,
+                    classify_boundary,
+                    boundary,
                 },
             ),
+            Commands::Taint {
+                sink,
+                source,
+                depth,
+            } => vuln_deps::run_sink_taint(&ctx, sink, source, depth),
+            Commands::Find {
+                pattern,
+                type_name,
+                file,
+                lang,
+                scope,
+                scope_mode,
+                exclude_scope,
+                exact,
+                limit,
+                count_only,
+                annotation,
+                show_attributes,
+                package,
+            } => structured_query::run_find(
+                &ctx,
+                pattern,
+                type_name,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class: None,
+                    line: None,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang,
+                    limit,
+                    package,
+                    methods: None,
+                },
+                exact,
+                count_only,
+                annotation,
+                show_attributes,
+            ),
+            Commands::Callers {
+                symbol,
+                depth,
+                file,
+                class,
+                line,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+                package,
+                methods,
+            } => structured_query::run_call_neighbors(
+                &ctx,
+                symbol,
+                true,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                    package,
+                    methods: if methods.is_empty() {
+                        None
+                    } else {
+                        Some(methods)
+                    },
+                },
+            ),
+            Commands::Callees {
+                symbol,
+                depth,
+                file,
+                class,
+                line,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+            } => structured_query::run_call_neighbors(
+                &ctx,
+                symbol,
+                false,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                    package: None,
+                    methods: None,
+                },
+            ),
+            Commands::Relations {
+                symbol,
+                edge,
+                direction,
+                from_type,
+                to_type,
+                depth,
+                file,
+                class,
+                line,
+                scope,
+                scope_mode,
+                exclude_scope,
+                limit,
+            } => structured_query::run_relations(
+                &ctx,
+                symbol,
+                edge,
+                direction,
+                from_type,
+                to_type,
+                depth,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit,
+                    package: None,
+                    methods: None,
+                },
+            ),
+            Commands::Inventory {
+                by,
+                file,
+                scope,
+                scope_mode,
+                exclude_scope,
+            } => structured_query::run_inventory(
+                &ctx,
+                by,
+                structured_query::SharedQueryArgs {
+                    file,
+                    class: None,
+                    line: None,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    lang: None,
+                    limit: None,
+                    package: None,
+                    methods: None,
+                },
+            ),
+            Commands::Status => session_status::run_status(&ctx),
+            Commands::Rules { action } => match action {
+                RulesCommands::Run {
+                    rules_dir,
+                    target,
+                    catalog,
+                } => rules::run_rules(&ctx, rules_dir, target, catalog),
+            },
+            Commands::Query { action } => match action {
+                QueryCommands::Find {
+                    pattern,
+                    type_name,
+                    file,
+                    lang,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    exact,
+                    limit,
+                    count_only,
+                    annotation,
+                    show_attributes,
+                } => structured_query::run_find(
+                    &ctx,
+                    pattern,
+                    type_name,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class: None,
+                        line: None,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang,
+                        limit,
+                    package: None,
+                    methods: None,
+                },
+                    exact,
+                    count_only,
+                    annotation,
+                    show_attributes,
+                ),
+                QueryCommands::Callers {
+                    symbol,
+                    depth,
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_call_neighbors(
+                    &ctx,
+                    symbol,
+                    true,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        line,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    package: None,
+                    methods: None,
+                },
+                ),
+                QueryCommands::Callees {
+                    symbol,
+                    depth,
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_call_neighbors(
+                    &ctx,
+                    symbol,
+                    false,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        line,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    package: None,
+                    methods: None,
+                },
+                ),
+                QueryCommands::Relations {
+                    symbol,
+                    edge,
+                    direction,
+                    from_type,
+                    to_type,
+                    depth,
+                    file,
+                    class,
+                    line,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                    limit,
+                } => structured_query::run_relations(
+                    &ctx,
+                    symbol,
+                    edge,
+                    direction,
+                    from_type,
+                    to_type,
+                    depth,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class,
+                        line,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit,
+                    package: None,
+                    methods: None,
+                },
+                ),
+                QueryCommands::Inventory {
+                    by,
+                    file,
+                    scope,
+                    scope_mode,
+                    exclude_scope,
+                } => structured_query::run_inventory(
+                    &ctx,
+                    by,
+                    structured_query::SharedQueryArgs {
+                        file,
+                        class: None,
+                        line: None,
+                        scope,
+                        scope_mode,
+                        exclude_scope,
+                        lang: None,
+                        limit: None,
+                    package: None,
+                    methods: None,
+                },
+                ),
+            },
             Commands::Inspect { symbol, layer } => {
                 inspect::run(&ctx, inspect::InspectArgs { symbol, layer })
             }
@@ -1114,7 +1855,6 @@ impl Cli {
             ),
             Commands::Install {
                 skill,
-                with_commands,
                 with_policy,
                 list_agents,
                 global_install,
@@ -1125,7 +1865,6 @@ impl Cli {
                 &ctx,
                 install::InstallArgs {
                     skill,
-                    with_commands,
                     with_policy,
                     list_agents,
                     global_install,
@@ -1134,10 +1873,21 @@ impl Cli {
                     force,
                 },
             ),
-            Commands::MigrateCache { name, from, force } => migrate_cache::run(
-                &ctx,
-                migrate_cache::MigrateCacheArgs { name, from, force },
-            ),
+            Commands::Vuln { action } => match action {
+                VulnCommands::Triage { osv } => vuln_deps::run_vuln_triage(&ctx, osv),
+                VulnCommands::Analyze {
+                    osv,
+                    include_jars,
+                    include_node_modules,
+                } => vuln_deps::run_vuln_analyze(&ctx, osv, include_jars, include_node_modules),
+            },
+            Commands::Deps { action } => match action {
+                DepsCommands::Check {
+                    osv,
+                    include_jars,
+                    include_node_modules,
+                } => vuln_deps::run_deps_check(&ctx, osv, include_jars, include_node_modules),
+            },
             Commands::Diff { base, head } => diff::run(
                 &ctx,
                 diff::DiffArgs { base, head },
@@ -1178,8 +1928,23 @@ fn command_label_for(command: &Commands) -> &'static str {
     match command {
         Commands::Discover { .. } => "discover",
         Commands::Gql { .. } => "gql",
+        Commands::Find { .. } => "find",
+        Commands::Callers { .. } => "callers",
+        Commands::Callees { .. } => "callees",
+        Commands::Relations { .. } => "relations",
+        Commands::Inventory { .. } => "inventory",
+        Commands::Status => "status",
+        Commands::Rules { .. } => "rules",
+        Commands::Query { action } => match action {
+            QueryCommands::Find { .. } => "query find",
+            QueryCommands::Callers { .. } => "query callers",
+            QueryCommands::Callees { .. } => "query callees",
+            QueryCommands::Relations { .. } => "query relations",
+            QueryCommands::Inventory { .. } => "query inventory",
+        },
         Commands::Slice { .. } => "slice",
         Commands::BlastRadius { .. } => "blast-radius",
+        Commands::Taint { .. } => "taint",
         Commands::Inspect { .. } => "inspect",
         Commands::Metrics { .. } => "metrics",
         Commands::Semantic { action } => match action {
@@ -1206,7 +1971,13 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::PrCheck { .. } => "pr-check",
         Commands::Export { .. } => "export",
         Commands::Install { .. } => "install",
-        Commands::MigrateCache { .. } => "migrate-cache",
+        Commands::Vuln { action } => match action {
+            VulnCommands::Triage { .. } => "vuln triage",
+            VulnCommands::Analyze { .. } => "vuln analyze",
+        },
+        Commands::Deps { action } => match action {
+            DepsCommands::Check { .. } => "deps check",
+        },
         Commands::Diff { .. } => "diff",
         Commands::Serve { .. } => "serve",
     }

@@ -35,6 +35,8 @@ pub mod segmented_spill;
 pub mod snapshot;
 /// Structural diff between two columnar snapshots.
 pub mod snapshot_diff;
+/// Deterministic mmap structured query (`find` / `callers` / `relations` / `inventory`).
+pub mod structured_query;
 /// Stable cross-snapshot node identity.
 pub mod stable_key;
 pub mod structural_sketch;
@@ -57,7 +59,8 @@ pub use graph_compactor::{
 pub use migration::{migrate_snapshot, migrate_v1_to_v2};
 pub use schema::{AccessType, CallType, GRAPH_SCHEMA_VERSION, GraphParameter, SharedStr};
 pub use segmented_spill::{
-    DEFAULT_SORT_RUN_BYTES, FinishedSpill, SegmentedSpill, write_columnar_from_spill,
+    DEFAULT_SORT_RUN_BYTES, FinishedSpill, SegmentedSpill, set_sort_run_bytes_override,
+    write_columnar_from_spill,
 };
 pub use snapshot::{
     MmappedGraphSnapshot, PreparedGraphSnapshot, PreparedIndexes, SNAPSHOT_FILE, SnapshotNodeStore,
@@ -65,6 +68,12 @@ pub use snapshot::{
 pub use snapshot_diff::{
     DiffSink, DiffStats, EdgeDeltaEvent, EdgeDeltaKind, NodeDeltaEvent, NodeDeltaKind, NoopDiffSink,
     SnapshotPair, VecDiffSink, diff_snapshots,
+};
+pub use structured_query::{
+    ALL_EDGE_TYPES, ALL_NODE_TYPES, CallNeighborsResult, EntityRow, EdgeRow, FindResult,
+    InventoryBy, InventoryCount, InventoryResult, QueryFilters, RelationDirection, RelationsResult,
+    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, import_package_prefix,
+    parse_annotation_list, parse_edge_type, parse_node_type,
 };
 pub use stable_key::{
     MmapNodeKey, NodeRowRef, StableNodeKey, NAMESPACE_RGCTL, deterministic_node_id,

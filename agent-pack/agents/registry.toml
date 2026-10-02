@@ -1,4 +1,4 @@
-# Agent adapters (OpenSpec-aligned paths). See docs/guides/agent-commands.md
+# Agent adapters (OpenSpec-aligned paths). See docs/guides/agent-skill.md
 # command_style: hyphen | colon | dollar | slash
 # command_extension: md (default), prompt, prompt.md, toml
 # global_skills / global_commands: reserved for future -g path wiring (install uses agent_dir under prefix today)

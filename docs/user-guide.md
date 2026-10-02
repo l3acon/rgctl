@@ -2,7 +2,7 @@
 
 End-to-end guide for installing rgctl, indexing an in-tree example, and querying a codebase from the **command line**. Sample outputs target **`rgctl-tests/ecommerce-java`**. Runnable examples are backed by scenarios under [`user-guide/scenarios/`](user-guide/scenarios/) (see change `docs-agent-first-diataxis`).
 
-**Concepts:** [Introduction](Introduction.md). **Use with agents:** [agent-commands](guides/agent-commands.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md). **Contribute:** [AGENTS.md](../AGENTS.md). **JSON fields:** [json-api.md](json-api.md).
+**Concepts:** [Introduction](Introduction.md). **Use with agents:** [agent-skill](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md). **Contribute:** [AGENTS.md](../AGENTS.md). **JSON fields:** [json-api.md](json-api.md).
 
 ### How this guide is organized
 
@@ -22,7 +22,7 @@ End-to-end guide for installing rgctl, indexing an in-tree example, and querying
 3. [Example project: ecommerce-java](#3-example-project-ecommerce-java)
 4. [Index with `discover`](#4-index-with-discover)
 5. [Global CLI flags](#5-global-cli-flags)
-6. [Query the graph with GQL](#6-query-the-graph-with-gql)
+6. [Structured graph queries](#6-structured-graph-queries)
 7. [Blast radius (change impact)](#7-blast-radius-change-impact)
 8. [Program slicing and taint](#8-program-slicing-and-taint)
 9. [Inspect CFG / PDG / dominance](#9-inspect-cfg--pdg--dominance)
@@ -76,7 +76,7 @@ If no release is published yet for your platform, use [Option B](#option-b--buil
 
 ### Option B — Build from source
 
-Requires **Rust 1.88+** (Edition 2024; [rustup.rs](https://rustup.rs/)).
+Requires **Rust 1.99+** (Edition 2024; [rustup.rs](https://rustup.rs/)).
 
 ```bash
 git clone https://github.com/sshaaf/rgctl.git
@@ -95,20 +95,16 @@ All **Tier 1** languages registered in [`languages.toml`](../languages.toml) (in
 After `rgctl` is on your `PATH`, install the **agent pack** into the **target repository** (the same root you pass to `discover` via `-r` / `--repo`, or the current directory):
 
 ```bash
-rgctl install --skill --with-commands
-rgctl -r /path/to/repo install --skill --with-commands
+rgctl install --skill
+rgctl -r /path/to/repo install --skill
 rgctl install --list-agents
 ```
 
-That writes:
-
-- **Meta skill** `rgctl` (router + references)
-- **Eight workflow skills** — `rgctl-discover`, `rgctl-impact`, `rgctl-flow`, `rgctl-search`, `rgctl-gql`, `rgctl-migrate`, `rgctl-kantra`, `rgctl-gate`
-- **Eight slash / prompt commands** (with `--with-commands`) — e.g. Cursor `/rgctl-gql`, Claude `/rgctl:gql`
+That writes **one skill** named `rgctl` (plus `references/` with command encyclopedia and workflow playbooks). Older packs that installed separate `rgctl-discover` / `rgctl-impact` / … folders are obsolete — delete those directories if present.
 
 **Default (no `--tools`):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. Use **`--tools all`** for the full registry.
 
-Full flag reference, adapter paths, and workflow ↔ CLI table: **[Agent commands](guides/agent-commands.md)**. Walkthrough: [Agent pack](guides/agent-skill.md). Add `--with-policy` for a Cursor structural-rules snippet. Use `-g` for a global install. Exit code **1** if a managed file differs unless you pass `--force`. Install does not run `discover`.
+Full flag reference: [Installation](installation.md). Walkthrough: [Agent pack](guides/agent-skill.md). Add `--with-policy` for a Cursor structural-rules snippet. Use `-g` for a global install. Exit code **1** if a managed file differs unless you pass `--force`. Install does not run `discover`.
 
 ---
 
@@ -232,13 +228,24 @@ Built-in registry includes **markdown** (`rgctl-lang-markdown`): `.md` and `.mdx
 
 ### Full pipeline (`--full`)
 
-`rgctl discover PATH --full` prints an execution plan, runs a **basic** discover (queryable snapshot), reports that the initial discover is complete, then continues in the same process with `--with-cfg --with-dashboard --with-harmonic`, then `semantic index`. Other terminals can `gql` after stage 1. Does **not** imply taint or secret scanning.
+`rgctl discover PATH --full` prints an execution plan, runs a **basic** discover (queryable snapshot), reports that the initial discover is complete, then continues in the same process with `--with-cfg --with-dashboard --with-harmonic`, then `semantic index`. Other terminals can run `find` / `inventory` after stage 1. Does **not** imply taint or secret scanning.
 
 ```bash
 rgctl discover . --full
 ```
 
 Status is written to `.rgctl/pipeline_status.json`. A second `--full` on unchanged sources skips fresh stages.
+
+### Constrained discover (`--with-limits`)
+
+Opt-in for containers / small machines. Default discover is unchanged.
+
+```bash
+rgctl discover . --with-limits max-mem-mb=4096,threads=1
+# or: RGCTL_WITH_LIMITS=max-mem-mb=4096,threads=1 rgctl discover .
+```
+
+Caps pipeline/CFG Rayon workers, shrinks the extract stream channel and spill sort-run buffers from `max-mem-mb`, and aborts with a clear error if peak RSS approaches ~95% of the budget (warn at ~90%).
 
 ### Fast index (default)
 
@@ -261,7 +268,7 @@ Example output:
 [✓] Completed in 0.0s (peak memory: 21 MB)
 
 [i] Next steps:
-   rgctl gql "MATCH (n:Function) RETURN n"  # Query the graph
+   rgctl find --type function --count-only   # Query the graph
    rgctl slice <file> --line <N> --variable <VAR>
    rgctl serve --open   # Dashboard + query API at http://127.0.0.1:8080
 ```
@@ -316,6 +323,7 @@ Harmonic, dashboard, migration export, security, CFG/PDG, and discover-time tain
 | `--with-security` | Secret scanning |
 | `--with-cfg` | Per-function CFG, dominators, PDG (archive under `.rgctl/analysis/`) |
 | `--with-taint` | Discover-time taint into archive (implies CFG/PDG pass) |
+| `--taint-rules PATH` | Extra YAML pack file or directory (after built-ins + `.rgctl/taint-rules.d/`) |
 | `--with-harmonic` | Harmonic centrality (migration ranking) |
 | `--with-dashboard` | Static dashboard bundle under `.rgctl/dashboard/` |
 | `--export-migration-hints` | Migration roadmap JSON (alias: `--export-migration-plan`) |
@@ -372,20 +380,21 @@ rgctl discover . --with-kantra --kantra-index-only
 | `--kantra-catalog ROOT` | Rulesets tree (e.g. `stable/java`); overrides embedded catalog |
 | `--kantra-index-only` | Skip eval; still index catalog rules into the graph |
 
-**Artifacts:** `.rgctl/kantra_findings.json` (violations + skipped rules). Rule nodes are queryable via GQL after index:
+**Artifacts:** `.rgctl/kantra_findings.json` (violations + skipped rules). Rule nodes are queryable after index:
 
 ```bash
-rgctl gql "MATCH (r:KantraRule) RETURN r LIMIT 10"
-rgctl gql 'MATCH (r:KantraRule) WHERE r.`konveyor.io/target` = '\''quarkus'\'' RETURN r'
+rgctl -f json find --type kantrarule --limit 10 | jq '.returned'
+# Target filter at discover time:
+rgctl discover . --with-kantra --kantra-target quarkus
 ```
 
-Konveyor labels (`konveyor.io/target`, `konveyor.io/source`, …) are stored as node `properties`; use backtick-quoted property names in GQL `WHERE` clauses.
+Konveyor labels (`konveyor.io/target`, `konveyor.io/source`, …) are stored on rule nodes; filter eval with `--kantra-target` and inspect violations in `kantra_findings.json`.
 
 **Source builds:** full embedded catalog requires the git submodule — `git submodule update --init crates/rgctl-kantra/assets/rulesets` or `./scripts/init-kantra-rulesets.sh`. Without it, the build falls back to `tests/fixtures/kantra-rules/`. See [`crates/rgctl-kantra/README.md`](../crates/rgctl-kantra/README.md).
 
 **Further reading:** [Kantra integration exploration](design/kantra-integration-exploration.md) · [Architecture options (embedded catalog + rules graph)](../KANTRA_ARCHITECTURE_OPTIONS.md) · [JSON schema](json-api.md#kantra_findingsjson)
 
-Does **not** require `--with-cfg`. Unsupported rule providers and invalid regex patterns are skipped with reasons in `skipped_rules`. After full eval, `VIOLATES` edges link each `KantraRule` to matched code nodes (queryable via GQL).
+Does **not** require `--with-cfg`. Unsupported rule providers and invalid regex patterns are skipped with reasons in `skipped_rules`. After full eval, `violates` edges link each `KantraRule` to matched code nodes (`rgctl relations --edge violates --from-type kantrarule`).
 
 **Dashboard:** `discover --with-kantra --with-dashboard` exports `kantra_index.json` and per-file violation shards. Open **Migration Rules** in the dashboard (category + Konveyor target filters, syntax-highlighted snippets). See [Dashboard user guide — Migration Rules](dashboard-user-guide.md#migration-rules-kantra).
 
@@ -458,7 +467,7 @@ Point every subsequent command at the **same repo root** you indexed:
 ```bash
 export REPO="$PWD"   # after cd into the repo
 # or pass -r on each command:
-rgctl -r "$REPO" gql 'MATCH (n:Function) RETURN n LIMIT 5'
+rgctl -r "$REPO" -f json status
 ```
 
 ---
@@ -478,7 +487,7 @@ Examples:
 
 ```bash
 # JSON for scripting
-rgctl -r "$REPO" -f json gql 'MATCH (n:Class) RETURN n LIMIT 10'
+rgctl -r "$REPO" -f json find --type class --limit 10 | jq '.entities[].name'
 
 # Mermaid diagram to a file
 rgctl -r "$REPO" -f mermaid -o checkout-cfg.mmd inspect checkout cfg
@@ -486,33 +495,34 @@ rgctl -r "$REPO" -f mermaid -o checkout-cfg.mmd inspect checkout cfg
 
 ---
 
-## 6. Query the graph with GQL
+## 6. Structured graph queries
 
-`gql` runs the graph query language against the indexed graph. **Run `discover` first.**
+Use **`find`**, **`callers`**, **`callees`**, **`relations`**, **`inventory`**, and **`status`** against the indexed graph. **Run `discover` first.** Step-by-step guide: [Structured graph queries](guides/structured-query.md). JSON shapes: [json-api.md §5](json-api.md#5-structured-query-verbs).
 
-### Inventory macros
-
-```bash
-rgctl -r "$REPO" gql --macro-name all_functions unused
-```
-
-Text mode prints one function name per line (count varies with fixture size). JSON is better for scripts:
+### Session check
 
 ```bash
-rgctl -r "$REPO" -f json gql --macro-name all_functions unused | jq '.count'
+rgctl -r "$REPO" -f json status | jq '{status, nodes, edges}'
 ```
 
-<!-- ug-scenario:06-gql-all-functions -->
+### Function inventory
+
+```bash
+rgctl -r "$REPO" -f json find --type function --count-only | jq '.total'
+```
+
+<!-- ug-scenario:06-find-function-count -->
 ```text
 317
 ```
-<!-- /ug-scenario:06-gql-all-functions -->
+<!-- /ug-scenario:06-find-function-count -->
+
+Text mode lists names; JSON returns `entities[]` with `id`, `name`, `type`, and `file`.
 
 ### Exact name match
 
 ```bash
-rgctl -r "$REPO" gql \
-  "MATCH (n:Function) WHERE n.name = 'clearCart' RETURN n"
+rgctl -r "$REPO" find clearCart --type function --exact
 ```
 
 ```text
@@ -522,50 +532,31 @@ clearCart
 
 (There are two `clearCart` methods — service and controller.)
 
-JSON shows file paths:
-
 ```bash
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Function) WHERE n.name = 'clearCart' RETURN n" | jq '.rows'
+rgctl -r "$REPO" -f json find clearCart --type function --exact | jq '.entities'
 ```
 
 ```json
 [
-  [
-    {
-      "binding": "n",
-      "file": "…/service/CartService.java",
-      "node": "clearCart",
-      "type": "Function"
-    }
-  ],
-  [
-    {
-      "binding": "n",
-      "file": "…/controller/CartController.java",
-      "node": "clearCart",
-      "type": "Function"
-    }
-  ]
+  {
+    "id": "…",
+    "name": "clearCart",
+    "type": "function",
+    "file": "…/service/CartService.java"
+  },
+  {
+    "id": "…",
+    "name": "clearCart",
+    "type": "function",
+    "file": "…/controller/CartController.java"
+  }
 ]
 ```
 
 ### Classes
 
 ```bash
-rgctl -r "$REPO" -f json gql \
-  "MATCH (n:Class) WHERE n.name = 'CartService' RETURN n" | jq '.rows[0]'
-```
-
-```json
-[
-  {
-    "binding": "n",
-    "file": "…/service/CartService.java",
-    "node": "CartService",
-    "type": "Class"
-  }
-]
+rgctl -r "$REPO" -f json find CartService --type class --exact | jq '.entities[0]'
 ```
 
 ### Call relationships
@@ -573,80 +564,61 @@ rgctl -r "$REPO" -f json gql \
 Who calls `clearCart`?
 
 ```bash
-rgctl -r "$REPO" gql \
-  "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = 'clearCart' RETURN a,b"
+rgctl -r "$REPO" callers clearCart
 ```
 
 ```text
-checkout -> clearCart
-clearCart -> clearCart
+checkout
+clearCart
 ```
 
-JSON (trimmed):
+Or enumerate `calls` edges explicitly:
 
-```json
-{
-  "count": 2,
-  "rows": [
-    [
-      { "binding": "a", "node": "checkout", "file": "…/OrderService.java", "type": "Function" },
-      { "binding": "b", "node": "clearCart", "file": "…/CartService.java", "type": "Function" }
-    ]
-  ],
-  "schema_version": 1
-}
+```bash
+rgctl -r "$REPO" -f json relations clearCart --edge calls --direction in | jq '.edges[].source.name'
 ```
 
 ### Common node / edge types
 
-- Nodes: `Function`, `Class`, `Interface`, `Module`, `File`, `Import`, `ConfigKey`, …
-- Edges: `CALLS`, `IMPORTS`, `CONTAINS`, `DEPENDS_ON`, `IMPLEMENTS`, …
+- Node types for `--type`: `function`, `class`, `interface`, `module`, `file`, `kantrarule`, …
+- Edge types for `--edge`: `calls`, `imports`, `contains`, `depends_on`, `implements`, `references`, `violates`, …
 
 ### Named communities (analysis overlay)
 
 `discover` runs label-propagation community detection and stores assignments in
 `.rgctl/analysis_results.bin` — **not** as edges in the topology graph.
-`gql` joins that sidecar so you can list and filter communities:
 
 Community detection uses behavioral edges (`Calls`, `Uses`, `References`) by default.  
 On mixed code + markdown repos, doc `REFERENCES` participate in the same community pass as code edges; this is expected behavior.
 
 ```bash
-# Macro: list communities (id, heuristic label, member_count)
-rgctl -r "$REPO" -f json gql --macro-name all_communities unused | jq '.rows[:3]'
+rgctl -r "$REPO" -f json communities list | jq '.communities[:3]'
 ```
 
 ```json
-[
-  [
+{
+  "communities": [
     {
-      "binding": "c",
-      "node": "ecommerce.service::checkout",
-      "type": "Community",
+      "id": 385,
       "label": "ecommerce.service::checkout",
-      "community_id": 385,
-      "member_count": 19,
-      "file": null
+      "member_count": 19
     }
-  ]
-]
+  ],
+  "schema_version": 1
+}
 ```
 
 ```bash
-# Members of one community (use an id from the list above)
-rgctl -r "$REPO" -f json gql \
-  "MATCH (f:Function) WHERE f.community_id = '385' RETURN f LIMIT 10" | jq '.count'
+# Bucket sizes by community id
+rgctl -r "$REPO" -f json inventory --by community | jq '.counts[:5]'
 
-# CLI helpers (same labels; --write refreshes analysis_results.bin)
+# Refresh heuristic labels (--write updates analysis_results.bin)
 rgctl -r "$REPO" communities list
 rgctl -r "$REPO" communities label --write
 ```
 
-Labels are **heuristic** (package path, top PageRank symbol, token majority, infrastructure hubs).
-They are for orientation — not ground-truth domain names. See
+Use each community **label** (often `package::symbol`) as a `--scope` prefix on `find` to explore members. Labels are **heuristic** — not ground-truth domain names. See
 [community query & naming plan](design/community-query-and-naming-plan.md).
-
-Virtual type `:Community` is query-only; there is no `MEMBER_OF` edge in the snapshot.
 
 ---
 
@@ -692,7 +664,7 @@ Remediation: Refine your search query using a fully qualified namespace syntax:
 |------|---------|
 | Bare name | `checkout` (fails if ambiguous) |
 | FQN | `CartService::clearCart` |
-| UUID | node id from GQL / blast JSON |
+| UUID | node id from `find` / blast JSON |
 
 Disambiguate with filters:
 
@@ -824,8 +796,7 @@ rgctl -r "$REPO" -f mermaid slice \
 `--function` must be the **method/function name** in the source file (as parsed by tree-sitter), not the enclosing class name:
 
 ```bash
-rgctl -r "$REPO" gql \
-  "MATCH (n:Function) WHERE n.name = 'checkout' RETURN n"
+rgctl -r "$REPO" find checkout --type function --exact
 ```
 
 ---
@@ -974,8 +945,8 @@ rgctl -r "$REPO" -f json metrics --communities | jq .
 }
 ```
 
-That summary is counts only. For **named** communities and membership, use GQL / `communities list`
-([§6](#6-query-the-graph-with-gql)) or `.rgctl/dashboard/communities.json` after `--with-dashboard`.
+That summary is counts only. For **named** communities and membership, use `communities list`
+([§6](#6-structured-graph-queries)) or `.rgctl/dashboard/communities.json` after `--with-dashboard`.
 
 ```bash
 rgctl -r "$REPO" -f json metrics --pagerank | jq '.pagerank | {iterations, converged, top: .top[:3]}'
@@ -1056,7 +1027,7 @@ Passing `--diffuse` recomputes dense vectors and mixes call-graph neighbors **be
 | `--no-fusion` | Disable late fusion (default is fusion **on**: blast, PageRank, name, token-bloom, community, package, callees) |
 | `--keyword-and` | Every query token must match metadata or body sketch |
 | `--candidate-pool <N>` | Hamming pool size before fusion [default: 256] |
-| `--expand neighbors\|blast\|gql\|all` | Hybrid expansion after top hits |
+| `--expand neighbors\|blast\|all` | Hybrid expansion after top hits |
 | `--embedder hash\|vocab\|onnx\|code-daemon` | Embedding backend [default: `vocab`] |
 | `--embed-bodies` | Append identifier tokens from function source (off by default) |
 | `--dimensions <N>` | Float width before quantize; multiple of 8 [default: 256] |
@@ -1075,7 +1046,7 @@ Design → **[Semantic search design](design/semantic-search-design.md)** · tim
 
 ## 13. Export graph projections
 
-`export` writes the graph or a **filter-selected** subgraph to a file or directory. The `--query` flag uses **filter syntax**, not GQL `MATCH` (JSON/graph formats honor the filter; Obsidian/OKF use `--query all`):
+`export` writes the graph or a **filter-selected** subgraph to a file or directory. The `--query` flag uses **filter syntax** (`name:Foo`, `type:Function`, …) — not structured `find` patterns (JSON/graph formats honor the filter; Obsidian/OKF use `--query all`):
 
 | `--export-format` | Output | `--query` |
 |-------------------|--------|-----------|
@@ -1124,11 +1095,11 @@ rgctl -r "$REPO" export \
   --query all
 ```
 
-Open `$REPO/vault` in Obsidian (**Open folder as vault**). Each note is one heading section; YAML `qualified_name` maps back to GQL. Re-run `discover` + `export` after doc changes.
+Open `$REPO/vault` in Obsidian (**Open folder as vault**). Each note is one heading section; YAML `qualified_name` maps back to graph `module` nodes (`find` / `relations`). Re-run `discover` + `export` after doc changes.
 
 Other doc export formats: `--export-format okf` (JSON entity bundle). Full walkthrough: [markdown-context.md](markdown-context.md#obsidian-vault-export).
 
-For GQL pattern matching, use `rgctl gql` — or `rgctl serve` + [HTTP API](http-api.md).
+For structural lookups on docs, use `find` / `relations` — see [markdown context](markdown-context.md). For browsing, use `serve` + the dashboard ([HTTP Server and Dashboard](guides/http-server-and-dashboard.md)).
 
 ---
 
@@ -1164,18 +1135,19 @@ rgctl -r "$REPO" serve --no-pipeline --query-only
 |----------|---------|
 | `/` | Dashboard UI or preparing page |
 | `GET /api/status` | Full-pipeline status JSON |
-| `POST /api/query` | GQL / macros (JSON body; 503 until graph ready) |
+| `POST /api/semantic/query` | Semantic search (primary HTTP query for agents) |
 | `GET /api/semantic/status` | Semantic index availability |
 | `POST /api/semantic/query` | Semantic search (JSON body) |
 | `/api/health` | Health check |
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8080/api/query \
+curl -sS http://127.0.0.1:8080/api/status | jq .
+curl -sS -X POST http://127.0.0.1:8080/api/semantic/query \
   -H 'Content-Type: application/json' \
-  -d '{"macro":"all_functions"}' | jq '.count'
+  -d '{"query":"checkout cart","limit":5}' | jq '.hits[:3]'
 ```
 
-Full reference: [http-api.md](http-api.md). CoolStore walkthrough: [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
+Full reference: [HTTP Server and Dashboard](guides/http-server-and-dashboard.md). CoolStore walkthrough: [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
 
 ---
 
@@ -1192,11 +1164,10 @@ rgctl discover . -l java -e target \
   --with-cfg --with-dashboard --with-harmonic --with-kantra --export-migration-hints
 
 # 3. Explore structure
-rgctl -r "$REPO" -f json gql --macro-name all_functions unused | jq '.count'
-rgctl -r "$REPO" -f json gql --macro-name all_communities unused | jq '.rows[:5]'
+rgctl -r "$REPO" -f json find --type function --count-only | jq '.total'
+rgctl -r "$REPO" -f json communities list | jq '.communities[:5]'
 rgctl -r "$REPO" communities list | head -15
-rgctl -r "$REPO" gql \
-  "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = 'clearCart' RETURN a,b"
+rgctl -r "$REPO" callers clearCart
 
 # 4. Change-impact before editing
 rgctl -r "$REPO" blast-radius 'CartService::clearCart'
@@ -1208,9 +1179,8 @@ rgctl -r "$REPO" cpg mutations --type ShoppingCart --exclude-ctors
 rgctl -r "$REPO" blast-radius 'ShoppingCartService::priceShoppingCart'
 
 # 5b. Konveyor Kantra migration rules (optional target filter)
-rgctl -r "$REPO" -f json gql "MATCH (r:KantraRule) RETURN r LIMIT 5" | jq '.count'
-rgctl -r "$REPO" -f json gql \
-  'MATCH (r:KantraRule)-[:VIOLATES]->(n) RETURN r, n LIMIT 10' | jq '.count'
+rgctl -r "$REPO" -f json find --type kantrarule --limit 5 | jq '.returned'
+rgctl -r "$REPO" -f json relations --edge violates --from-type kantrarule --limit 10 | jq '.returned'
 jq '{violations: (.violations|length), evaluated_rules, target_filter}' \
   "$REPO/.rgctl/kantra_findings.json"
 
@@ -1239,7 +1209,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | Command | Purpose |
 |---------|---------|
 | `discover` | Index repo, build `.rgctl/` artifacts (`--full` = staged CFG/dashboard/harmonic + semantic) |
-| `gql` | Graph query language (incl. virtual `:Community`) |
+| `find` / `callers` / `callees` / `relations` / `inventory` / `status` | Structured graph queries ([§6](#6-structured-graph-queries)) |
 | `communities` | List / refresh heuristic community labels |
 | `blast-radius` | Upstream call-graph impact for a symbol |
 | `slice` | Line-level program slice or taint trace |
@@ -1248,7 +1218,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `metrics` | PageRank, betweenness, communities summary |
 | `export` | Serialize graph (json, graphml, dot, mermaid, obsidian vault, okf) |
 | `check` | CI policy gateway |
-| `install` | Copy the bundled agent pack (meta + workflow skills; optional slash commands) into adapter dirs |
+| `install` | Copy the bundled agent pack (single skill `rgctl`) into adapter dirs |
 | `semantic` | Opt-in semantic index + query (`--scope community`, `docs`, `all`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/status` (auto full pipeline); `--no-pipeline` fail-fast |
 
@@ -1262,6 +1232,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `--with-security` | Secret scanning |
 | `--with-cfg` | CFG / PDG (not taint); alias `--cfg` |
 | `--with-taint` | Discover-time taint (implies CFG pass) |
+| `--taint-rules PATH` | Extra taint YAML pack (file or dir; after built-ins / `.rgctl/taint-rules.d/`) |
 | `--with-dfg-loops` | Tag loop-carried `DataDependency` edges in PDG (with `--with-cfg`) |
 | `--with-ast-skeleton` | Build AST skeleton archive for `cpg ast` |
 | `--with-harmonic` | Harmonic centrality (default off; needed for migration ranking) |
@@ -1297,7 +1268,7 @@ cd /path/to/repo && rgctl discover .
 ```bash
 rgctl discover . -l java -e target
 # or
-rgctl -r "$REPO" gql 'MATCH (n:Function) RETURN n LIMIT 1'
+rgctl -r "$REPO" -f json status
 ```
 
 ### Symbol not found / ambiguous (`blast-radius`, `inspect`)
@@ -1305,7 +1276,7 @@ rgctl -r "$REPO" gql 'MATCH (n:Function) RETURN n LIMIT 1'
 List exact names, then use FQN:
 
 ```bash
-rgctl -r "$REPO" gql "MATCH (n:Function) WHERE n.name = 'clearCart' RETURN n"
+rgctl -r "$REPO" find clearCart --type function --exact
 rgctl -r "$REPO" blast-radius 'CartService::clearCart'
 rgctl -r "$REPO" blast-radius clearCart --class CartService
 ```
@@ -1350,9 +1321,9 @@ RUST_LOG=info,profile=info rgctl discover . -v 2>&1 | grep '\[profile\]'
 
 - [Introduction](Introduction.md) — concepts and feature goals
 - [cli-getting-started.md](cli-getting-started.md) — deprecated stub (use this User Guide)
-- [http-api.md](http-api.md) — dashboard HTTP API
+- [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) — dashboard HTTP API
 - [json-api.md](json-api.md) — machine-readable output + field catalogs
 - [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) — paste into consumer repos’ `AGENTS.md`
 - [AGENTS.md](../AGENTS.md) — contributor agent README for this repository
-- [agent-commands](guides/agent-commands.md) — skill install
+- [agent-skill](guides/agent-skill.md) — skill install
 - [`rgctl-tests/README.md`](../rgctl-tests/README.md) — all language fixtures + correctness suite

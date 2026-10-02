@@ -7,7 +7,7 @@ Practical, step-by-step guides for every major rgctl feature. Each guide uses th
 | Guide | Feature | Description |
 |-------|---------|-------------|
 | [Discovering and Indexing a Codebase](discovering-and-indexing.md) | `discover` | Build the knowledge graph from source code |
-| [Graph Query Language](graph-query-language.md) | `gql` | Query the code graph with Cypher-like syntax |
+| [Structured graph queries](structured-query.md) | `find` / `callers` / `relations` / … | Agent-facing graph exploration verbs |
 | [Blast Radius Analysis](blast-radius-analysis.md) | `blast-radius` | Measure upstream impact before changing a function |
 | [Semantic Search](semantic-search.md) | `semantic` | Natural-language search over function symbols |
 | [Graph Metrics](graph-metrics.md) | `metrics` | PageRank, betweenness, and community detection analytics |
@@ -20,8 +20,7 @@ Practical, step-by-step guides for every major rgctl feature. Each guide uses th
 | [CI Policy Checks](ci-policy-checks.md) | `check`, `pr-check` | PR temporal gates and local policy checks |
 | [HTTP Server and Dashboard](http-server-and-dashboard.md) | `serve` | Run an HTTP API and browser-based dashboard |
 | [Migration Planning](migration-planning.md) | `discover --export-migration-hints` | Generate a dependency-aware migration roadmap |
-| [Agent commands](agent-commands.md) | `install --skill --with-commands` | Agent pack: meta + eight workflow skills, slash commands, `--tools` registry |
-| [Agent pack](agent-skill.md) | CoolStore install walkthrough | Use cases; NL → workflow / slash → CLI |
+| [Agent pack](agent-skill.md) | CoolStore install walkthrough | Use cases; NL → `rgctl` skill → CLI |
 
 ## Prerequisites
 
@@ -39,4 +38,4 @@ cd coolstore
 - [User Guide](../user-guide.md) -- full CLI reference and tutorial
 - [JSON API Reference](../json-api.md) -- schema details for `-f json` output
 - [Agent Recipes](../agent-recipes.md) -- copy-paste recipes for LLM agents
-- [Glossary](../glossary.md) -- definitions of key terms
+- [Introduction](../Introduction.md) -- definitions of key terms

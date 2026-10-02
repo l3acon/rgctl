@@ -24,8 +24,10 @@ This guide uses the **CoolStore** (`example/coolstore`) -- a Java EE e-commerce 
 
 Migration planning requires harmonic centrality and the migration hints export:
 
+CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
+
 ```bash
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-cfg \
   --with-harmonic \
   --export-migration-hints
@@ -35,14 +37,12 @@ rgctl -r example/coolstore discover \
 
 ```
 [>] rgctl discover
-[!] Deep analysis enabled (--with-cfg / --with-taint).
-   CFG/PDG on large codebases (>50K functions) may take several minutes.
-[!] Found 186 circular dependencies
 
 ✓ Control flow analysis:
-  Field writes indexed: 3299
-  CFG/PDG/Dominance: 6585 functions analyzed
-[✓] rgctl discover finished in 20.7s
+  Field writes indexed: 43
+  CFG/PDG/Dominance: 150 functions analyzed
+  Skipped: 2 functions (unsupported_language=0, missing_source=0, analysis_error=2)
+[✓] rgctl discover finished in 329ms
 ```
 
 **What happened:**
@@ -65,34 +65,66 @@ cat example/coolstore/.rgctl/migration_plan.json
 {
   "schema_version": 2,
   "preset": "hybrid_default",
-  "preset_label": "Hybrid Default",
+  "order_mode": "scheduled",
   "weights": {
     "alpha": 0.33,
     "beta": 0.33,
     "gamma": 0.34
   },
-  "order_mode": "scheduled",
   "steps": [
     {
       "step": 1,
-      "community_id": 74,
-      "label": "main.webapp.bower_components.matches-selector",
-      "priority_score": -0.143,
+      "community_id": 4,
+      "label": "com.redhat.coolstore.persistence",
+      "priority_score": -0.17,
       "schedule_step": 1,
-      "priority_rank": 60,
-      "avg_pagerank": 0.0000634,
-      "avg_harmonic": 0.0000407,
+      "priority_rank": 5,
+      "avg_pagerank": 0.0013936469331383705,
+      "avg_harmonic": 0.0,
       "max_blast": 0.0
     },
     {
       "step": 2,
-      "community_id": 13,
-      "label": "com.redhat.coolstore.model",
-      "priority_score": -0.155,
+      "community_id": 3,
+      "label": "com.redhat.coolstore.utils",
+      "priority_score": 0.41742493731006725,
       "schedule_step": 2,
-      "priority_rank": 73,
-      "avg_pagerank": 0.0000532,
-      "avg_harmonic": 0.0000339,
+      "priority_rank": 1,
+      "avg_pagerank": 0.001993491896428168,
+      "avg_harmonic": 0.017803672002628446,
+      "max_blast": 0.0
+    },
+    {
+      "step": 3,
+      "community_id": 2,
+      "label": "com.redhat.coolstore.rest",
+      "priority_score": 0.3287355246224791,
+      "schedule_step": 3,
+      "priority_rank": 2,
+      "avg_pagerank": 0.0017003595227530848,
+      "avg_harmonic": 0.022823009387745213,
+      "max_blast": 0.0
+    },
+    {
+      "step": 4,
+      "community_id": 1,
+      "label": "com.redhat.coolstore.service",
+      "priority_score": 0.25033399963107006,
+      "schedule_step": 4,
+      "priority_rank": 3,
+      "avg_pagerank": 0.001865008517223246,
+      "avg_harmonic": 0.011136115525219151,
+      "max_blast": 0.0
+    },
+    {
+      "step": 5,
+      "community_id": 0,
+      "label": "com.redhat.coolstore.model",
+      "priority_score": -0.0499976701794404,
+      "schedule_step": 5,
+      "priority_rank": 4,
+      "avg_pagerank": 0.0015796984992345277,
+      "avg_harmonic": 0.0012205137184715456,
       "max_blast": 0.0
     }
   ]
@@ -103,8 +135,8 @@ cat example/coolstore/.rgctl/migration_plan.json
 
 - **`preset: "hybrid_default"`** -- the default migration strategy, balancing PageRank, harmonic centrality, and blast radius with equal weights (0.33/0.33/0.34).
 - **`order_mode: "scheduled"`** -- steps are topologically sorted so dependencies are extracted before dependents.
-- **Step 1** -- extract `matches-selector` (a bower component with zero blast radius, low centrality) first. It is the safest, most independent module.
-- **Step 2** -- extract `com.redhat.coolstore.model` (the domain model) next. It has low blast radius and low centrality, meaning it can be extracted without breaking many callers.
+- **Step 1** -- extract `com.redhat.coolstore.persistence` first (lowest coupling / priority on this run).
+- **Step 2** -- extract `com.redhat.coolstore.utils` next in the scheduled order.
 - **`priority_score`** -- a combined score from the three metrics. Lower (more negative) scores come first in the scheduled order.
 - **`max_blast: 0.0`** -- neither of the first two steps has any blast-radius impact, making them safe starting points.
 
@@ -114,17 +146,17 @@ rgctl offers four migration strategy presets:
 
 ```bash
 # Foundational-first: extract shared libraries and utilities first
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-harmonic --export-migration-hints \
   --migration-preset foundational_first
 
 # Dense cluster: extract tightly-coupled clusters together
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-harmonic --export-migration-hints \
   --migration-preset dense_cluster
 
 # Risk mitigation: prioritize low-risk extractions
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-harmonic --export-migration-hints \
   --migration-preset risk_mitigation
 ```
@@ -142,12 +174,12 @@ Control how steps are sorted:
 
 ```bash
 # Scheduled: dependency-aware topological sort (default)
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-harmonic --export-migration-hints \
   --migration-order scheduled
 
 # Priority: sort by priority score regardless of dependencies
-rgctl -r example/coolstore discover \
+rgctl -r example/coolstore discover -l java \
   --with-harmonic --export-migration-hints \
   --migration-order priority
 ```
@@ -179,8 +211,8 @@ After reviewing the plan, use other rgctl commands to dig deeper:
 
 ```bash
 # See what functions are in the community being extracted
-rgctl -r example/coolstore -f json gql \
-  "MATCH (f:Function) WHERE f.community_id = '13' RETURN f LIMIT 20"
+rgctl -r example/coolstore -f json communities list | jq '.communities[] | select(.id==13)'
+rgctl -r example/coolstore -f json find --type function --scope com.redhat.coolstore --limit 20
 
 # Check blast radius of a specific function before extracting
 rgctl -r example/coolstore blast-radius getShoppingCart --depth 3
@@ -218,7 +250,7 @@ See [Migration Algorithms](../migration-algorithms.md) for the academic backgrou
 - **Dependency-safe.** The scheduled order ensures you never extract a module before its dependencies.
 - **Configurable strategy.** Four presets and two ordering modes let you tailor the plan to your migration approach.
 - **Full traceability.** Every step includes the metrics that justify its position in the plan.
-- **Composable.** Use GQL, blast-radius, and CPG to investigate each migration step in detail.
+- **Composable.** Use structured queries, blast-radius, and CPG to investigate each migration step in detail.
 
 ## Related Guides
 
