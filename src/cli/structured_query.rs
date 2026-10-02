@@ -42,6 +42,8 @@ impl SharedQueryArgs {
             limit: self.limit,
             count_only: false,
             exact: false,
+            annotation_names: None,
+            show_attributes: false,
         })
     }
 }
@@ -109,6 +111,8 @@ pub fn run_find(
     shared: SharedQueryArgs,
     exact: bool,
     count_only: bool,
+    annotation: Option<String>,
+    show_attributes: bool,
 ) -> Result<()> {
     let store = open_store(ctx)?;
     let node_type = type_name
@@ -119,6 +123,14 @@ pub fn run_find(
     let mut filters = shared.into_filters(node_type)?;
     filters.exact = exact;
     filters.count_only = count_only;
+    filters.show_attributes = show_attributes;
+    if let Some(raw) = annotation {
+        let list = rgctl_graph::parse_annotation_list(&raw);
+        if list.is_empty() {
+            anyhow::bail!("--annotation requires at least one name (e.g. @MessageDriven)");
+        }
+        filters.annotation_names = Some(list);
+    }
     // Default limit for find when not counting
     if filters.limit.is_none() && !count_only {
         filters.limit = Some(50);
