@@ -120,6 +120,16 @@ rm -rf .rgctl
   2>&1 | tee /tmp/metasfresh-deep-profile.log
 ```
 
+### Declarative taint rules (post-#16)
+
+`discover --with-taint` applies language packs from `crates/rgctl-analysis/rules/taint/*.yaml`
+(compiled once per session; scoped by `-l` / detected languages). Override with
+`.rgctl/taint-rules.d/` or `--taint-rules PATH`. Release smoke:
+`cargo test --release --test taint_rules_release_smoke -- --ignored --nocapture`.
+When claiming wall regression vs pre-declarative baselines, keep ≤10% on gbuilder /
+document metasfresh sampling; Gate A (linux cold discover) is N/A unless the default
+(non-taint) discover path changes.
+
 ---
 
 ## Reading `[profile]` output

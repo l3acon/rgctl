@@ -1,0 +1,133 @@
+schema_version: 1
+id: java-builtins
+languages:
+- java
+rules:
+- id: java-src-http
+  role: source
+  kind: HttpParameter
+  match:
+    type: any_substring
+    values:
+    - getParameter(
+    - getHeader(
+    - getQueryString(
+    - request.get
+- id: java-src-file
+  role: source
+  kind: FileInput
+  match:
+    type: any_substring
+    values:
+    - FileInputStream
+    - Files.read
+    - BufferedReader
+- id: java-src-env
+  role: source
+  kind: EnvironmentVar
+  match:
+    type: substring
+    value: System.getenv
+- id: java-src-argv
+  role: source
+  kind: CommandLineArg
+  match:
+    type: any_substring
+    values:
+    - 'args['
+    - getArgs(
+- id: java-src-db
+  role: source
+  kind: DatabaseResult
+  match:
+    type: any_substring
+    values:
+    - ResultSet
+    - executeQuery
+- id: java-sink-sql
+  role: sink
+  kind: SqlQuery
+  cwe: CWE-89
+  match:
+    type: any_substring
+    values:
+    - createStatement
+    - prepareStatement
+    - executeQuery
+    - executeUpdate
+    - .createQuery(
+- id: java-sink-shell
+  role: sink
+  kind: ShellCommand
+  cwe: CWE-78
+  match:
+    type: any_substring
+    values:
+    - Runtime.getRuntime().exec
+    - ProcessBuilder
+    - .exec(
+- id: java-sink-file
+  role: sink
+  kind: FileWrite
+  match:
+    type: any_substring
+    values:
+    - FileOutputStream
+    - FileWriter
+    - Files.write
+- id: java-sink-html
+  role: sink
+  kind: HtmlRender
+  cwe: CWE-79
+  match:
+    type: any_substring
+    values:
+    - PrintWriter
+    - response.getWriter
+    - innerHTML
+    - innerText
+- id: java-sink-log
+  role: sink
+  kind: LogOutput
+  match:
+    type: any_substring
+    values:
+    - Logger.
+    - .log(
+- id: java-san-num
+  role: sanitizer
+  kind: TypeCast
+  detail: numeric
+  match:
+    type: any_substring
+    values:
+    - Integer.parseInt
+    - Long.parseLong
+    - Double.parseDouble
+- id: java-san-html
+  role: sanitizer
+  kind: HtmlEscape
+  match:
+    type: any_substring
+    values:
+    - StringEscapeUtils
+    - HtmlUtils.htmlEscape
+    - ESAPI.encoder
+- id: java-san-sql
+  role: sanitizer
+  kind: SqlParameterize
+  match:
+    type: all_substrings
+    values:
+    - prepareStatement
+    - setString
+- id: java-san-val
+  role: sanitizer
+  kind: Validation
+  detail: pattern
+  match:
+    type: any_substring
+    values:
+    - Pattern.matches
+    - .matches(
+    - Validator.

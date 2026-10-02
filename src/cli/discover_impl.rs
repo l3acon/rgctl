@@ -38,6 +38,7 @@ pub(crate) struct AnalysisOptions<'a> {
     pub with_security: bool,
     pub with_cfg: bool,
     pub with_taint: bool,
+    pub taint_rules: Option<String>,
     pub with_dfg_loops: bool,
     pub with_ast_skeleton: bool,
     pub write_json_graph: bool,
@@ -84,6 +85,7 @@ pub(crate) fn run_full_analysis(
         with_security,
         with_cfg,
         with_taint,
+        taint_rules,
         with_dfg_loops,
         with_ast_skeleton,
         write_json_graph,
@@ -152,6 +154,7 @@ pub(crate) fn run_full_analysis(
                 .collect(),
         );
     }
+    let taint_lang_scope = discovery.languages.clone();
 
     if let Some(excludes) = exclude {
         discovery.exclude_patterns = excludes
@@ -607,6 +610,26 @@ pub(crate) fn run_full_analysis(
             None
         };
 
+        let taint_rule_set = if with_taint {
+            let cli = taint_rules.as_ref().map(std::path::PathBuf::from);
+            let langs = taint_lang_scope.as_ref();
+            match rgctl_analysis::taint_rules::TaintRuleSet::load_with_overlays(
+                Some(Path::new(path)),
+                cli.as_deref(),
+                langs.map(|v| v.as_slice()),
+            ) {
+                Ok(set) => Some(std::sync::Arc::new(set)),
+                Err(err) => {
+                    warn!(error = %err, "failed to load taint rule packs; using bundled defaults");
+                    rgctl_analysis::taint_rules::TaintRuleSet::bundled()
+                        .ok()
+                        .map(std::sync::Arc::new)
+                }
+            }
+        } else {
+            None
+        };
+
         let batch = run_cfg_analysis_batch(
             &functions,
             &storage,
@@ -616,6 +639,7 @@ pub(crate) fn run_full_analysis(
                 thread_count: limits.as_ref().and_then(|l| l.threads),
                 enable_taint: with_taint,
                 dfg_loops: with_dfg_loops,
+                taint_rules: taint_rule_set,
             },
             file_sources.as_ref(),
         );

@@ -4,7 +4,8 @@ use crate::analysis::storage::stable_function_key;
 use crate::analysis::{
     AnalysisIndexEntry, AnalysisStorage, CfgPdgRecord, ControlFlowGraph, DominatorTree,
     FunctionAnalysis, FunctionIdSyncEntry, ParsedSourceFile, PdgBuildOptions,
-    ProgramDependenceGraph, TaintAnalyzer, build_cfg_for_function, cfg_language_id_from_path,
+    ProgramDependenceGraph, TaintAnalyzer, TaintRuleSet, build_cfg_for_function,
+    cfg_language_id_from_path,
 };
 use rayon::prelude::*;
 use rgctl_graph::code_index::hash_code;
@@ -28,6 +29,8 @@ pub struct CfgAnalysisOptions {
     pub enable_taint: bool,
     /// Tag loop-carried data deps on the PDG (`--with-dfg-loops`).
     pub dfg_loops: bool,
+    /// Compiled taint rule packs (built-in + overlays). Shared across workers.
+    pub taint_rules: Option<Arc<TaintRuleSet>>,
 }
 
 /// Why a function was not CFG-analyzed.
@@ -204,6 +207,7 @@ struct CfgWorkContext<'a> {
     timings: Option<&'a Mutex<Vec<CfgFunctionTiming>>>,
     enable_taint: bool,
     dfg_loops: bool,
+    taint_rules: Option<&'a Arc<TaintRuleSet>>,
 }
 
 /// Analyze all repository functions in parallel with incremental reuse and bincode persistence.
@@ -250,6 +254,7 @@ pub fn run_cfg_analysis_batch(
         timings: timing_ref,
         enable_taint: options.enable_taint,
         dfg_loops: options.dfg_loops,
+        taint_rules: options.taint_rules.as_ref(),
     };
 
     let nested: Vec<Vec<Result<CfgFunctionWork, CfgSkipReason>>> = with_large_stack(|| {
@@ -473,6 +478,7 @@ fn process_file_group(
                 ctx.timings,
                 ctx.enable_taint,
                 ctx.dfg_loops,
+                ctx.taint_rules,
             )
             .ok_or(CfgSkipReason::AnalysisError)
         })
@@ -541,6 +547,7 @@ fn analyze_function_in_file(
     timings: Option<&Mutex<Vec<CfgFunctionTiming>>>,
     enable_taint: bool,
     dfg_loops: bool,
+    taint_rules: Option<&Arc<TaintRuleSet>>,
 ) -> Option<CfgFunctionWork> {
     let code_hash = resolve_code_hash(func_node, source);
 
@@ -570,6 +577,7 @@ fn analyze_function_in_file(
         timings,
         enable_taint,
         dfg_loops,
+        taint_rules,
     )
 }
 
@@ -628,6 +636,7 @@ fn compute_function_cfg(
     timings: Option<&Mutex<Vec<CfgFunctionTiming>>>,
     enable_taint: bool,
     dfg_loops: bool,
+    taint_rules: Option<&Arc<TaintRuleSet>>,
 ) -> Option<CfgFunctionWork> {
     let total_start = timings.is_some().then(Instant::now);
 
@@ -653,6 +662,7 @@ fn compute_function_cfg(
         stage,
         enable_taint,
         dfg_loops,
+        taint_rules,
     )?;
 
     if let (Some(start), Some(log)) = (total_start, timings) {
@@ -686,6 +696,7 @@ fn compute_from_cfg(
     stage: Option<&CfgStageTimings>,
     enable_taint: bool,
     dfg_loops: bool,
+    taint_rules: Option<&Arc<TaintRuleSet>>,
 ) -> Option<CfgFunctionWork> {
     if let Some(stage) = stage {
         stage.functions.fetch_add(1, Ordering::Relaxed);
@@ -723,7 +734,11 @@ fn compute_from_cfg(
         if let Some(ref pdg) = pdg_arc {
             let mut analyzer =
                 TaintAnalyzer::with_dominator(pdg.as_ref(), cfg_arc.as_ref(), dom_data);
-            analyzer.detect_patterns(language);
+            if let Some(rules) = taint_rules {
+                analyzer.detect_patterns_with_rules(language, rules.as_ref());
+            } else {
+                analyzer.detect_patterns(language);
+            }
             let flows = analyzer.analyze();
             let vulnerable = flows.iter().filter(|f| f.is_vulnerable()).count();
             let count = flows.len();

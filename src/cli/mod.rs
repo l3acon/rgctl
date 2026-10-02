@@ -131,6 +131,11 @@ pub enum Commands {
         #[arg(long = "with-taint")]
         with_taint: bool,
 
+        /// Extra taint rule pack (YAML file or directory). Merged after built-ins and
+        /// `.rgctl/taint-rules.d/` (see docs). Only used with `--with-taint`.
+        #[arg(long = "taint-rules", value_name = "PATH")]
+        taint_rules: Option<String>,
+
         /// Classify loop-carried data dependencies on the PDG (implies CFG).
         #[arg(long = "with-dfg-loops")]
         with_dfg_loops: bool,
@@ -1136,6 +1141,7 @@ impl Cli {
                 with_security,
                 with_cfg,
                 with_taint,
+                taint_rules,
                 with_dfg_loops,
                 with_ast_skeleton,
                 write_json_graph,
@@ -1168,6 +1174,7 @@ impl Cli {
                         with_security,
                         with_cfg,
                         with_taint,
+                        taint_rules,
                         with_dfg_loops,
                         with_ast_skeleton,
                         write_json_graph,
