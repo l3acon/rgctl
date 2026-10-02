@@ -40,6 +40,9 @@ mod slice;
 pub mod slice_output;
 mod stage_profile;
 mod structured_query;
+mod session_status;
+mod resources;
+mod rules;
 
 pub use args::OutputFormat;
 
@@ -271,6 +274,14 @@ pub enum Commands {
         /// Return counts only
         #[arg(long = "count-only")]
         count_only: bool,
+
+        /// Invert AnnotatedWith: entities carrying this annotation (`@Foo` or `Foo[,Bar…]`)
+        #[arg(long = "annotation", value_name = "NAME[,NAME…]")]
+        annotation: Option<String>,
+
+        /// Include annotation argument text when indexed (requires --annotation)
+        #[arg(long = "show-attributes")]
+        show_attributes: bool,
     },
 
     /// Incoming CALLS neighbors for a symbol
@@ -385,7 +396,7 @@ pub enum Commands {
 
     /// Aggregate symbol/edge counts (includes zero-count schema kinds for type/edge)
     Inventory {
-        /// Aggregation dimension: type | edge | lang | file | community
+        /// Aggregation dimension: type | edge | lang | file | community | import-prefix
         #[arg(long = "by", default_value = "type")]
         by: String,
 
@@ -400,6 +411,22 @@ pub enum Commands {
 
         #[arg(long = "exclude-scope")]
         exclude_scope: bool,
+    },
+
+    /// Session graph status (snapshot presence, digest, node/edge counts; no rediscover)
+    Status,
+
+    /// Parse deployment/persistence descriptors (persistence.xml, weblogic/jboss/web/beans)
+    Resources {
+        /// Optional extra descriptor file to include
+        #[arg(long = "file", value_name = "PATH")]
+        file: Option<String>,
+    },
+
+    /// Evaluate Konveyor-shaped rules against the session (Kantra engine)
+    Rules {
+        #[command(subcommand)]
+        action: RulesCommands,
     },
 
     /// Alias namespace for structured query verbs (`query find`, `query callers`, …)
@@ -682,6 +709,28 @@ pub enum Commands {
 }
 
 #[derive(Subcommand)]
+pub enum RulesCommands {
+    /// Evaluate a ruleset directory (or catalog) against the current session graph
+    Run {
+        /// Ruleset directory (`ruleset.yaml` + `*.yaml`), like `--kantra-rules`
+        #[arg(value_name = "DIR")]
+        rules_dir: std::path::PathBuf,
+
+        /// Filter by `konveyor.io/target` label
+        #[arg(long = "target", value_name = "NAME")]
+        target: Option<String>,
+
+        /// Index KantraRule nodes only; skip evaluation
+        #[arg(long = "index-only")]
+        index_only: bool,
+
+        /// Override with a rulesets tree (mutually exclusive with DIR as single ruleset when set)
+        #[arg(long = "catalog", value_name = "ROOT")]
+        catalog: Option<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum QueryCommands {
     /// Alias for `rgctl find`
     Find {
@@ -705,6 +754,10 @@ pub enum QueryCommands {
         limit: Option<usize>,
         #[arg(long = "count-only")]
         count_only: bool,
+        #[arg(long = "annotation", value_name = "NAME[,NAME…]")]
+        annotation: Option<String>,
+        #[arg(long = "show-attributes")]
+        show_attributes: bool,
     },
     /// Alias for `rgctl callers`
     Callers {
@@ -1188,6 +1241,8 @@ impl Cli {
                 exact,
                 limit,
                 count_only,
+                annotation,
+                show_attributes,
             } => structured_query::run_find(
                 &ctx,
                 pattern,
@@ -1204,6 +1259,8 @@ impl Cli {
                 },
                 exact,
                 count_only,
+                annotation,
+                show_attributes,
             ),
             Commands::Callers {
                 symbol,
@@ -1310,6 +1367,16 @@ impl Cli {
                     limit: None,
                 },
             ),
+            Commands::Status => session_status::run_status(&ctx),
+            Commands::Resources { file } => resources::run_resources(&ctx, file),
+            Commands::Rules { action } => match action {
+                RulesCommands::Run {
+                    rules_dir,
+                    target,
+                    index_only,
+                    catalog,
+                } => rules::run_rules(&ctx, rules_dir, target, index_only, catalog),
+            },
             Commands::Query { action } => match action {
                 QueryCommands::Find {
                     pattern,
@@ -1322,6 +1389,8 @@ impl Cli {
                     exact,
                     limit,
                     count_only,
+                    annotation,
+                    show_attributes,
                 } => structured_query::run_find(
                     &ctx,
                     pattern,
@@ -1338,6 +1407,8 @@ impl Cli {
                     },
                     exact,
                     count_only,
+                    annotation,
+                    show_attributes,
                 ),
                 QueryCommands::Callers {
                     symbol,
@@ -1752,6 +1823,9 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::Callees { .. } => "callees",
         Commands::Relations { .. } => "relations",
         Commands::Inventory { .. } => "inventory",
+        Commands::Status => "status",
+        Commands::Resources { .. } => "resources",
+        Commands::Rules { .. } => "rules",
         Commands::Query { action } => match action {
             QueryCommands::Find { .. } => "query find",
             QueryCommands::Callers { .. } => "query callers",

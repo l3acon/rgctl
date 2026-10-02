@@ -262,6 +262,11 @@ pub struct QueryFilters {
     pub count_only: bool,
     /// Exact name match (no glob)
     pub exact: bool,
+    /// Annotation invert: simple names / `@Name` / FQNs (OR). When set, `find` returns
+    /// AnnotatedWith **sources** matching any listed annotation.
+    pub annotation_names: Option<Vec<String>>,
+    /// Request annotation argument payloads when indexed (`--show-attributes`).
+    pub show_attributes: bool,
 }
 
 /// Session over an open snapshot store.
@@ -485,6 +490,30 @@ impl<'a> StructuredQuery<'a> {
 
     /// Entity search (`rgctl find`).
     pub fn find(&self, pattern: Option<&str>, filters: &QueryFilters) -> Result<FindResult> {
+        if filters.show_attributes {
+            // Argument indexing is Phase C; refuse inventing empty lookup= fields.
+            if filters
+                .annotation_names
+                .as_ref()
+                .map(|v| !v.is_empty())
+                .unwrap_or(false)
+            {
+                return Err(Error::InvalidQuery(
+                    "annotation attributes are not indexed yet; omit --show-attributes or re-discover after arg indexing lands"
+                        .into(),
+                ));
+            }
+            return Err(Error::InvalidQuery(
+                "--show-attributes requires --annotation and indexed annotation arguments".into(),
+            ));
+        }
+
+        if let Some(annots) = filters.annotation_names.as_ref() {
+            if !annots.is_empty() {
+                return self.find_by_annotation(annots, pattern, filters);
+            }
+        }
+
         let mut candidates: Vec<Node> = Vec::new();
         if let Some(pat) = pattern {
             candidates = self.lookup_name_candidates(pat, filters.exact)?;
@@ -516,6 +545,65 @@ impl<'a> StructuredQuery<'a> {
         }
 
         candidates.retain(|n| self.node_passes(n, filters));
+        Self::finish_find(candidates, filters)
+    }
+
+    /// Invert AnnotatedWith: return sources carrying any of the listed annotations (OR).
+    fn find_by_annotation(
+        &self,
+        annots: &[String],
+        pattern: Option<&str>,
+        filters: &QueryFilters,
+    ) -> Result<FindResult> {
+        let normalized: Vec<String> = annots
+            .iter()
+            .map(|a| normalize_annotation_name(a))
+            .filter(|a| !a.is_empty())
+            .collect();
+        if normalized.is_empty() {
+            return Err(Error::InvalidQuery(
+                "--annotation requires at least one name (e.g. @MessageDriven)".into(),
+            ));
+        }
+
+        let mut seen = HashSet::new();
+        let mut candidates: Vec<Node> = Vec::new();
+        self.store.for_each_edge(|from, to, et| {
+            if et != EdgeType::AnnotatedWith {
+                return Ok(());
+            }
+            let Some(ann) = self.store.get_node(to)? else {
+                return Ok(());
+            };
+            if !normalized.iter().any(|want| annotation_name_matches(&ann, want)) {
+                return Ok(());
+            }
+            if !seen.insert(from) {
+                return Ok(());
+            }
+            let Some(src) = self.store.get_node(from)? else {
+                return Ok(());
+            };
+            if let Some(pat) = pattern {
+                let ok = if filters.exact || !is_glob_pattern(pat) {
+                    src.name == pat
+                } else {
+                    glob_match(pat, &src.name)
+                };
+                if !ok {
+                    return Ok(());
+                }
+            }
+            if self.node_passes(&src, filters) {
+                candidates.push(src);
+            }
+            Ok(())
+        })?;
+
+        Self::finish_find(candidates, filters)
+    }
+
+    fn finish_find(candidates: Vec<Node>, filters: &QueryFilters) -> Result<FindResult> {
         let total = candidates.len();
         let limit = filters.limit.unwrap_or(total);
         let entities: Vec<EntityRow> = if filters.count_only {
@@ -1011,6 +1099,38 @@ impl<'a> StructuredQuery<'a> {
                     counts,
                 })
             }
+            InventoryBy::ImportPrefix => {
+                // Observed prefixes only (no zero-fill). Default depth = 2 dotted segments.
+                const DEPTH: usize = 2;
+                let mut map: HashMap<String, usize> = HashMap::new();
+                for id in self.store.all_node_ids() {
+                    let Some(n) = self.store.get_node(id)? else {
+                        continue;
+                    };
+                    if n.node_type != NodeType::Import {
+                        continue;
+                    }
+                    if !self.node_passes(&n, filters) {
+                        continue;
+                    }
+                    let key = import_package_prefix(&n.name, DEPTH);
+                    *map.entry(key).or_insert(0) += 1;
+                }
+                let mut counts: Vec<_> = map
+                    .into_iter()
+                    .map(|(key, count)| InventoryCount {
+                        key,
+                        count,
+                        occurrences: None,
+                    })
+                    .collect();
+                counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.key.cmp(&b.key)));
+                Ok(InventoryResult {
+                    schema_version: STRUCTURED_QUERY_SCHEMA_VERSION,
+                    by: "import-prefix".into(),
+                    counts,
+                })
+            }
         }
     }
 
@@ -1072,6 +1192,8 @@ pub enum InventoryBy {
     File,
     /// Community id property
     Community,
+    /// Import package prefix (first N dotted segments; observed only)
+    ImportPrefix,
 }
 
 impl InventoryBy {
@@ -1083,8 +1205,9 @@ impl InventoryBy {
             "lang" | "language" => Ok(Self::Lang),
             "file" => Ok(Self::File),
             "community" => Ok(Self::Community),
+            "import-prefix" | "importprefix" | "import_prefix" => Ok(Self::ImportPrefix),
             other => Err(Error::InvalidQuery(format!(
-                "unknown inventory --by '{other}' (expected type|edge|lang|file|community)"
+                "unknown inventory --by '{other}' (expected type|edge|lang|file|community|import-prefix)"
             ))),
         }
     }
@@ -1237,6 +1360,66 @@ fn lang_from_ext(ext: &str) -> String {
     }
 }
 
+/// Strip `@` and whitespace from an annotation CLI token.
+pub fn normalize_annotation_name(raw: &str) -> String {
+    raw.trim().trim_start_matches('@').trim().to_string()
+}
+
+/// Parse `--annotation @A,@B` into normalized names (empty tokens dropped).
+pub fn parse_annotation_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(normalize_annotation_name)
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// True when an Annotation node matches a normalized want (simple name or FQN).
+fn annotation_name_matches(node: &Node, want: &str) -> bool {
+    if want.is_empty() {
+        return false;
+    }
+    if node.name == want {
+        return true;
+    }
+    if let Some(simple) = node.name.rsplit('.').next() {
+        if simple == want {
+            return true;
+        }
+    }
+    if let Some(qn) = node.qualified_name.as_deref() {
+        if qn == want {
+            return true;
+        }
+        if let Some(simple) = qn.rsplit('.').next() {
+            if simple == want {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Derive import package prefix: strip `import` / `static` / `.*` / `;`, take first `depth` segments.
+pub fn import_package_prefix(import_name: &str, depth: usize) -> String {
+    let mut s = import_name.trim();
+    if let Some(rest) = s.strip_prefix("import ") {
+        s = rest.trim();
+    }
+    if let Some(rest) = s.strip_prefix("static ") {
+        s = rest.trim();
+    }
+    s = s.trim_end_matches(';').trim();
+    if let Some(rest) = s.strip_suffix(".*") {
+        s = rest.trim();
+    }
+    let parts: Vec<&str> = s.split('.').filter(|p| !p.is_empty()).collect();
+    if parts.is_empty() {
+        return "<unknown>".into();
+    }
+    let take = depth.max(1).min(parts.len());
+    parts[..take].join(".")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1266,6 +1449,27 @@ mod tests {
             .with_file_path("<external>");
         let imp = Node::new(NodeType::Import, "import javax.ws.rs.Path;")
             .with_file_path("src/Svc.java");
+        let imp_ejb = Node::new(NodeType::Import, "import javax.ejb.MessageDriven;")
+            .with_file_path("src/OrderMDB.java");
+        let imp_jms = Node::new(NodeType::Import, "import javax.jms.Topic;")
+            .with_file_path("src/OrderMDB.java");
+        let imp_eclipselink =
+            Node::new(NodeType::Import, "import org.eclipse.persistence.sessions.Session;")
+                .with_file_path("src/Jpa.java");
+        let mdb_ann = Node::new(NodeType::Annotation, "MessageDriven")
+            .with_qualified_name("javax.ejb.MessageDriven")
+            .with_file_path("<external>");
+        let scoped_ann = Node::new(NodeType::Annotation, "SessionScoped")
+            .with_qualified_name("javax.enterprise.context.SessionScoped")
+            .with_file_path("<external>");
+        let mdb = Node::new(NodeType::Class, "OrderMDB")
+            .with_qualified_name("com.coolstore.OrderMDB")
+            .with_file_path("src/OrderMDB.java")
+            .with_location(1, 80);
+        let cart = Node::new(NodeType::Class, "CartResource")
+            .with_qualified_name("com.coolstore.CartResource")
+            .with_file_path("src/CartResource.java")
+            .with_location(1, 40);
         let caller = Node::new(NodeType::Function, "handle")
             .with_qualified_name("de.metas.printing.esb.Svc.handle")
             .with_file_path("src/Svc.java")
@@ -1275,11 +1479,22 @@ mod tests {
         let c1_id = c1.id;
         let base_id = base.id;
         let caller_id = caller.id;
+        let mdb_ann_id = mdb_ann.id;
+        let scoped_ann_id = scoped_ann.id;
+        let mdb_id = mdb.id;
+        let cart_id = cart.id;
         backend.insert_node(f1).unwrap();
         backend.insert_node(a1).unwrap();
         backend.insert_node(c1).unwrap();
         backend.insert_node(base).unwrap();
         backend.insert_node(imp).unwrap();
+        backend.insert_node(imp_ejb).unwrap();
+        backend.insert_node(imp_jms).unwrap();
+        backend.insert_node(imp_eclipselink).unwrap();
+        backend.insert_node(mdb_ann).unwrap();
+        backend.insert_node(scoped_ann).unwrap();
+        backend.insert_node(mdb).unwrap();
+        backend.insert_node(cart).unwrap();
         backend.insert_node(caller).unwrap();
         backend
             .insert_edge(Edge::new(f1_id, a1_id, EdgeType::AnnotatedWith))
@@ -1289,6 +1504,12 @@ mod tests {
             .unwrap();
         backend
             .insert_edge(Edge::new(caller_id, f1_id, EdgeType::Calls))
+            .unwrap();
+        backend
+            .insert_edge(Edge::new(mdb_id, mdb_ann_id, EdgeType::AnnotatedWith))
+            .unwrap();
+        backend
+            .insert_edge(Edge::new(cart_id, scoped_ann_id, EdgeType::AnnotatedWith))
             .unwrap();
         write_columnar_from_backend(&backend, &path).unwrap();
         let store = SnapshotNodeStore::open(&path).unwrap();
@@ -1371,8 +1592,127 @@ mod tests {
                 },
             )
             .unwrap();
+        assert!(res.total >= 1);
+        assert!(res.entities.iter().any(|e| e.name.starts_with("import javax")));
+    }
+
+    #[test]
+    fn find_by_annotation_message_driven() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let res = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(vec!["MessageDriven".into()]),
+                    node_type: Some(NodeType::Class),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         assert_eq!(res.total, 1);
-        assert!(res.entities[0].name.starts_with("import javax"));
+        assert_eq!(res.entities[0].name, "OrderMDB");
+    }
+
+    #[test]
+    fn find_by_annotation_or_list() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let res = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(vec!["MessageDriven".into(), "SessionScoped".into()]),
+                    node_type: Some(NodeType::Class),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(res.total, 2);
+        let names: HashSet<_> = res.entities.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains("OrderMDB"));
+        assert!(names.contains("CartResource"));
+    }
+
+    #[test]
+    fn find_by_annotation_at_prefix_and_fqn() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let list = parse_annotation_list("@SessionScoped,javax.ejb.MessageDriven");
+        let res = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(list),
+                    node_type: Some(NodeType::Class),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(res.total, 2);
+    }
+
+    #[test]
+    fn show_attributes_errors_when_not_indexed() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let err = q
+            .find(
+                None,
+                &QueryFilters {
+                    annotation_names: Some(vec!["Resource".into()]),
+                    show_attributes: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("not indexed") || msg.contains("attributes"));
+    }
+
+    #[test]
+    fn inventory_import_prefix_census() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let res = q
+            .inventory(InventoryBy::ImportPrefix, &QueryFilters::default())
+            .unwrap();
+        assert_eq!(res.by, "import-prefix");
+        let keys: HashMap<_, _> = res.counts.iter().map(|c| (c.key.as_str(), c.count)).collect();
+        assert!(keys.get("javax.ws").copied().unwrap_or(0) >= 1);
+        assert!(keys.get("javax.ejb").copied().unwrap_or(0) >= 1);
+        assert!(keys.get("javax.jms").copied().unwrap_or(0) >= 1);
+        assert!(keys.get("org.eclipse").copied().unwrap_or(0) >= 1);
+    }
+
+    #[test]
+    fn import_package_prefix_heuristic() {
+        assert_eq!(
+            import_package_prefix("import javax.ejb.MessageDriven;", 2),
+            "javax.ejb"
+        );
+        assert_eq!(
+            import_package_prefix("import static org.junit.Assert.*;", 2),
+            "org.junit"
+        );
+        assert_eq!(import_package_prefix("com.fasterxml.jackson.databind.ObjectMapper", 2), "com.fasterxml");
+    }
+
+    #[test]
+    fn find_mdb_suffix_glob() {
+        let (_dir, store) = sample_store();
+        let q = StructuredQuery::new(&store);
+        let res = q
+            .find(
+                Some("*MDB*"),
+                &QueryFilters {
+                    node_type: Some(NodeType::Class),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(res.total, 1);
+        assert_eq!(res.entities[0].name, "OrderMDB");
     }
 
     #[test]

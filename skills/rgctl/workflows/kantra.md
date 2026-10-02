@@ -13,6 +13,9 @@ Native evaluation of [Konveyor Kantra](https://github.com/konveyor/kantra) rules
 ```bash
 rgctl discover . -l java --with-kantra
 # violations: .rgctl/kantra_findings.json
+
+# Post-index (when snapshot already exists):
+rgctl -f json rules run ./rules/ --target quarkus
 # rules in graph: KantraRule / KantraRuleset nodes (GQL)
 ```
 

@@ -90,9 +90,10 @@ Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/
 
 | User Intent | CLI Command |
 |-------------|-------------|
-| Evaluate migration rules | `discover . --with-kantra` |
-| Filter by migration target | `discover . --with-kantra --kantra-target quarkus` |
-| CI / custom ruleset | `discover . --with-kantra --kantra-rules PATH` |
+| Evaluate migration rules | `discover . --with-kantra` or `rules run ./rules/` |
+| Filter by migration target | `discover . --with-kantra --kantra-target quarkus` / `rules run ./rules/ --target quarkus` |
+| CI / custom ruleset | `discover . --with-kantra --kantra-rules PATH` / `rules run PATH` |
+| Index rules only | `discover . --with-kantra --kantra-index-only` / `rules run PATH --index-only` |
 | List indexed rules (GQL) | `gql "MATCH (r:KantraRule) RETURN r LIMIT 20"` |
 | Rules for one target label | `gql` with `` r.`konveyor.io/target` `` property (backticks) |
 | Read violations artifact | `.rgctl/kantra_findings.json` |
@@ -105,11 +106,16 @@ Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/
 
 | User Intent | CLI Command |
 |-------------|-------------|
+| Session / index freshness | `status` |
 | Schema / counts (incl. zeros) | `inventory --by type` or `inventory --by edge` |
+| Import prefix census | `inventory --by import-prefix` |
 | Count functions | `find --type function --count-only` |
 | Find by name/type | `find "User*" --type class --limit 50` |
+| Suffix scan (MDB / Remote) | `find '*MDB*' --type class` |
+| Classes with annotation | `find --annotation @MessageDriven --type class` |
 | javax import worklist | `find "import javax*" --type import --scope <pkg>` |
 | Annotation pairs (seedless) | `relations --edge annotatedwith --from-type function --to-type annotation --scope <pkg>` |
+| Deployment / persistence config | `resources` (persistence.xml, weblogic/jboss/web/beans) |
 | Find callers/callees | `callers <Symbol> --depth 1` / `callees <Symbol>` |
 | Outside callers of a module | `callers <Symbol> --scope <pkg> --scope-mode outside` |
 | EXTENDS / IMPLEMENTS inventory | `relations --edge extends --from-type class` (omit SYMBOL) |
@@ -119,8 +125,9 @@ Legacy daemon cache: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/
 | Refresh community labels | `communities label --write` |
 | Ad-hoc Cypher (experimental) | `gql "MATCH …"` — uncanny valley; prefer verbs above |
 
-**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) are not indexed yet.
+**Migration probe order:** `status` → `inventory --by import-prefix` → `find --annotation …` / suffix globs → `resources` → `rules run` / `--with-kantra` → `callers InitialContext`.
 
+**Complexity honesty:** exact name = hash index; prefix/`*mid*`/`--scope` may scan keys/columns until better indexes land. Module re-index is still a strong speed lever. Annotation **arguments** (e.g. `@Path("/x")`) are not indexed yet (`--show-attributes` errors until they are).
 **See:** [Command Encyclopedia](references/command-encyclopedia.md) (find/callers/relations/inventory), [GQL Reference](references/gql-reference.md) (legacy), [Semantic Search Guide](../../docs/guides/semantic-search.md)
 
 ### 3. Impact & Safety

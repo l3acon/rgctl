@@ -72,8 +72,8 @@ pub use snapshot_diff::{
 pub use structured_query::{
     ALL_EDGE_TYPES, ALL_NODE_TYPES, CallNeighborsResult, EntityRow, EdgeRow, FindResult,
     InventoryBy, InventoryCount, InventoryResult, QueryFilters, RelationDirection, RelationsResult,
-    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, parse_edge_type,
-    parse_node_type,
+    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, import_package_prefix,
+    parse_annotation_list, parse_edge_type, parse_node_type,
 };
 pub use stable_key::{
     MmapNodeKey, NodeRowRef, StableNodeKey, NAMESPACE_RGCTL, deterministic_node_id,

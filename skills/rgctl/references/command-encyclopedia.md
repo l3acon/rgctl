@@ -107,26 +107,42 @@ Samples below are truncated where noted. Field names match live CLI / `docs/json
 ```bash
 rgctl -f json find [PATTERN] --type function --scope pkg --limit 50
 rgctl -f json find --type function --count-only
+rgctl -f json find --annotation @MessageDriven --type class
+rgctl -f json find --annotation @Stateful,@Stateless,@Singleton --type class
+rgctl -f json find '*MDB*' --type class --limit 50          # bare-name suffix scan
 rgctl -f json callers <SYMBOL> --depth 1 --file PATH --class NAME --line N
 rgctl -f json callees <SYMBOL> --depth 1
 rgctl -f json relations [SYMBOL] --edge annotatedwith --from-type function --to-type annotation --scope pkg
 rgctl -f json relations --edge extends --from-type class   # seedless
 rgctl -f json inventory --by type   # includes zero-count kinds
 rgctl -f json inventory --by edge
+rgctl -f json inventory --by import-prefix   # javax.ejb / javax.jms / org.eclipse …
+rgctl -f json status                # snapshot presence, digest, node/edge counts
+rgctl -f json resources             # persistence.xml + weblogic/jboss/web/beans (no Kantra)
+rgctl -f json rules run ./rules/ [--target quarkus]   # post-index Kantra eval
 rgctl -f json query find …          # alias namespace
 ```
 
 **Purpose:** Deterministic mmap structured query (no Cypher, no `MemoryBackend` hydrate). Prefer these over `gql` for agent work. Relations `total` is distinct `(source,target,edge)`; duplicates collapse with `occurrences` (`schema_version` ≥ 2). `inventory --by edge` uses the same rule: `count` = distinct, `occurrences` = raw stored edges.
 
-**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`).
+**Migration probes (Coolstore-shaped):**
+1. `status` — is `.rgctl/` fresh?
+2. `inventory --by import-prefix` — EE surface census
+3. `find --annotation @MessageDriven|@SessionScoped|…` — blockers without package guess
+4. `find '*MDB*'` / `'*Remote*'` — suffix scan before reading files
+5. `resources` — persistence provider, JNDI DS, weblogic/jboss bindings
+6. `rules run ./rules/` or `discover --with-kantra` — fire `when:` catalog (M2)
+7. `callers InitialContext` — JNDI usage sites
 
-**Flags:** `--scope` + `--scope-mode inside|outside|crossing` (or `--exclude-scope`). `--file` / `--class` / `--line` disambiguate. Edge rows use keyed `source`/`target` (never positional). Omit `SYMBOL` on `relations` for set-wide typed-edge scans.
+**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`). `resources` / `status` do not rediscover. `rules run` requires a snapshot; Kantra stays opt-in.
 
-**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Ambiguous symbols emit candidates (`error: ambiguous_symbol` JSON under `-f json`). Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout.
+**Flags:** `--annotation` inverts `AnnotatedWith` (OR list; `@` optional). `--show-attributes` needs annotation-arg indexing (errors honestly until indexed). `--scope` + `--scope-mode inside|outside|crossing` (or `--exclude-scope`). `--file` / `--class` / `--line` disambiguate. Edge rows use keyed `source`/`target` (never positional). Omit `SYMBOL` on `relations` for set-wide typed-edge scans.
+
+**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Ambiguous symbols emit candidates (`error: ambiguous_symbol` JSON under `-f json`). Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout. Do not treat Kantra as the only search path — use annotation/import/resources first.
 
 **Agent should report:** counts, lean names/files, keyed edge pairs — not full node dumps.
 
-**See:** OpenSpec `add-structured-query-cli`; GQL demotion is a follow-up change (latency + cardinality gates cleared).
+**See:** OpenSpec `add-migration-search-primitives` (+ `add-structured-query-cli`); GQL demotion is a follow-up change.
 
 ---
 
