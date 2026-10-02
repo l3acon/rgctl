@@ -244,42 +244,67 @@ fn resolve_maven_parts(
 ) -> Result<PackageResolution, PackageResolveError> {
     let name = format!("{group}:{artifact}");
     let runtime = is_jdk_bundled(group, artifact);
-    if let Some(prefix) = maven_table().get(&format!("{group}:{artifact}")) {
-        return Ok(PackageResolution {
+    let resolved = if let Some(prefix) = maven_table().get(&format!("{group}:{artifact}")) {
+        PackageResolution {
             input: input.into(),
             ecosystem: "Maven".into(),
             name,
             import_prefixes: vec![prefix.clone()],
             runtime_bundled: runtime,
             honesty: Some("table-mapped Maven coordinate".into()),
-        });
-    }
-    if let Some(prefix) = maven_table().get(group) {
-        return Ok(PackageResolution {
+        }
+    } else if let Some(prefix) = maven_table().get(group) {
+        PackageResolution {
             input: input.into(),
             ecosystem: "Maven".into(),
             name,
             import_prefixes: vec![prefix.clone()],
             runtime_bundled: runtime,
             honesty: Some("table-mapped Maven group".into()),
-        });
-    }
-    // Short / non-dotted groups without a table entry: refuse silent guess.
-    if !group.contains('.') {
+        }
+    } else if !group.contains('.') {
+        // Short / non-dotted groups without a table entry: refuse silent guess.
         return Err(PackageResolveError::UnmappedMavenGroup {
             group: group.into(),
         });
+    } else {
+        // Dotted group → Java package prefix (drop trailing segments that look like artifact org).
+        let prefix = heuristic_maven_prefix(group, artifact);
+        PackageResolution {
+            input: input.into(),
+            ecosystem: "Maven".into(),
+            name,
+            import_prefixes: vec![prefix],
+            runtime_bundled: runtime,
+            honesty: Some("heuristic: dotted Maven group → Java package prefix".into()),
+        }
+    };
+    Ok(enrich_xalan_jdk_dual_path(group, resolved))
+}
+
+/// Xalan exists both as Maven (`org.apache.xalan` / `org.apache.xml.serializer`) and as the
+/// JDK-bundled JAXP XSLTC engine (`com.sun.org.apache.xalan.internal.*`) reached via
+/// `javax.xml.transform`. Surface both so `find --package` / callers do not miss JAXP imports.
+fn enrich_xalan_jdk_dual_path(group: &str, mut resolved: PackageResolution) -> PackageResolution {
+    if group != "xalan" {
+        return resolved;
     }
-    // Dotted group → Java package prefix (drop trailing segments that look like artifact org).
-    let prefix = heuristic_maven_prefix(group, artifact);
-    Ok(PackageResolution {
-        input: input.into(),
-        ecosystem: "Maven".into(),
-        name,
-        import_prefixes: vec![prefix],
-        runtime_bundled: runtime,
-        honesty: Some("heuristic: dotted Maven group → Java package prefix".into()),
-    })
+    resolved.runtime_bundled = true;
+    for alias in [
+        "javax.xml.transform",
+        "com.sun.org.apache.xalan.internal",
+    ] {
+        if !resolved.import_prefixes.iter().any(|p| p == alias) {
+            resolved.import_prefixes.push(alias.into());
+        }
+    }
+    let note = "Xalan also ships as JDK-bundled JAXP (XSLTC); \
+                prefixes include javax.xml.transform + com.sun.org.apache.xalan.internal";
+    resolved.honesty = Some(match resolved.honesty.take() {
+        Some(prev) => format!("{prev}; {note}"),
+        None => note.into(),
+    });
+    resolved
 }
 
 fn heuristic_maven_prefix(group: &str, artifact: &str) -> String {
@@ -337,6 +362,7 @@ fn is_jdk_bundled(group: &str, artifact: &str) -> bool {
             | ("com.sun.xml" | "com.sun.org.apache", _)
     ) || group.starts_with("java.")
         || group == "jdk"
+        || group == "xalan" // also JDK JAXP XSLTC; enrich_xalan_jdk_dual_path adds aliases
         || (group == "xml-apis" && artifact == "xml-apis")
 }
 
@@ -370,6 +396,40 @@ mod tests {
         let r = resolve_package("xalan:serializer").unwrap();
         assert!(r.import_prefixes.iter().any(|p| p.contains("apache")));
         assert!(!r.import_prefixes.iter().any(|p| p == "xalan"));
+    }
+
+    #[test]
+    fn xalan_includes_jdk_jaxp_aliases() {
+        for coords in ["xalan:xalan", "xalan:serializer", "pkg:maven/xalan/xalan@2.7.2"] {
+            let r = resolve_package(coords).unwrap();
+            assert!(
+                r.runtime_bundled,
+                "{coords}: expected runtime_bundled for JDK dual path"
+            );
+            assert!(
+                r.import_prefixes.iter().any(|p| p == "javax.xml.transform"),
+                "{coords}: missing javax.xml.transform; got {:?}",
+                r.import_prefixes
+            );
+            assert!(
+                r.import_prefixes
+                    .iter()
+                    .any(|p| p == "com.sun.org.apache.xalan.internal"),
+                "{coords}: missing com.sun.org.apache.xalan.internal; got {:?}",
+                r.import_prefixes
+            );
+            assert!(
+                r.honesty.as_deref().is_some_and(|h| h.contains("JAXP")),
+                "{coords}: honesty should mention JAXP dual path"
+            );
+        }
+        let serializer = resolve_package("xalan:serializer").unwrap();
+        assert!(serializer
+            .import_prefixes
+            .iter()
+            .any(|p| p == "org.apache.xml.serializer"));
+        let core = resolve_package("xalan:xalan").unwrap();
+        assert!(core.import_prefixes.iter().any(|p| p == "org.apache.xalan"));
     }
 
     #[test]
