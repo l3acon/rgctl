@@ -100,11 +100,41 @@ Samples below are truncated where noted. Field names match live CLI / `docs/json
 
 ---
 
+## find / callers / callees / relations / inventory
+
+**Commands:**
+
+```bash
+rgctl -f json find [PATTERN] --type function --scope pkg --limit 50
+rgctl -f json find --type function --count-only
+rgctl -f json callers <SYMBOL> --depth 1 --file PATH --class NAME
+rgctl -f json callees <SYMBOL> --depth 1
+rgctl -f json relations [SYMBOL] --edge annotatedwith --from-type function --to-type annotation --scope pkg
+rgctl -f json relations --edge extends --from-type class   # seedless
+rgctl -f json inventory --by type   # includes zero-count kinds
+rgctl -f json inventory --by edge
+rgctl -f json query find …          # alias namespace
+```
+
+**Purpose:** Deterministic mmap structured query (no Cypher, no `MemoryBackend` hydrate). Prefer these over `gql` for agent work.
+
+**Prerequisites:** `discover` done (columnar `graph.snapshot.bin`).
+
+**Flags:** `--scope` + `--scope-mode inside|outside|crossing` (or `--exclude-scope`). Edge rows use keyed `source`/`target` (never positional). Omit `SYMBOL` on `relations` for set-wide typed-edge scans.
+
+**Pitfalls:** Exact name is O(1) hash; prefix/contains/`--scope` may scan. Annotation argument values are not in the graph yet. Warm caches invalidate wall-time claims — label cold vs warm. Do not scrape stderr; parse `schema_version` on stdout.
+
+**Agent should report:** counts, lean names/files, keyed edge pairs — not full node dumps.
+
+**See:** OpenSpec `add-structured-query-cli`; demote GQL only after latency + probe-catalog gates.
+
+---
+
 ## gql
 
 **Command:** `rgctl -f json gql '<MATCH…>'` or `rgctl -f json gql --macro-name <NAME> unused`
 
-**Purpose:** Inventory, callers/callees, communities, path/relationship queries.
+**Purpose:** Experimental Cypher subset. Prefer `find` / `callers` / `relations` / `inventory` for agent workflows.
 
 **Prerequisites:** `discover` done. Virtual `:Community` needs analysis overlay from discover.
 

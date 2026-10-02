@@ -2,7 +2,7 @@
   "grammar": "tree-sitter-groovy@0.1.2",
   "handlers": {
     "annotated_type": "Skip",
-    "annotation": "AstSkeleton",
+    "annotation": "Relation",
     "annotation_argument_list": "Skip",
     "annotation_type_body": "Skip",
     "annotation_type_declaration": "Symbol",
@@ -81,7 +81,7 @@
     "local_variable_declaration": "Skip",
     "map_item": "Skip",
     "map_literal": "Literal",
-    "marker_annotation": "AstSkeleton",
+    "marker_annotation": "Relation",
     "method_declaration": "Symbol",
     "method_invocation": "Relation",
     "method_reference": "Relation",

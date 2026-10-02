@@ -45,7 +45,7 @@ Artifacts live at **`{repo}/.rgctl/`**. Set `REPO` to the repository root:
 
 ```bash
 export REPO=/path/to/repo
-rgctl -r "$REPO" -f json gql 'MATCH (n:Function) RETURN n LIMIT 20'
+rgctl -r "$REPO" -f json find --type function --limit 20
 ```
 
 Upgrading from an old daemon install: `rgctl migrate-cache` copies `~/.rgctl/cache/{name}/.rgctl/` into the repo (see [installation.md](../installation.md)).
@@ -58,16 +58,18 @@ Upgrading from an old daemon install: `rgctl migrate-cache` copies `~/.rgctl/cac
 |--------|---------|
 | Full session (graph + CFG + dashboard + semantic) | `rgctl discover PATH --full` (queryable after stage 1; status in `.rgctl/pipeline_status.json`) |
 | HTTP session (auto-pipeline) | `rgctl serve` — `GET /api/status`; `--no-pipeline` restores fail-fast |
-| Inventory functions | `rgctl -f json gql --macro-name all_functions unused` |
-| List communities | `rgctl -f json gql --macro-name all_communities unused` |
-| Find symbol by pattern | `rgctl -f json gql "MATCH (n:Function) WHERE n.name LIKE '*Service*' RETURN n LIMIT 20"` |
-| Find by FQN (not `n.name`) | `rgctl -f json gql "MATCH (n:Class) WHERE n.qualified_name = 'com.example.Foo' RETURN n"` |
-| Community members | `rgctl -f json gql "MATCH (f:Function) WHERE f.community_id = '12' RETURN f LIMIT 20"` |
+| Schema / counts (zeros included) | `rgctl -f json inventory --by type` or `--by edge` |
+| Inventory / count functions | `rgctl -f json find --type function --count-only` |
+| Find symbol by pattern | `rgctl -f json find "*Service*" --type function --limit 20` |
+| Find by package scope | `rgctl -f json find --type class --scope com.example` |
+| Callers / callees | `rgctl -f json callers <Symbol> --depth 2` / `callees <Symbol>` |
+| Typed edges (seedless OK) | `rgctl -f json relations --edge annotatedwith --from-type function --to-type annotation` |
+| List communities | `rgctl -f json communities list` |
 | Natural-language function search | `rgctl semantic index` then `rgctl -f json semantic query "checkout flow" --limit 10` |
 | Community semantic search | `rgctl -f json semantic query "checkout" --scope community --limit 10` |
 | Impact before editing | `rgctl -f json blast-radius <Symbol> [--depth N]` |
 | Architectural hotspots | `rgctl -f json metrics --pagerank` |
-| Call neighborhood | `rgctl -f json gql "MATCH (a:Function)-[:CALLS*1..3]->(b:Function) RETURN a,b LIMIT 50"` |
+| Experimental Cypher | `rgctl -f json gql 'MATCH …'` — prefer find/callers/relations |
 | Doc headings / cross-links | `discover` indexes `.md` / `.mdx` by default; GQL on `:Module` with `kind=heading` and `REFERENCES` — see [markdown-context.md](../markdown-context.md) |
 | Obsidian vault from docs | `rgctl -r "$REPO" discover -l markdown` then `export --export-format obsidian --export-output "$REPO/vault" --query all` — see [markdown-context.md](../markdown-context.md#obsidian-vault-export) |
 | Doc section semantic search | `rgctl semantic index --scope docs --embedder hash` then `rgctl -f json semantic query "checkout flow" --scope docs --limit 10` (query scope does not filter — index must be doc-scoped) |
@@ -92,7 +94,8 @@ Upgrading from an old daemon install: `rgctl migrate-cache` copies `~/.rgctl/cac
 
 ```bash
 export REPO=/path/to/repo
-rgctl -r "$REPO" -f json gql 'MATCH (n:Function) RETURN n LIMIT 5'
+rgctl -r "$REPO" -f json find --type function --limit 5
+rgctl -r "$REPO" -f json callers ShoppingCartService --depth 2
 rgctl -r "$REPO" -f json blast-radius ShoppingCartService
 ```
 
@@ -110,7 +113,7 @@ See [http-api.md](../http-api.md).
 ## Rules of thumb
 
 0. **Artifacts** — always `{repo}/.rgctl/` after `discover`. Add `.rgctl/` to `.gitignore`.
-1. **Index first** — `gql`, `blast-radius`, `metrics` fail without `discover`.
+1. **Index first** — `find`/`callers`/`relations`/`inventory`, `blast-radius`, `metrics` fail without `discover`.
 2. **Discover target** — `cd repo && rgctl discover .` or `rgctl -r PATH discover` (no trailing `.` with `-r`).
 3. **Use `-f json`** — stable `schema_version` fields; see [json-api.md](../json-api.md).
 4. **`inspect` takes a symbol only** — no `--class` (use `blast-radius` for disambiguation).

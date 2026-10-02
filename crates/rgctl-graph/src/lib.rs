@@ -35,6 +35,8 @@ pub mod segmented_spill;
 pub mod snapshot;
 /// Structural diff between two columnar snapshots.
 pub mod snapshot_diff;
+/// Deterministic mmap structured query (`find` / `callers` / `relations` / `inventory`).
+pub mod structured_query;
 /// Stable cross-snapshot node identity.
 pub mod stable_key;
 pub mod structural_sketch;
@@ -66,6 +68,12 @@ pub use snapshot::{
 pub use snapshot_diff::{
     DiffSink, DiffStats, EdgeDeltaEvent, EdgeDeltaKind, NodeDeltaEvent, NodeDeltaKind, NoopDiffSink,
     SnapshotPair, VecDiffSink, diff_snapshots,
+};
+pub use structured_query::{
+    ALL_EDGE_TYPES, ALL_NODE_TYPES, CallNeighborsResult, EntityRow, EdgeRow, FindResult,
+    InventoryBy, InventoryCount, InventoryResult, QueryFilters, RelationDirection, RelationsResult,
+    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, parse_edge_type,
+    parse_node_type,
 };
 pub use stable_key::{
     MmapNodeKey, NodeRowRef, StableNodeKey, NAMESPACE_RGCTL, deterministic_node_id,
