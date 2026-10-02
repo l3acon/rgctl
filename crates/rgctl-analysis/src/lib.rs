@@ -7,6 +7,7 @@ pub mod analysis_pack;
 pub mod ast_skeleton;
 pub mod blast_engine_snapshot;
 pub mod blast_radius;
+pub mod boundary;
 pub mod calendar_policy;
 pub mod blast_radius_scc;
 pub mod blast_slice_handoff;
@@ -76,6 +77,10 @@ pub use blast_radius::{
 };
 pub use blast_radius_scc::{
     BlastRadiusEngine, BlastRadiusResult, EngineStats, SccNode, impact_score_from_counts,
+};
+pub use boundary::{
+    bundled_boundary_catalogs, classify_boundaries, BoundaryCatalog, BoundaryKind, BoundaryLabel,
+    BoundaryNodeRef, BoundaryRule,
 };
 pub use blast_slice_handoff::{
     BlastSliceTrace, SliceHandoffSeed, criterion_for_parameter, filter_handoff_seeds_by_index,

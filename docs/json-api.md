@@ -1130,18 +1130,21 @@ rgctl -r "$REPO" -f json cpg calls priceShoppingCart | jq '.edges[:10]'
 
 ---
 
-## 18. `vuln triage` / `deps check`
+## 18. `vuln triage` / `deps check` / `vuln analyze` / `taint`
 
-OSV supply-chain triage (does **not** require `discover`; does **not** run on discover). Parse uses the [`osv`](https://crates.io/crates/osv) schema crate. Types: `rgctl-security`. `schema_version` is **1**.
+OSV supply-chain + reachability (does **not** run on discover). Parse uses the [`osv`](https://crates.io/crates/osv) schema crate; OpenVEX via [`openvex`](https://crates.io/crates/openvex). Types: `rgctl-security`. Analyze `schema_version` is **1**.
 
 ```bash
 rgctl -f json vuln triage --osv ./advisory.json
-rgctl -r "$REPO" -f json deps check --osv ./advisory.json
 rgctl -r "$REPO" -f json deps check --osv ./advisory.json --include-jars lib
-rgctl -r "$REPO" -f json deps check --osv ./advisory.json --include-node-modules .
+rgctl -r "$REPO" -f json find --package 'com.fasterxml.jackson.core:jackson-databind' -t import
+rgctl -r "$REPO" -f json callers ObjectMapper --methods readValue,writeValueAsString
+rgctl -r "$REPO" -f json blast-radius <Symbol> --classify-boundary
+rgctl -r "$REPO" -f json taint --sink ObjectMapper.readValue --source external   # needs discover --with-cfg
+rgctl -r "$REPO" -f json vuln analyze --osv ./advisory.json --include-jars lib
 ```
 
-`deps check` verdict: `not_affected` | `affected_candidate`. Bundled JAR / `node_modules` scans are **opt-in**.
+`deps check` verdict: `not_affected` | `affected_candidate`. Analyze `exploitability`: `not_affected` | `not_exploitable` | `exploitable` | `under_investigation`. Bundled JAR / `node_modules` scans are **opt-in**. Sink-first requires CFG artifacts.
 
 Human guide: [Agent pack](guides/agent-skill.md) · skill workflow `vuln`.
 
