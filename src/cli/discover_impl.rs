@@ -1280,7 +1280,9 @@ pub(crate) fn run_full_analysis(
 
         info!("");
         info!("[i] Next steps:");
-        info!("   rgctl gql \"MATCH (n:Function) RETURN n\"  # Query the graph");
+        info!("   rgctl -f json find --type function --limit 20");
+        info!("   rgctl -f json inventory --by type");
+        info!("   rgctl -f json relations --edge calls --limit 20");
         info!("   rgctl slice <file> --line <N> --variable <VAR>");
         if dashboard_dir.join("manifest.json").is_file() {
             info!("   rgctl serve --open   # Dashboard + query API at http://127.0.0.1:8080");

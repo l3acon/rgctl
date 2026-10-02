@@ -196,6 +196,7 @@ fn require_unique_function(backend: &MemoryBackend, symbol: &str) -> Result<Node
         many => Err(Error::AmbiguousSymbol {
             name: symbol.to_string(),
             count: many.len(),
+            candidates: vec![],
         }),
     }
 }

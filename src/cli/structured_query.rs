@@ -3,9 +3,10 @@
 use super::context::CliContext;
 use super::OutputFormat;
 use anyhow::{Context, Result};
+use rgctl_error::Error as GraphError;
 use rgctl_graph::{
     parse_edge_type, parse_node_type, InventoryBy, QueryFilters, RelationDirection, ScopeMode,
-    StructuredQuery,
+    STRUCTURED_QUERY_SCHEMA_VERSION, StructuredQuery,
 };
 
 /// Shared filter flags for structured query verbs.
@@ -13,6 +14,7 @@ use rgctl_graph::{
 pub struct SharedQueryArgs {
     pub file: Option<String>,
     pub class: Option<String>,
+    pub line: Option<usize>,
     pub scope: Option<String>,
     pub scope_mode: Option<String>,
     pub exclude_scope: bool,
@@ -36,6 +38,7 @@ impl SharedQueryArgs {
             scope: self.scope,
             scope_mode,
             class: self.class,
+            line: self.line,
             limit: self.limit,
             count_only: false,
             exact: false,
@@ -59,6 +62,43 @@ fn emit_text_entities(ctx: &CliContext, names: impl IntoIterator<Item = String>)
         ctx.stdout_line(&name)?;
     }
     Ok(())
+}
+
+/// Map graph errors; under `-f json`, emit an `ambiguous_symbol` envelope on stdout.
+fn map_sq_err(ctx: &CliContext, err: GraphError) -> anyhow::Error {
+    if let GraphError::AmbiguousSymbol {
+        name,
+        count,
+        candidates,
+    } = &err
+    {
+        if ctx.format == OutputFormat::Json {
+            let envelope = serde_json::json!({
+                "schema_version": STRUCTURED_QUERY_SCHEMA_VERSION,
+                "error": "ambiguous_symbol",
+                "name": name,
+                "count": count,
+                "candidates": candidates,
+            });
+            let _ = ctx.emit_json_value(&envelope);
+        } else if !candidates.is_empty() {
+            eprintln!("Ambiguous symbol '{name}': {count} matches. Candidates:");
+            for c in candidates.iter().take(20) {
+                let file = c.file.as_deref().unwrap_or("?");
+                let line = c
+                    .line
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "?".into());
+                let qn = c.qualified_name.as_deref().unwrap_or("");
+                eprintln!(
+                    "  - id={} type={} file={file}:{line} name={} {qn}",
+                    c.id, c.node_type, c.name
+                );
+            }
+            eprintln!("Disambiguate with --file, --class, and/or --line.");
+        }
+    }
+    anyhow::anyhow!("{err}")
 }
 
 /// `rgctl find`
@@ -86,7 +126,7 @@ pub fn run_find(
     let q = StructuredQuery::new(store.as_ref());
     let result = q
         .find(pattern.as_deref(), &filters)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         return emit_json(ctx, &result);
     }
@@ -114,7 +154,7 @@ pub fn run_call_neighbors(
     let q = StructuredQuery::new(store.as_ref());
     let result = q
         .call_neighbors(&symbol, incoming, depth, &filters)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         // Shape as callers/callees field name for agents
         let mut v = serde_json::to_value(&result)?;
@@ -173,13 +213,18 @@ pub fn run_relations(
             depth,
             &filters,
         )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         return emit_json(ctx, &result);
     }
     for e in result.edges {
+        let occ = if e.occurrences > 1 {
+            format!(" x{}", e.occurrences)
+        } else {
+            String::new()
+        };
         ctx.stdout_line(&format!(
-            "{} -[{}]-> {}",
+            "{} -[{}]-> {}{occ}",
             e.source.name, e.edge, e.target.name
         ))?;
     }
@@ -198,12 +243,20 @@ pub fn run_inventory(
     let q = StructuredQuery::new(store.as_ref());
     let result = q
         .inventory(dim, &filters)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         return emit_json(ctx, &result);
     }
     for c in result.counts {
-        ctx.stdout_line(&format!("{}\t{}", c.key, c.count))?;
+        if let Some(occ) = c.occurrences {
+            if occ != c.count {
+                ctx.stdout_line(&format!("{}\t{}\toccurrences={}", c.key, c.count, occ))?;
+            } else {
+                ctx.stdout_line(&format!("{}\t{}", c.key, c.count))?;
+            }
+        } else {
+            ctx.stdout_line(&format!("{}\t{}", c.key, c.count))?;
+        }
     }
     Ok(())
 }

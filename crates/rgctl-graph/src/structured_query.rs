@@ -16,7 +16,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// JSON schema version for structured-query envelopes.
-pub const STRUCTURED_QUERY_SCHEMA_VERSION: u32 = 1;
+///
+/// v2: relations rows carry `occurrences`; `total` is distinct `(source,target,edge)` count.
+pub const STRUCTURED_QUERY_SCHEMA_VERSION: u32 = 2;
 
 /// All [`NodeType`] variants for inventory zero-count emission.
 pub const ALL_NODE_TYPES: &[NodeType] = &[
@@ -157,6 +159,8 @@ pub struct EdgeRow {
     /// Hop distance from seed (1 for seedless scans)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hops: Option<usize>,
+    /// How many stored edges collapsed into this distinct relationship
+    pub occurrences: usize,
 }
 
 /// Find / list result envelope.
@@ -226,8 +230,13 @@ pub struct InventoryResult {
 pub struct InventoryCount {
     /// Bucket key (type/edge/lang/file/community)
     pub key: String,
-    /// Count (may be zero)
+    /// Primary count. For `--by edge`: distinct `(source,target)` relationships
+    /// (aligned with `relations.total`). For other dimensions: entity count.
     pub count: usize,
+    /// Raw stored edge instances when `count` is distinct (`--by edge` only).
+    /// Omitted for non-edge inventories.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub occurrences: Option<usize>,
 }
 
 /// Filters shared by find / resolve.
@@ -245,6 +254,8 @@ pub struct QueryFilters {
     pub scope_mode: ScopeMode,
     /// Enclosing class/type name filter
     pub class: Option<String>,
+    /// Definition start line (disambiguates same-class overloads)
+    pub line: Option<usize>,
     /// Max rows (None = unbounded)
     pub limit: Option<usize>,
     /// Count only
@@ -377,6 +388,11 @@ impl<'a> StructuredQuery<'a> {
         if !Self::matches_class(node, f.class.as_deref()) {
             return false;
         }
+        if let Some(want_line) = f.line
+            && node.start_line != Some(want_line)
+        {
+            return false;
+        }
         true
     }
 
@@ -401,10 +417,25 @@ impl<'a> StructuredQuery<'a> {
         match matches.len() {
             0 => Err(Error::NodeNotFound(symbol.to_string())),
             1 => Ok(matches.remove(0)),
-            n => Err(Error::AmbiguousSymbol {
-                name: symbol.to_string(),
-                count: n,
-            }),
+            n => {
+                let candidates = matches
+                    .into_iter()
+                    .take(50)
+                    .map(|node| rgctl_error::SymbolCandidate {
+                        id: node.id.to_string(),
+                        name: node.name.to_string(),
+                        qualified_name: node.qualified_name.as_ref().map(|s| s.to_string()),
+                        node_type: node_type_cli(node.node_type),
+                        file: node.file_path.as_ref().map(|s| s.to_string()),
+                        line: node.start_line,
+                    })
+                    .collect();
+                Err(Error::AmbiguousSymbol {
+                    name: symbol.to_string(),
+                    count: n,
+                    candidates,
+                })
+            }
         }
     }
 
@@ -607,9 +638,8 @@ impl<'a> StructuredQuery<'a> {
         to_type: Option<NodeType>,
         filters: &QueryFilters,
     ) -> Result<RelationsResult> {
-        let mut edges = Vec::new();
-        let mut total = 0usize;
-        let limit = filters.limit.unwrap_or(usize::MAX);
+        // Aggregate duplicate stored edges into distinct (source,target) with occurrences.
+        let mut agg: HashMap<(Uuid, Uuid), EdgeRow> = HashMap::new();
         self.store.for_each_edge(|from, to, et| {
             if et != edge {
                 return Ok(());
@@ -633,32 +663,45 @@ impl<'a> StructuredQuery<'a> {
             if !Self::edge_scope_ok(&src, &dst, filters.scope.as_deref(), filters.scope_mode) {
                 return Ok(());
             }
-            // Emit according to direction (both = outbound orientation as stored).
-            let emit = match direction {
-                RelationDirection::Out | RelationDirection::Both => true,
-                RelationDirection::In => true, // still emit keyed as stored; direction field notes "in" view
+            let (source, target, dir_label, key) = match direction {
+                RelationDirection::In => (
+                    Self::project(&dst),
+                    Self::project(&src),
+                    "in",
+                    (to, from),
+                ),
+                RelationDirection::Out | RelationDirection::Both => (
+                    Self::project(&src),
+                    Self::project(&dst),
+                    "out",
+                    (from, to),
+                ),
             };
-            if !emit {
-                return Ok(());
-            }
-            total += 1;
-            if edges.len() < limit {
-                let (source, target, dir_label) = match direction {
-                    RelationDirection::In => (Self::project(&dst), Self::project(&src), "in"),
-                    RelationDirection::Out | RelationDirection::Both => {
-                        (Self::project(&src), Self::project(&dst), "out")
-                    }
-                };
-                edges.push(EdgeRow {
+            agg.entry(key)
+                .and_modify(|row| row.occurrences = row.occurrences.saturating_add(1))
+                .or_insert(EdgeRow {
                     source,
                     edge: edge_type_cli(edge),
                     direction: dir_label.into(),
                     target,
                     hops: Some(1),
+                    occurrences: 1,
                 });
-            }
             Ok(())
         })?;
+        let total = agg.len();
+        let limit = filters.limit.unwrap_or(usize::MAX);
+        let mut edges: Vec<EdgeRow> = agg.into_values().collect();
+        // Stable order for agents / goldens: source name, then target name.
+        edges.sort_by(|a, b| {
+            (&a.source.name, &a.target.name, &a.source.id, &a.target.id).cmp(&(
+                &b.source.name,
+                &b.target.name,
+                &b.source.id,
+                &b.target.id,
+            ))
+        });
+        edges.truncate(limit);
         Ok(RelationsResult {
             schema_version: STRUCTURED_QUERY_SCHEMA_VERSION,
             target: None,
@@ -681,11 +724,9 @@ impl<'a> StructuredQuery<'a> {
         let seed = self.resolve_symbol(symbol, filters)?;
         let depth = depth.max(1);
         let adj = self.build_typed_adjacency(edge)?;
-        let mut rows = Vec::new();
-        let mut total = 0usize;
-        let limit = filters.limit.unwrap_or(usize::MAX);
+        let mut agg: HashMap<(Uuid, Uuid, bool), EdgeRow> = HashMap::new();
 
-        let walk = |incoming: bool, rows: &mut Vec<EdgeRow>, total: &mut usize| -> Result<()> {
+        let walk = |incoming: bool, agg: &mut HashMap<(Uuid, Uuid, bool), EdgeRow>| -> Result<()> {
             let mut seen = HashSet::from([seed.id]);
             let mut q = VecDeque::from([(seed.id, 0usize)]);
             while let Some((id, d)) = q.pop_front() {
@@ -721,16 +762,25 @@ impl<'a> StructuredQuery<'a> {
                     {
                         continue;
                     }
-                    *total += 1;
-                    if rows.len() < limit {
-                        rows.push(EdgeRow {
+                    let key = (src_id, dst_id, incoming);
+                    agg.entry(key)
+                        .and_modify(|row| {
+                            row.occurrences = row.occurrences.saturating_add(1);
+                            // Keep the shortest hop when collapsing duplicates.
+                            if let (Some(h), Some(prev)) = (Some(hop), row.hops) {
+                                if h < prev {
+                                    row.hops = Some(h);
+                                }
+                            }
+                        })
+                        .or_insert(EdgeRow {
                             source: Self::project(&src),
                             edge: edge_type_cli(edge),
                             direction: if incoming { "in" } else { "out" }.into(),
                             target: Self::project(&dst),
                             hops: Some(hop),
+                            occurrences: 1,
                         });
-                    }
                     if seen.insert(nid) && hop < depth {
                         q.push_back((nid, hop));
                     }
@@ -740,13 +790,26 @@ impl<'a> StructuredQuery<'a> {
         };
 
         match direction {
-            RelationDirection::Out => walk(false, &mut rows, &mut total)?,
-            RelationDirection::In => walk(true, &mut rows, &mut total)?,
+            RelationDirection::Out => walk(false, &mut agg)?,
+            RelationDirection::In => walk(true, &mut agg)?,
             RelationDirection::Both => {
-                walk(false, &mut rows, &mut total)?;
-                walk(true, &mut rows, &mut total)?;
+                walk(false, &mut agg)?;
+                walk(true, &mut agg)?;
             }
         }
+
+        let total = agg.len();
+        let limit = filters.limit.unwrap_or(usize::MAX);
+        let mut rows: Vec<EdgeRow> = agg.into_values().collect();
+        rows.sort_by(|a, b| {
+            (&a.source.name, &a.target.name, &a.source.id, &a.target.id).cmp(&(
+                &b.source.name,
+                &b.target.name,
+                &b.source.id,
+                &b.target.id,
+            ))
+        });
+        rows.truncate(limit);
 
         Ok(RelationsResult {
             schema_version: STRUCTURED_QUERY_SCHEMA_VERSION,
@@ -781,6 +844,7 @@ impl<'a> StructuredQuery<'a> {
                     .map(|t| InventoryCount {
                         key: node_type_cli(*t),
                         count: *map.get(t).unwrap_or(&0),
+                        occurrences: None,
                     })
                     .collect();
                 // Include any unexpected types not in ALL_NODE_TYPES.
@@ -789,6 +853,7 @@ impl<'a> StructuredQuery<'a> {
                         counts.push(InventoryCount {
                             key: node_type_cli(t),
                             count: c,
+                            occurrences: None,
                         });
                     }
                 }
@@ -799,7 +864,12 @@ impl<'a> StructuredQuery<'a> {
                 })
             }
             InventoryBy::Edge => {
-                let mut map: HashMap<EdgeType, usize> =
+                // `count` = distinct (from,to) pairs; `occurrences` = raw stored edges.
+                let mut distinct: HashMap<EdgeType, HashSet<(Uuid, Uuid)>> = ALL_EDGE_TYPES
+                    .iter()
+                    .map(|t| (*t, HashSet::new()))
+                    .collect();
+                let mut occurrences: HashMap<EdgeType, usize> =
                     ALL_EDGE_TYPES.iter().map(|t| (*t, 0usize)).collect();
                 self.store.for_each_edge(|from, to, et| {
                     if et == EdgeType::Unknown {
@@ -821,14 +891,20 @@ impl<'a> StructuredQuery<'a> {
                             return Ok(());
                         }
                     }
-                    *map.entry(et).or_insert(0) += 1;
+                    *occurrences.entry(et).or_insert(0) += 1;
+                    distinct.entry(et).or_default().insert((from, to));
                     Ok(())
                 })?;
                 let counts = ALL_EDGE_TYPES
                     .iter()
-                    .map(|t| InventoryCount {
-                        key: edge_type_cli(*t),
-                        count: *map.get(t).unwrap_or(&0),
+                    .map(|t| {
+                        let occ = *occurrences.get(t).unwrap_or(&0);
+                        let dist = distinct.get(t).map(|s| s.len()).unwrap_or(0);
+                        InventoryCount {
+                            key: edge_type_cli(*t),
+                            count: dist,
+                            occurrences: Some(occ),
+                        }
                     })
                     .collect();
                 Ok(InventoryResult {
@@ -861,7 +937,11 @@ impl<'a> StructuredQuery<'a> {
                 }
                 let mut counts: Vec<_> = map
                     .into_iter()
-                    .map(|(key, count)| InventoryCount { key, count })
+                    .map(|(key, count)| InventoryCount {
+                        key,
+                        count,
+                        occurrences: None,
+                    })
                     .collect();
                 counts.sort_by(|a, b| a.key.cmp(&b.key));
                 Ok(InventoryResult {
@@ -888,7 +968,11 @@ impl<'a> StructuredQuery<'a> {
                 }
                 let mut counts: Vec<_> = map
                     .into_iter()
-                    .map(|(key, count)| InventoryCount { key, count })
+                    .map(|(key, count)| InventoryCount {
+                        key,
+                        count,
+                        occurrences: None,
+                    })
                     .collect();
                 counts.sort_by(|a, b| a.key.cmp(&b.key));
                 Ok(InventoryResult {
@@ -914,7 +998,11 @@ impl<'a> StructuredQuery<'a> {
                 }
                 let mut counts: Vec<_> = map
                     .into_iter()
-                    .map(|(key, count)| InventoryCount { key, count })
+                    .map(|(key, count)| InventoryCount {
+                        key,
+                        count,
+                        occurrences: None,
+                    })
                     .collect();
                 counts.sort_by(|a, b| a.key.cmp(&b.key));
                 Ok(InventoryResult {
@@ -1296,6 +1384,139 @@ mod tests {
             .unwrap();
         assert_eq!(res.returned, 1);
         assert_eq!(res.neighbors[0].name, "handle");
+    }
+
+    #[test]
+    fn seedless_calls_dedupes_with_occurrences() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("graph.snapshot.bin");
+        let mut backend = MemoryBackend::new();
+        let a = Node::new(NodeType::Function, "assumeNotEmpty")
+            .with_file_path("Check.java")
+            .with_location(290, 300);
+        let b = Node::new(NodeType::Function, "assume")
+            .with_file_path("Check.java")
+            .with_location(138, 150);
+        let a_id = a.id;
+        let b_id = b.id;
+        backend.insert_node(a).unwrap();
+        backend.insert_node(b).unwrap();
+        for _ in 0..4 {
+            backend
+                .insert_edge(Edge::new(a_id, b_id, EdgeType::Calls))
+                .unwrap();
+        }
+        write_columnar_from_backend(&backend, &path).unwrap();
+        let store = SnapshotNodeStore::open(&path).unwrap();
+        let q = StructuredQuery::new(&store);
+        let res = q
+            .relations(
+                None,
+                EdgeType::Calls,
+                RelationDirection::Out,
+                None,
+                None,
+                1,
+                &QueryFilters::default(),
+            )
+            .unwrap();
+        assert_eq!(res.total, 1, "distinct relationships");
+        assert_eq!(res.returned, 1);
+        assert_eq!(res.edges[0].occurrences, 4);
+        assert_eq!(res.schema_version, STRUCTURED_QUERY_SCHEMA_VERSION);
+        assert_eq!(res.edges[0].source.name, "assumeNotEmpty");
+        assert_eq!(res.edges[0].target.name, "assume");
+    }
+
+    #[test]
+    fn ambiguous_symbol_includes_candidates() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("graph.snapshot.bin");
+        let mut backend = MemoryBackend::new();
+        let a = Node::new(NodeType::Function, "assume")
+            .with_file_path("A.java")
+            .with_location(10, 20);
+        let b = Node::new(NodeType::Function, "assume")
+            .with_file_path("B.java")
+            .with_location(30, 40);
+        backend.insert_node(a).unwrap();
+        backend.insert_node(b).unwrap();
+        write_columnar_from_backend(&backend, &path).unwrap();
+        let store = SnapshotNodeStore::open(&path).unwrap();
+        let q = StructuredQuery::new(&store);
+        let err = q
+            .resolve_symbol("assume", &QueryFilters::default())
+            .unwrap_err();
+        match err {
+            Error::AmbiguousSymbol {
+                count,
+                candidates,
+                ..
+            } => {
+                assert_eq!(count, 2);
+                assert_eq!(candidates.len(), 2);
+                assert!(candidates.iter().any(|c| c.file.as_deref() == Some("A.java")));
+            }
+            other => panic!("expected AmbiguousSymbol, got {other:?}"),
+        }
+        let ok = q
+            .resolve_symbol(
+                "assume",
+                &QueryFilters {
+                    line: Some(30),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(ok.start_line, Some(30));
+    }
+
+    #[test]
+    fn inventory_edge_distinct_matches_relations_total() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("graph.snapshot.bin");
+        let mut backend = MemoryBackend::new();
+        let a = Node::new(NodeType::Function, "assumeNotEmpty")
+            .with_file_path("Check.java")
+            .with_location(290, 300);
+        let b = Node::new(NodeType::Function, "assume")
+            .with_file_path("Check.java")
+            .with_location(138, 150);
+        let a_id = a.id;
+        let b_id = b.id;
+        backend.insert_node(a).unwrap();
+        backend.insert_node(b).unwrap();
+        for _ in 0..4 {
+            backend
+                .insert_edge(Edge::new(a_id, b_id, EdgeType::Calls))
+                .unwrap();
+        }
+        write_columnar_from_backend(&backend, &path).unwrap();
+        let store = SnapshotNodeStore::open(&path).unwrap();
+        let q = StructuredQuery::new(&store);
+        let inv = q
+            .inventory(InventoryBy::Edge, &QueryFilters::default())
+            .unwrap();
+        let calls = inv
+            .counts
+            .iter()
+            .find(|c| c.key == "calls")
+            .expect("calls bucket");
+        assert_eq!(calls.count, 1, "distinct relationships");
+        assert_eq!(calls.occurrences, Some(4));
+        let rel = q
+            .relations(
+                None,
+                EdgeType::Calls,
+                RelationDirection::Out,
+                None,
+                None,
+                1,
+                &QueryFilters::default(),
+            )
+            .unwrap();
+        assert_eq!(rel.total, calls.count);
+        assert_eq!(rel.edges[0].occurrences, calls.occurrences.unwrap());
     }
 
     #[test]
