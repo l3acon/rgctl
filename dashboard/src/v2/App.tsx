@@ -7,6 +7,7 @@ import { Chip, Panel, Unavailable } from "./shell";
 import { Spine } from "./rooms/Spine";
 import { CfgPdgLens } from "./rooms/CfgPdg";
 import { LensPlaceholder, Placeholder } from "./rooms/Placeholder";
+import { ArchitectureRoom } from "./rooms/Architecture";
 import { loadFunctions, loadManifest, type FunctionEntry } from "./data";
 import { LENSES, ROOMS, isLens, isRoom, keyOf, resolveFocus, type LensId, type RoomId } from "./focus";
 import { useState } from "react";
@@ -144,7 +145,10 @@ export function App() {
             {room === "understand" && !staleFocus && (
               <UnderstandRoom entry={entry} lens={lens} loading={functions.isLoading} onOpenPalette={() => setPaletteOpen(true)} onCarry={goRoom} />
             )}
-            {room !== "repo" && room !== "understand" && <Placeholder room={room} />}
+            {room === "architecture" && <ArchitectureRoom />}
+            {room !== "repo" && room !== "understand" && room !== "architecture" && (
+              <Placeholder room={room} />
+            )}
           </div>
         </main>
       </div>

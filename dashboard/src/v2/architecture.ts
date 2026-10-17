@@ -54,6 +54,7 @@ export function buildView(
     modularity: summary?.modularity ?? null,
     mode: metagraph.mode ?? "unknown",
     communityPairs,
+    edgeList: metagraph.edges.map((e) => ({ source: e.source, target: e.target, weight: e.weight })),
     edges: metagraph.edges.length,
     artifactEdges,
     disagreement: disagreementOf(metagraph, summary, migrationCount),

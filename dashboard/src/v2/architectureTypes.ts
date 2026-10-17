@@ -146,6 +146,8 @@ export interface ArchitectureView {
   mode: string;
   /** Community pairs the package edges collapse to. */
   communityPairs: number;
+  /** Every exported package edge, in the shape the canvas draws. */
+  edgeList: { source: number; target: number; weight: number }[];
   edges: number;
   /** Edges touching the remainder or a path bucket — named, not drawn. */
   artifactEdges: number;

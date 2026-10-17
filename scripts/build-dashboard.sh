@@ -18,7 +18,16 @@ DASH="$ROOT/dashboard"
 # React, because it does not carry CodeMirror's ~150 KiB or Sigma's ~29 KiB. Headroom is ~10%, enough for a
 # dependency bump without silencing a real regression.
 BUDGET_KIB_V1=345
-BUDGET_KIB_V2=145
+# v2 was 145 KiB until the Architecture room arrived. The universe draws, so it carries three.js: measured on
+# this tree, `dist-v2` is **287 KiB gzipped** against 137 before — a +150 KiB delta, of which ~139 KiB is the
+# lazily-loaded `UniverseScene` chunk (three.js + the scene) and the rest is the room, the adapter and the
+# derived layers. The vendored, untree-shaken three.js copy the demos use is 430 KiB, so the bundled cost is
+# about a third of it — which is why the number is measured here rather than quoted from the demos.
+#
+# The chunk is split deliberately: the shell's own first paint stays at ~148 KiB and three.js is only fetched
+# when someone opens the Architecture room. The gate sums the whole directory, so it is the total that is
+# budgeted, not the initial payload.
+BUDGET_KIB_V2=320
 
 echo "==> wasm-pack (rgctl-wasm)"
 WASM_JS="$DASH/wasm/rgctl_wasm.js"

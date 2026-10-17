@@ -75,6 +75,70 @@ fn discover_with_dashboard_writes_bundle() {
     );
 }
 
+/// The maintainer's instruction on #61: `--with-dashboard` keeps working, says it is deprecated, routes to
+/// the universe, and promises its own removal. All four are asserted, because three of them are sentences
+/// and a sentence is the part that silently goes missing.
+#[test]
+fn with_dashboard_routes_to_the_universe_and_says_it_is_deprecated() {
+    if !rgctl_dashboard::dist_embedded() {
+        eprintln!("skip: dashboard bundle not embedded");
+        return;
+    }
+
+    let (_tmp, repo) = materialize();
+    let output = run_discover(&repo, &["--with-dashboard"]);
+    assert_ok(&output, "discover --with-dashboard");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("deprecated"),
+        "the deprecated flag must say so: {stderr}"
+    );
+    assert!(
+        stderr.contains("--with-universe"),
+        "the notice must name the replacement: {stderr}"
+    );
+    assert!(
+        stderr.contains("removed in the next release"),
+        "the notice must promise the removal, or users cannot plan: {stderr}"
+    );
+
+    let manifest: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(repo.join(".rgctl/dashboard/manifest.json")).expect("manifest.json"),
+    )
+    .expect("manifest parses");
+    assert_eq!(
+        manifest["mode"], "universe",
+        "the deprecated flag routes to the universe, so the manifest must say so"
+    );
+}
+
+/// `--with-universe` is the real flag: same bundle, no deprecation notice, and the manifest says what it is.
+#[test]
+fn with_universe_writes_the_universe_bundle_quietly() {
+    if !rgctl_dashboard::dist_embedded() {
+        eprintln!("skip: dashboard bundle not embedded");
+        return;
+    }
+
+    let (_tmp, repo) = materialize();
+    let output = run_discover(&repo, &["--with-universe"]);
+    assert_ok(&output, "discover --with-universe");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("deprecated"),
+        "the current flag must not warn about itself: {stderr}"
+    );
+
+    let dash = repo.join(".rgctl/dashboard");
+    assert!(dash.join("index.html").is_file(), "missing index.html");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(dash.join("manifest.json")).expect("manifest.json"))
+            .expect("manifest parses");
+    assert_eq!(manifest["mode"], "universe");
+}
+
 #[test]
 fn export_migration_hints_writes_plan_without_dashboard() {
     let (_tmp, repo) = materialize();

@@ -77,6 +77,14 @@ pub struct DashboardManifest {
     /// and compares unequal, which forces one re-export and is the correct outcome.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle_version: Option<String>,
+    /// What this bundle *is*, for anything that serves it: `"universe"` for the v2 dashboard,
+    /// `"dashboard"` for the pre-universe one served through the legacy hatch.
+    ///
+    /// Distinct from `bundle_version`, which says which files were extracted. A server that opens
+    /// whatever the manifest declares needs the mode, and inferring it from a version string would put
+    /// that knowledge in two places.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,6 +334,7 @@ impl DashboardManifest {
             metrics,
             generated_at: chrono_now_rfc3339(),
             export_fingerprint: Some(export_fingerprint),
+            mode: Some(crate::bundle::selected_mode().to_string()),
             bundle_version: Some(crate::bundle::selected_version_tag().to_string()),
         }
     }
