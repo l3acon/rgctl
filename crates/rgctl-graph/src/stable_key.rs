@@ -73,18 +73,26 @@ pub fn deterministic_node_id(
     file_path: Option<&str>,
     name: &str,
     node_type: NodeType,
+    qualified_name: Option<&str>,
 ) -> Uuid {
     match file_path {
-        Some(path) => stable_key_to_uuid(stable_key_from_facets(Some(path), name, node_type)),
+        Some(path) => {
+            stable_key_to_uuid(stable_key_from_facets(Some(path), name, node_type, qualified_name))
+        }
         None => Uuid::new_v4(),
     }
 }
 
-/// Hash normalized file path, name, and node type into a [`StableNodeKey`].
+/// Hash normalized file path, name, node type, and optional qualified name into a [`StableNodeKey`].
+///
+/// When `qualified_name` is present it is hashed (same-file same-simple-name symbols diverge).
+/// When absent, an empty facet is hashed — **not** `start_line` — so a one-line insert above a
+/// symbol cannot churn cross-commit identity for languages that omit QN.
 pub fn stable_key_from_facets(
     file_path: Option<&str>,
     name: &str,
     node_type: NodeType,
+    qualified_name: Option<&str>,
 ) -> StableNodeKey {
     let mut hasher = blake3::Hasher::new();
     if let Some(path) = file_path {
@@ -94,8 +102,24 @@ pub fn stable_key_from_facets(
     hasher.update(name.as_bytes());
     hasher.update(&[0xff]);
     hasher.update(&(node_type as u16).to_le_bytes());
+    hasher.update(&[0xff]);
+    if let Some(qn) = qualified_name.filter(|s| !s.is_empty()) {
+        hasher.update(qn.as_bytes());
+    } else {
+        hasher.update(b"");
+    }
     let hash = hasher.finalize();
     StableNodeKey(u64::from_le_bytes(hash.as_bytes()[..8].try_into().expect("8 bytes")))
+}
+
+/// Stable key facets from a materialized [`Node`] (same contract as [`stable_key_from_row`]).
+pub fn stable_key_from_node(node: &crate::schema::Node) -> StableNodeKey {
+    stable_key_from_facets(
+        node.file_path.as_deref().map(|s| s.as_ref()),
+        node.name.as_ref(),
+        node.node_type,
+        node.qualified_name.as_deref().map(|s| s.as_ref()),
+    )
 }
 
 /// Read stable key facets from a columnar node row without allocating strings.
@@ -112,7 +136,13 @@ pub fn stable_key_from_row(col: &ColumnarGraphMmap, idx: usize) -> Result<Stable
         row.file_path_len,
     )?;
     let node_type = crate::columnar_snapshot::node_type_from_u16(row.node_type)?;
-    Ok(stable_key_from_facets(file_path, name, node_type))
+    let qn = col.node_qualified_name_str(idx)?;
+    Ok(stable_key_from_facets(
+        file_path,
+        name,
+        node_type,
+        qn,
+    ))
 }
 
 /// Repo-relative path used for PR scope filtering (file path or file-node name).
@@ -200,6 +230,52 @@ mod tests {
         let login = Node::new(NodeType::Function, "login").with_file_path("auth.rs");
         let auth = Node::new(NodeType::Function, "authenticate").with_file_path("auth.rs");
         assert_ne!(login.id, auth.id);
+    }
+
+    #[test]
+    fn deterministic_node_id_disambiguates_by_qualified_name() {
+        let a = Node::new(NodeType::Function, "$lambda$0")
+            .with_file_path("AuthService.java")
+            .with_qualified_name("AuthService.login.$lambda$0")
+            .with_location(63, 63);
+        let b = Node::new(NodeType::Function, "$lambda$0")
+            .with_file_path("AuthService.java")
+            .with_qualified_name("AuthService.currentUser.$lambda$0")
+            .with_location(77, 77);
+        assert_ne!(a.id, b.id, "per-owner lambdas must not share a UUID");
+    }
+
+    #[test]
+    fn start_line_shift_without_qn_keeps_stable_key() {
+        // Cross-commit identity must not churn when a line is inserted above a
+        // symbol that has no qualified_name (TS/JS/Python/Go/C++ common case).
+        let a = Node::new(NodeType::Function, "dup")
+            .with_file_path("f.ts")
+            .with_location(10, 12);
+        let b = Node::new(NodeType::Function, "dup")
+            .with_file_path("f.ts")
+            .with_location(40, 42);
+        assert_eq!(a.id, b.id);
+        assert_eq!(
+            stable_key_from_facets(Some("f.ts"), "dup", NodeType::Function, None),
+            stable_key_from_facets(Some("f.ts"), "dup", NodeType::Function, None),
+        );
+    }
+
+    #[test]
+    fn stable_key_from_row_reads_qn_without_materialize() {
+        let node = Node::new(NodeType::Function, "$lambda$0")
+            .with_file_path("AuthService.java")
+            .with_qualified_name("AuthService.login.$lambda$0");
+        let expected = stable_key_from_facets(
+            Some("AuthService.java"),
+            "$lambda$0",
+            NodeType::Function,
+            Some("AuthService.login.$lambda$0"),
+        );
+        let (_tmp, col) = open_columnar(vec![node]);
+        assert_eq!(col.node_qualified_name_str(0).unwrap(), Some("AuthService.login.$lambda$0"));
+        assert_eq!(stable_key_from_row(&col, 0).unwrap(), expected);
     }
 
     #[test]

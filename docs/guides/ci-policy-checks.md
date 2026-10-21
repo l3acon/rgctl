@@ -159,13 +159,18 @@ Policy field `scope.strict_diff: true` also enables strict mode for `check`.
 
 ### Example: CoolStore
 
+CoolStore does not ship a `policy.json`; use a local file (or [docs/examples/policy-strict.json](../examples/policy-strict.json) for a stricter smoke policy):
+
 ```bash
-rgctl -r example/coolstore discover . -l java
+rgctl -r example/coolstore discover . -l java --with-cfg --with-harmonic
+cat > /tmp/coolstore-ci-policy.json <<'EOF'
+{"max_impact_nodes": 15, "centrality_alert_threshold": 0.15}
+EOF
 rgctl -r example/coolstore -f json check \
-  --policy-file example/coolstore/policy.json
+  --policy-file /tmp/coolstore-ci-policy.json
 ```
 
-On CoolStore Java-only, `example/coolstore/policy.json` (`max_impact_nodes: 15`) fails `check` on symbols such as `toProduct` when the impact zone is 19. That illustrates why PR workflows use **`new_violations_only`** instead of failing on all existing debt.
+On CoolStore Java-only, that policy (`max_impact_nodes: 15`) fails `check` (`schema_version` 1, `passed: false`) on symbols such as `toProduct` when the impact zone is 19. That illustrates why PR workflows use **`new_violations_only`** instead of failing on all existing debt.
 
 ---
 
@@ -176,21 +181,25 @@ Temporal PR gate: compare **base** (`main`) vs **head** (PR), classify each viol
 ### How it works (default: delta head)
 
 ```text
-  .rgctl-base/          git diff              PR source tree
-  (main snapshot)   base_ref..head_ref      (checkout)
+  .rgctl-base/          git diff              PR working tree
+  (main snapshot)   base_ref..head_ref      (on-disk files)
         │                    │                      │
-        └──────── seed ──────┴── delta compact ─────┘
+        └──── compact ───────┴── into ──────────────┘
                               │
-                         .rgctl/  (synthesized head)
+                   .rgctl/synth-head/  (synthesized head)
                               │
                     scoped policy eval → JSON + exit code
 ```
 
 1. Open base snapshot from cache (`.rgctl-base/`, `$RGCTL_BASE_ARTIFACT`, or `--base-artifact`).
-2. Copy base into `{repo}/.rgctl/` and apply changed paths from `git diff --name-status` (incremental extract + compact).
+2. Compact base + changed paths from `git diff --name-status` into `{repo}/.rgctl/synth-head/` (does **not** overwrite live `.rgctl/graph.snapshot.bin`).
 3. Optionally expand scope to **caller files** (`--cascade-depth`, default `1`).
 4. Evaluate blast-radius policy only on entities in the git scope.
 5. Classify each violation temporally; apply calendar rules; append to `violation_ledger.jsonl`.
+
+**Worktree mode:** `--synthetic-head worktree` uses live `.rgctl/graph.snapshot.bin` as base when `.rgctl-base/` is absent, and still writes the head under `.rgctl/synth-head/`.
+
+**Caveat:** delta extract reads **working-tree files on disk**, not `git show <head_ref>:path`. Check out the target ref (or use `--synthetic-head worktree`). A mismatch emits a stderr warning. `--bisect` inherits the same limitation until blob extract lands.
 
 **Legacy mode:** pass `--full-snapshots` and provide both `--base-artifact` and `--head-artifact` (or pre-built `.rgctl/` on the PR branch). Use when you already run two full `discover` jobs in CI.
 

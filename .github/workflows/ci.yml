@@ -1,8 +1,8 @@
-# CI does not run on push or on every pull request.
-#
 # Triggers:
-#   - workflow_dispatch  — run manually from the Actions tab (any branch/ref).
-#   - pull_request       — only when a maintainer adds the `ci` label to the PR.
+#   - workflow_dispatch  — full suite manually from the Actions tab (any branch/ref).
+#   - pull_request       — always runs a cheap `cargo check` (default features).
+#                         Full format/lint/test suite only when a maintainer adds the
+#                         `ci` label (create that label in the repo if missing).
 #
 # Fork PRs: label must be added by a maintainer on the base-repo PR.
 name: CI
@@ -31,6 +31,30 @@ env:
   FEATURES: ${{ github.event_name == 'workflow_dispatch' && inputs.features || '' }}
 
 jobs:
+  # Always-on cold-compile gate so ignored/missing Cargo.lock + pre-release crates
+  # cannot break `cargo build` unnoticed (#123).
+  check:
+    name: cargo check (default features)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          shared-key: check-default
+
+      - name: cargo check --bin rgctl
+        run: cargo check --locked --bin rgctl
+
   ci:
     name: Format, lint, and test
     if: >-
@@ -82,6 +106,21 @@ jobs:
       - name: QE cross-feature consistency
         run: cargo test --features "${{ env.FEATURES }}" --test cross_feature_qe
 
+      - name: QE graph determinism
+        run: cargo test --features "${{ env.FEATURES }}" --test graph_determinism_qe
+
+      - name: QE stable-key invariance
+        run: cargo test --features "${{ env.FEATURES }}" --test stable_key_invariance_qe
+
+      - name: QE columnar zero cold-touch
+        run: cargo test --features "${{ env.FEATURES }}" --test columnar_zero_cold_touch_gate
+
+      - name: E2E workflow equivalence
+        run: cargo test --features "${{ env.FEATURES }}" --test e2e_workflow_equivalence
+
+      - name: E2E feature contracts
+        run: cargo test --features "${{ env.FEATURES }}" --test e2e_feature_contracts
+
       - name: CLI JSON contract (unit)
         run: cargo test --features "${{ env.FEATURES }}" --test cli_output
 
@@ -93,3 +132,6 @@ jobs:
 
       - name: Blast-radius performance gates (release)
         run: cargo test --release --features "${{ env.FEATURES }}" --test blast_radius_perf
+
+      - name: Scale perf CI gate (release)
+        run: cargo test --release --features "${{ env.FEATURES }}" --test scale_perf_ci_gate -- --nocapture
