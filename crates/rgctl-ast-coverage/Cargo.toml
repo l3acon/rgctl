@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
+rgctl-plugin-api = { path = "../rgctl-plugin-api" }
 serde_json = "1"
 tree-sitter = { workspace = true }
 tree-sitter-java = "0.23"

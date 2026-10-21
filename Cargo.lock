@@ -2540,6 +2540,7 @@ dependencies = [
 name = "rgctl-ast-coverage"
 version = "0.4.20"
 dependencies = [
+ "rgctl-plugin-api",
  "serde_json",
  "tree-sitter",
  "tree-sitter-c",

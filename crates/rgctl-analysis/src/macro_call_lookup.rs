@@ -643,6 +643,12 @@ impl MacroCallLookupDb {
                 )
                 .map_err(sql_err)?;
             for entry in entries {
+                let direct_json = serde_json::to_string(&entry.direct_callers).map_err(json_err)?;
+                let impact_json = serde_json::to_string(&entry.impact_zone).map_err(json_err)?;
+                let direct_ids_json =
+                    serde_json::to_string(&entry.direct_caller_ids).map_err(json_err)?;
+                let impact_ids_json =
+                    serde_json::to_string(&entry.impact_zone_ids).map_err(json_err)?;
                 let direct_bin = encode_blob(&entry.direct_callers)?;
                 let impact_bin = encode_blob(&entry.impact_zone)?;
                 let direct_ids_bin = encode_blob(&entry.direct_caller_ids)?;
@@ -653,10 +659,10 @@ impl MacroCallLookupDb {
                     entry.class_name,
                     entry.file_path,
                     entry.score,
-                    "[]",
-                    "[]",
-                    "[]",
-                    "[]",
+                    direct_json,
+                    impact_json,
+                    direct_ids_json,
+                    impact_ids_json,
                     entry.language,
                     entry.signature,
                     entry.canonical_fqn,
@@ -689,6 +695,12 @@ impl MacroCallLookupDb {
                 )
                 .map_err(sql_err)?;
             for row in rows {
+                let direct_json = serde_json::to_string(&row.direct_callers).map_err(json_err)?;
+                let impact_json = serde_json::to_string(&row.impact_zone).map_err(json_err)?;
+                let direct_ids_json =
+                    serde_json::to_string(&row.direct_caller_ids).map_err(json_err)?;
+                let impact_ids_json =
+                    serde_json::to_string(&row.impact_zone_ids).map_err(json_err)?;
                 let direct_bin = encode_blob(&row.direct_callers)?;
                 let impact_bin = encode_blob(&row.impact_zone)?;
                 let direct_ids_bin = encode_blob(&row.direct_caller_ids)?;
@@ -697,10 +709,10 @@ impl MacroCallLookupDb {
                     row.symbol_name,
                     row.node_id.to_string(),
                     row.score,
-                    "[]",
-                    "[]",
-                    "[]",
-                    "[]",
+                    direct_json,
+                    impact_json,
+                    direct_ids_json,
+                    impact_ids_json,
                     direct_bin,
                     impact_bin,
                     direct_ids_bin,

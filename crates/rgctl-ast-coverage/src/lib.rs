@@ -3,7 +3,12 @@
 //! Used by `rgctl-languages` `build.rs` so `cargo check` / `cargo build` can
 //! **warn** when a grammar bump introduces new named kinds (or removes old ones)
 //! before unit tests are run. Set `RGCTL_AST_COVERAGE_STRICT=1` to fail the build.
+//!
+//! [`check_plugin_manifest_sync`] additionally verifies bi-directional agreement
+//! between a plugin's [`AstHandlerTable`] and the coverage JSON (when plugins
+//! expose handlers via `LanguagePlugin::declared_ast_handlers`).
 
+use rgctl_plugin_api::{AstHandlerTable, HandlerMask};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -243,6 +248,112 @@ pub fn check_manifest(
     issues
 }
 
+/// Bi-directional sync: plugin dispatch table ↔ `{lang}-ast-coverage.json` handlers.
+///
+/// - Every kind the plugin handles with a semantic mask (`Symbol` / `Relation` /
+///   `CfgStatement` / `AstSkeleton`) MUST be marked non-`Skip` in the manifest.
+/// - Every non-`Skip` / non-`Literal` manifest kind MUST appear in the plugin table
+///   with a compatible semantic mask.
+///
+/// Call this from language crate tests once `declared_ast_handlers()` is wired.
+pub fn check_plugin_manifest_sync(
+    language_id: &str,
+    manifest_json: &str,
+    table: &AstHandlerTable,
+    lang: &tree_sitter::Language,
+) -> Vec<CoverageIssue> {
+    let mut issues = Vec::new();
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(manifest_json) else {
+        issues.push(CoverageIssue {
+            language: language_id.into(),
+            message: "manifest JSON failed to parse".into(),
+        });
+        return issues;
+    };
+    let Some(handlers_obj) = v["handlers"].as_object() else {
+        issues.push(CoverageIssue {
+            language: language_id.into(),
+            message: "manifest missing `handlers` object".into(),
+        });
+        return issues;
+    };
+
+    let handlers: HashMap<String, String> = handlers_obj
+        .iter()
+        .map(|(k, val)| (k.clone(), val.as_str().unwrap_or("Skip").to_string()))
+        .collect();
+
+    // Plugin → manifest: semantic handlers must not be Skip in JSON.
+    for (kind_id, kind_name, mask) in table.iter() {
+        if mask.is_passive() {
+            continue;
+        }
+        match handlers.get(kind_name).map(|s| s.as_str()) {
+            None => issues.push(CoverageIssue {
+                language: language_id.into(),
+                message: format!(
+                    "plugin handles `{kind_name}` (kind_id={kind_id}, {}) but it is missing from ast-coverage.json",
+                    mask.to_coverage_label()
+                ),
+            }),
+            Some("Skip") => issues.push(CoverageIssue {
+                language: language_id.into(),
+                message: format!(
+                    "plugin handles `{kind_name}` as {} but ast-coverage.json marks it `Skip`",
+                    mask.to_coverage_label()
+                ),
+            }),
+            Some(label) => {
+                let Some(expected) = HandlerMask::from_coverage_label(label) else {
+                    continue;
+                };
+                if !mask.intersects(expected) && !expected.is_passive() {
+                    issues.push(CoverageIssue {
+                        language: language_id.into(),
+                        message: format!(
+                            "plugin `{kind_name}` mask {} does not include manifest handler `{label}`",
+                            mask.to_coverage_label()
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    // Manifest → plugin: active JSON kinds must be registered.
+    for (kind_name, label) in &handlers {
+        let Some(expected) = HandlerMask::from_coverage_label(label) else {
+            continue;
+        };
+        if expected.is_passive() {
+            continue;
+        }
+        match table.get_by_name(kind_name) {
+            None => {
+                let kind_id = lang.id_for_node_kind(kind_name, true);
+                issues.push(CoverageIssue {
+                    language: language_id.into(),
+                    message: format!(
+                        "ast-coverage.json marks `{kind_name}` as `{label}` (kind_id={kind_id}) but plugin AstHandlerTable has no entry"
+                    ),
+                });
+            }
+            Some((_id, mask)) if mask.is_passive() || !mask.intersects(expected) => {
+                issues.push(CoverageIssue {
+                    language: language_id.into(),
+                    message: format!(
+                        "ast-coverage.json marks `{kind_name}` as `{label}` but plugin table has {}",
+                        mask.to_coverage_label()
+                    ),
+                });
+            }
+            Some(_) => {}
+        }
+    }
+
+    issues
+}
+
 /// Validate every bundled spec under `crates_dir` (parent of `rgctl-lang-*`).
 pub fn check_crates_dir(crates_dir: &Path) -> Vec<CoverageIssue> {
     let mut all = Vec::new();
@@ -308,6 +419,42 @@ mod tests {
         assert!(
             issues.is_empty(),
             "java coverage drift: {issues:?}"
+        );
+    }
+
+    #[test]
+    fn plugin_manifest_sync_detects_skip_drift() {
+        let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
+        let kind = "function_item";
+        let kind_id = lang.id_for_node_kind(kind, true);
+        assert_ne!(kind_id, 0, "rust grammar must know function_item");
+
+        let mut table = AstHandlerTable::new();
+        table.insert(kind_id, kind, HandlerMask::SYMBOL);
+
+        let manifest = r#"{
+            "grammar": "tree-sitter-rust@0",
+            "handlers": { "function_item": "Skip" }
+        }"#;
+        let issues = check_plugin_manifest_sync("rust", manifest, &table, &lang);
+        assert!(
+            issues.iter().any(|i| i.message.contains("Skip")),
+            "expected Skip drift, got {issues:?}"
+        );
+    }
+
+    #[test]
+    fn plugin_manifest_sync_detects_missing_plugin_entry() {
+        let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
+        let table = AstHandlerTable::new();
+        let manifest = r#"{
+            "grammar": "tree-sitter-rust@0",
+            "handlers": { "function_item": "Symbol" }
+        }"#;
+        let issues = check_plugin_manifest_sync("rust", manifest, &table, &lang);
+        assert!(
+            issues.iter().any(|i| i.message.contains("no entry")),
+            "expected missing plugin entry, got {issues:?}"
         );
     }
 

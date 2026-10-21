@@ -3,9 +3,12 @@
 //! This module defines the core plugin system for language and configuration format support.
 //! Plugins enable extraction of symbols, relationships, and complexity metrics from source code.
 
+mod ast_handlers;
 mod call_extraction;
 mod error;
 mod registrar;
+
+pub use ast_handlers::{AstHandlerTable, HandlerMask};
 
 pub use call_extraction::{
     infer_python_method_target, ruby_call_callee, ruby_call_unresolved, C_CALL_KINDS,
@@ -370,6 +373,14 @@ pub trait LanguagePlugin: Send + Sync {
     /// Plugin capabilities
     fn capabilities(&self) -> LanguageCapabilities {
         LanguageCapabilities::default()
+    }
+
+    /// Optional AST handler table for bi-directional `*-ast-coverage.json` sync.
+    ///
+    /// Maps grammar `kind_id` → [`HandlerMask`]. Default returns `None` (opt-in);
+    /// language plugins SHOULD override once their single-pass jump table is wired.
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        None
     }
 
     /// Extract symbols from source code
