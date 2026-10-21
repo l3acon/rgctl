@@ -24,6 +24,8 @@
 - **OpenSpec language work:** Still cite [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) (pointer here); follow the sections below.
 - **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The website `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`.
 - **Releases:** Follow **Releases** below (and [docs/releasing.md](docs/releasing.md)). Do not hand-edit dozens of crate `version =` lines.
+- **AI-assisted contributions:** Contributors may use AI coding agents freely. The human author must still review every change and is solely responsible for the PR and its content. Do **not** add AI `Co-Authored-By` / `Assisted-By` / `Generated-By` trailers (or agent emails as author/committer) — PR CI enforces this via `scripts/check-no-ai-commit-trailers.py` (see [CONTRIBUTING.md](CONTRIBUTING.md#ai-coding-tools-and-authorship)). Prefer DCO `Signed-off-by` only.
+
 ---
 
 ## Context & architecture

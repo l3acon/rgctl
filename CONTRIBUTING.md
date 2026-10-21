@@ -135,6 +135,23 @@ Tier 1 depth (Layers A–F): [docs/tier-1-language-support.md](docs/tier-1-langu
 3. **Sign every commit** with **DCO sign-off** (`git commit -s`). See [Developer Certificate of Origin](https://developercertificate.org/) and [contributor checklist §6](docs/contributor-checklist.md#6-documentation--pr).
 4. Run the [standard test workflow](docs/contributor-checklist.md#5-standard-test-workflow) and list the commands you ran in the PR template.
 
+### AI coding tools and authorship
+
+We respect each contributor’s free will to use AI agents (Cursor, Claude Code, Copilot, and similar) when writing code. Using those tools is welcome.
+
+What we expect in return:
+
+- **You reviewed the change.** Every line in the PR should be something you understand and stand behind.
+- **You own the PR.** The human author is responsible for correctness, licensing, security, and fit with this project — not the agent.
+- **No AI co-author / assisted trailers in commits.** PR CI runs `scripts/check-no-ai-commit-trailers.py` on the PR commit range and fails on attribution trailers (`Co-Authored-By`, `Assisted-By`, `Generated-By`, `Made-With`, …), “Generated with …” banners, and known agent emails/bot identities. The catalog covers Cursor, Claude, Copilot, Codex/ChatGPT, Aider, Devin, Windsurf/Cascade, Gemini/Jules, Continue, Cline/Roo, Amazon Q, Cody, Replit, Goose, OpenHands, Antigravity, and more (`--list-agents` to print it). Commit as yourself (plus DCO `-s`); turn off agent co-author settings so the check stays green.
+
+Local check before you push:
+
+```bash
+./scripts/check-no-ai-commit-trailers.py --range origin/main..HEAD
+./scripts/check-no-ai-commit-trailers.py --list-agents   # optional
+```
+
 ---
 
 ## Releases
