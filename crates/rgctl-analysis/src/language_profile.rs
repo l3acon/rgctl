@@ -1,10 +1,8 @@
 //! Canonical language profiles for CFG/PDG analysis and path-based language detection.
 
 use rgctl_error::{Error, Result};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::path::Path;
-use tree_sitter::{Language, Parser, Tree};
+use tree_sitter::{Language, Tree};
 
 /// Analysis capabilities for a supported language.
 #[derive(Debug, Clone, Copy)]
@@ -253,30 +251,21 @@ fn grammar_for(profile: &LanguageAnalysisProfile) -> Result<Language> {
 }
 
 /// Parse source with the tree-sitter grammar for `language`.
+///
+/// Uses [`rgctl_plugin_api::parse_with_pool`] so CFG / slice / taint share the
+/// same Rayon worker parser pool as language extract plugins.
 pub fn parse_source(language: &str, source: &[u8]) -> Result<Tree> {
     let profile = profile_for_language(language)
         .filter(|p| p.cfg_enabled)
         .ok_or_else(|| Error::UnsupportedLanguage(language.to_string()))?;
 
     let grammar = grammar_for(profile)?;
-    let lang_id = profile.id;
-
-    thread_local! {
-        static PARSERS: RefCell<HashMap<&'static str, Parser>> = RefCell::new(HashMap::new());
-    }
-
-    PARSERS.with(|parsers| {
-        let mut map = parsers.borrow_mut();
-        let parser = map.entry(lang_id).or_insert_with(Parser::new);
-        parser
-            .set_language(&grammar)
-            .map_err(|e| Error::PluginError(format!("{} grammar: {e}", profile.id)))?;
-
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
+    rgctl_plugin_api::parse_with_pool(profile.id, grammar, source).map_err(|message| {
+        Error::ParseError {
             file: "source".into(),
             line: 0,
-            message: "Failed to parse source".to_string(),
-        })
+            message,
+        }
     })
 }
 

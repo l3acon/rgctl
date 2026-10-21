@@ -6,16 +6,24 @@
 mod ast_handlers;
 mod call_extraction;
 mod error;
+mod kind_dispatch;
+mod parser_pool;
 mod registrar;
+mod scope_stack;
+mod single_pass;
 
 pub use ast_handlers::{AstHandlerTable, HandlerMask};
+pub use kind_dispatch::{KindDispatchOnce, KindDispatchTable, MAX_KIND_ID};
+pub use parser_pool::{parse_with_pool, with_thread_local_parser};
+pub use scope_stack::{ScopeComplexity, ScopeFrame, ScopeKind, ScopeStack};
+pub use single_pass::SinglePassCtx;
 
 pub use call_extraction::{
     infer_python_method_target, ruby_call_callee, ruby_call_unresolved, C_CALL_KINDS,
     CPP_CALL_KINDS, CSHARP_CALL_KINDS, GO_CALL_KINDS, JS_CALL_KINDS, KOTLIN_CALL_KINDS,
     PHP_CALL_KINDS, PYTHON_CALL_KINDS, RUBY_CALL_KINDS, RUST_CALL_KINDS, TS_CALL_KINDS,
-    callee_name, kotlin_call_callee,
-    containing_function, push_call_relation, walk_calls,
+    callee_name, containing_function, containing_function_from_scope, kotlin_call_callee,
+    push_call_relation, walk_calls,
 };
 
 pub use error::{Error, Result};

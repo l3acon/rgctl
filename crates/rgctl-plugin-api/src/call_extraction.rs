@@ -1,6 +1,6 @@
 //! Shared helpers for extracting `Calls` relations from tree-sitter ASTs.
 
-use crate::{Relation, RelationType, SourceLocation, Symbol, SymbolType};
+use crate::{Relation, RelationType, ScopeStack, SourceLocation, Symbol, SymbolType};
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -102,6 +102,7 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
 /// Find the innermost function symbol containing `node`.
 ///
 /// `function_symbols` SHOULD already be filtered to [`SymbolType::Function`].
+/// Prefer [`containing_function_from_scope`] during single-pass extraction.
 pub fn containing_function<'a>(node: Node, function_symbols: &[&'a Symbol]) -> Option<&'a Symbol> {
     let line = node.start_position().row + 1;
     function_symbols
@@ -109,6 +110,26 @@ pub fn containing_function<'a>(node: Node, function_symbols: &[&'a Symbol]) -> O
         .copied()
         .filter(|s| line >= s.location.start_line && line <= s.location.end_line)
         .min_by_key(|s| s.location.end_line - s.location.start_line)
+}
+
+/// O(1) enclosing function via [`ScopeStack`] (single-pass AST engine).
+///
+/// Returns the `symbols[symbol_idx]` entry when the active function frame has
+/// recorded a `symbol_idx`; otherwise `None` (caller may fall back to
+/// [`containing_function`]).
+pub fn containing_function_from_scope<'a>(
+    stack: &ScopeStack,
+    symbols: &'a [Symbol],
+) -> Option<&'a Symbol> {
+    let frame = stack.current_function()?;
+    let idx = frame.symbol_idx?;
+    let sym = symbols.get(idx)?;
+    // Methods are stored as `SymbolType::Function` in most language plugins.
+    if sym.symbol_type == SymbolType::Function {
+        Some(sym)
+    } else {
+        None
+    }
 }
 
 /// Best-effort callee name from a call expression subtree (iterative; bounded depth).

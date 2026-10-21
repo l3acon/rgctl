@@ -3,7 +3,7 @@
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::{Parameter, SourceLocation, Symbol, SymbolType};
 use std::path::Path;
-use tree_sitter::{Node, Parser, Tree};
+use tree_sitter::{Node, Tree};
 
 /// Map a tree-sitter node kind to a symbol type using configured kind lists.
 pub fn symbol_type_for_kind(
@@ -258,31 +258,24 @@ fn walk_extract(
 
 /// Parse source with the given grammar and return the tree.
 ///
-/// Reuses a thread-local [`Parser`] (one per Rayon worker). `Parser::new` + grammar
-/// setup is expensive; cold discover parses tens of thousands of files on the same
-/// workers, so this matters more than per-file micro-opts in pass-1.
+/// Reuses the shared thread-local parser pool in [`rgctl_plugin_api::with_thread_local_parser`].
 pub fn parse_source(
     source: &[u8],
     file_path: &Path,
     grammar: tree_sitter::Language,
 ) -> Result<Tree> {
-    use rgctl_plugin_api::Error;
-    use std::cell::RefCell;
+    use rgctl_plugin_api::{parse_with_pool, Error};
 
-    thread_local! {
-        static PARSER: RefCell<Parser> = RefCell::new(Parser::new());
-    }
+    // Lang id is best-effort for pooling; grammar identity still drives set_language.
+    let lang_id = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("unknown");
 
-    PARSER.with(|cell| {
-        let mut parser = cell.borrow_mut();
-        parser
-            .set_language(&grammar)
-            .map_err(|e| Error::PluginError(format!("Failed to set grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse source".to_string(),
-        })
+    parse_with_pool(lang_id, grammar, source).map_err(|message| Error::ParseError {
+        file: file_path.to_path_buf(),
+        line: 0,
+        message,
     })
 }
 
