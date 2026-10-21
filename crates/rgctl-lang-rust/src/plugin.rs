@@ -10,7 +10,7 @@ use crate::extract_depth::{
     extract_mod_symbol, extract_trait_symbols, extract_use_symbols, module_prefix_from_path,
     push_children, qualify_with_module, walk_depth_relations, AST_MAX_DEPTH,
 };
-use crate::single_pass::{complexity_from_metadata, extract_all_single_pass, rust_ast_handlers};
+use crate::single_pass::{extract_all_single_pass, rust_ast_handlers};
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -987,8 +987,8 @@ fn helper() {}
             .iter()
             .find(|s| s.name == "caller")
             .expect("caller");
-        let from_meta = crate::single_pass::complexity_from_metadata(caller)
-            .expect("rgctl_complexity on extract_all");
+        let from_meta =
+            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
         assert_eq!(from_meta.cyclomatic, 2);
         assert_eq!(from_meta.returns, 1);
         let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();

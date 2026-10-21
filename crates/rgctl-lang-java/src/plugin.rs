@@ -6,6 +6,7 @@
 //! annotations, instantiation, method references, ctor chaining, imports)
 //! from Java source using a single Tree-sitter CST walk per phase.
 
+use crate::single_pass::{extract_all_single_pass, java_ast_handlers};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use rgctl_plugin_helpers::ComplexityCalculator;
@@ -13,6 +14,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 use tree_sitter::{Node, Parser};
+
+/// Call node kinds for deferred `Calls` flush (Java tree-sitter grammar).
+pub(crate) const JAVA_CALL_KINDS: &[&str] = &["method_invocation"];
 
 /// Tree-sitter node kinds that introduce a new named type scope for
 /// qualified-name purposes (`Outer.Inner` nesting).
@@ -25,7 +29,7 @@ const TYPE_DECL_KINDS: &[&str] = &[
 ];
 
 /// Decision-point node kinds counted toward cyclomatic/cognitive complexity.
-const BRANCH_KINDS: &[&str] = &[
+pub(crate) const BRANCH_KINDS: &[&str] = &[
     "if_statement",
     "while_statement",
     "for_statement",
@@ -47,7 +51,7 @@ const NESTING_CONTAINER_KINDS: &[&str] = &[
 /// Per-file extraction context: package prefix, anonymous-class synthetic
 /// names, and instance-initializer counters. Rebuilt once per symbols or
 /// relations walk (both walks may share one tree via `extract_all`).
-struct ExtractCtx {
+pub(crate) struct ExtractCtx {
     package: Option<String>,
     /// Simple import name → fully qualified type (e.g. `OncePerRequestFilter` → `org.springframework...`).
     imports: HashMap<String, String>,
@@ -63,7 +67,7 @@ struct ExtractCtx {
 }
 
 impl ExtractCtx {
-    fn new(root: Node, source: &[u8]) -> Self {
+    pub(crate) fn new(root: Node, source: &[u8]) -> Self {
         Self {
             package: Self::find_package_name(root, source),
             imports: Self::collect_imports(root, source),
@@ -468,7 +472,7 @@ impl JavaPlugin {
     // Symbol extraction: methods, constructors, static/instance init
     // ---------------------------------------------------------------
 
-    fn extract_method(
+    pub(crate) fn extract_method(
         &self,
         node: Node,
         source: &[u8],
@@ -511,7 +515,7 @@ impl JavaPlugin {
         })
     }
 
-    fn extract_constructor(
+    pub(crate) fn extract_constructor(
         &self,
         node: Node,
         source: &[u8],
@@ -561,7 +565,7 @@ impl JavaPlugin {
     }
 
     /// `compact_constructor_declaration` (records): `record Point(int x, int y) { public Point { ... } }`.
-    fn extract_compact_constructor(
+    pub(crate) fn extract_compact_constructor(
         &self,
         node: Node,
         source: &[u8],
@@ -607,7 +611,7 @@ impl JavaPlugin {
         })
     }
 
-    fn extract_static_initializer(
+    pub(crate) fn extract_static_initializer(
         &self,
         node: Node,
         source: &[u8],
@@ -637,7 +641,7 @@ impl JavaPlugin {
 
     /// Instance initializer block: a bare `block` that is a direct child of a
     /// `class_body` (tree-sitter-java has no dedicated node kind for these).
-    fn extract_instance_initializer(
+    pub(crate) fn extract_instance_initializer(
         &self,
         node: Node,
         source: &[u8],
@@ -895,7 +899,7 @@ impl JavaPlugin {
 
     /// Generic extractor for `class_declaration` / `interface_declaration` /
     /// `enum_declaration` / `annotation_type_declaration`.
-    fn extract_type(
+    pub(crate) fn extract_type(
         &self,
         node: Node,
         source: &[u8],
@@ -947,7 +951,7 @@ impl JavaPlugin {
 
     /// `record_declaration`: extracted as `SymbolType::Class` with
     /// `metadata.is_record: true` per D3 (records are JVM classes).
-    fn extract_record(
+    pub(crate) fn extract_record(
         &self,
         node: Node,
         source: &[u8],
@@ -989,7 +993,7 @@ impl JavaPlugin {
 
     /// `annotation_type_element_declaration` (`String value() default "";`)
     /// becomes a Function under the owning Annotation type, QN `Ann.value`.
-    fn extract_annotation_element(
+    pub(crate) fn extract_annotation_element(
         &self,
         node: Node,
         source: &[u8],
@@ -1039,7 +1043,7 @@ impl JavaPlugin {
 
     /// `lambda_expression` becomes a synthetic Function under the nearest
     /// enclosing callable, QN `Owner.$lambda$N` (pre-order index per owner).
-    fn extract_lambda(
+    pub(crate) fn extract_lambda(
         &self,
         node: Node,
         source: &[u8],
@@ -1065,7 +1069,7 @@ impl JavaPlugin {
         })
     }
 
-    fn extract_package_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_package_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
         let mut cursor = node.walk();
         let name = node
             .children(&mut cursor)
@@ -1092,7 +1096,7 @@ impl JavaPlugin {
     /// `module-info.java`'s `module_declaration`. Directives (`requires`,
     /// `exports`, `opens`, `uses`, `provides`) are recorded as best-effort
     /// string lists in metadata for GQL inspection (per D4).
-    fn extract_module_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_module_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
         let name = node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok())
@@ -1195,6 +1199,30 @@ impl JavaPlugin {
         Ok(symbols)
     }
 
+    pub(crate) fn collect_non_call_relations(
+        &self,
+        root: Node,
+        source: &[u8],
+        file_path: &Path,
+        ctx: &ExtractCtx,
+        symbols: &[Symbol],
+        relations: &mut Vec<Relation>,
+    ) -> Result<()> {
+        self.extract_inheritance(root, source, file_path, ctx, symbols, relations)?;
+        self.extract_annotated_with(root, source, file_path, ctx, relations)?;
+        self.extract_object_creation(root, source, file_path, ctx, relations)?;
+        self.extract_method_references(root, source, file_path, ctx, relations)?;
+        self.extract_ctor_chaining(root, source, file_path, ctx, relations)?;
+        self.extract_import_uses(root, source, file_path, ctx, relations)?;
+        self.extract_field_access(root, source, file_path, ctx, relations)?;
+        self.extract_array_creation(root, source, file_path, ctx, relations)?;
+        self.extract_class_literal(root, source, file_path, ctx, relations)?;
+        self.extract_lambda_calls(root, source, file_path, ctx, relations)?;
+        self.extract_throws_refs(root, source, file_path, ctx, relations)?;
+        self.extract_module_relations(root, source, file_path, relations)?;
+        Ok(())
+    }
+
     fn relations_from_tree(
         &self,
         root: Node,
@@ -1206,18 +1234,7 @@ impl JavaPlugin {
         let mut relations = Vec::new();
 
         self.extract_calls(root, source, file_path, symbols, &mut relations)?;
-        self.extract_inheritance(root, source, file_path, &ctx, symbols, &mut relations)?;
-        self.extract_annotated_with(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_object_creation(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_method_references(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_ctor_chaining(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_import_uses(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_field_access(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_array_creation(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_class_literal(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_lambda_calls(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_throws_refs(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_module_relations(root, source, file_path, &mut relations)?;
+        self.collect_non_call_relations(root, source, file_path, &ctx, symbols, &mut relations)?;
 
         Ok(relations)
     }
@@ -1326,19 +1343,13 @@ impl LanguagePlugin for JavaPlugin {
     }
 
     fn extract_symbols(&self, file_path: &Path, source: &[u8]) -> Result<Vec<Symbol>> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_java::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Java grammar: {e}")))?;
-
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: file_path.to_path_buf(),
                 line: 0,
-                message: "Failed to parse Java source".to_string(),
-            })?;
-
+                message: e,
+            },
+        )?;
         self.symbols_from_tree(tree.root_node(), source, file_path)
     }
 
@@ -1348,40 +1359,22 @@ impl LanguagePlugin for JavaPlugin {
         source: &[u8],
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_java::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Java grammar: {e}")))?;
-
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: file_path.to_path_buf(),
                 line: 0,
-                message: "Failed to parse Java source".to_string(),
-            })?;
-
+                message: e,
+            },
+        )?;
         self.relations_from_tree(tree.root_node(), source, file_path, symbols)
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_java::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Java grammar: {e}")))?;
+        extract_all_single_pass(self, file_path, source)
+    }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: 0,
-                message: "Failed to parse Java source".to_string(),
-            })?;
-
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(java_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -1393,14 +1386,17 @@ impl LanguagePlugin for JavaPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_java::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Java grammar: {e}")))?;
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let Some(tree) = parser.parse(source, None) else {
-            return Ok(None);
-        };
+        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
+                file: symbol.location.file.clone().into(),
+                line: symbol.location.start_line,
+                message: e,
+            },
+        )?;
         let root = tree.root_node();
         let target_row = symbol.location.start_line.saturating_sub(1);
 

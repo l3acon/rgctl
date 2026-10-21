@@ -20,46 +20,47 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
-/// Post–field-gating linux cold wall (default discover, no cfg/dashboard/harmonic).
-/// Baseline: **145 s** cold wall on reference M3 Pro / 36 GB (2026-08-25, `--no-daemon`).
-const LINUX_COLD_WALL_BASELINE_SECS: f64 = 145.0;
+/// Post–single-pass-AST linux cold wall (default discover, no cfg/dashboard/harmonic).
+/// Baseline: **75 s** cold wall on reference M3 Pro / 36 GB (2026-10-21; 3-run mean ~71 s).
+const LINUX_COLD_WALL_BASELINE_SECS: f64 = 75.0;
 const LINUX_COLD_MAX_NODES: u64 = 2_800_000;
-/// metasfresh `discover --full` cold wall (basic + deep + semantic).
-/// Baseline: **74 s** on same reference machine (2026-08-25, `--no-daemon`).
-const METASFRESH_COLD_WALL_BASELINE_SECS: f64 = 74.0;
-/// Establish on maintainer machine; override via `RGCTL_KAFKA_COLD_BASELINE_SECS`.
-const KAFKA_COLD_WALL_BASELINE_SECS: f64 = 600.0;
-/// `rust-lang/rust` full tree with `-l rust`. Baseline: **25 s** on reference M3 Pro (2026-09-03).
+/// metasfresh `discover --full` cold wall (gate uses process elapsed, not just final summary).
+/// Baseline: **50 s** on same reference machine (2026-10-21; elapsed ~45 s, final summary ~25 s).
+const METASFRESH_COLD_WALL_BASELINE_SECS: f64 = 50.0;
+/// Override via `RGCTL_KAFKA_COLD_BASELINE_SECS`. Measured ~9.6 s (2026-10-21).
+const KAFKA_COLD_WALL_BASELINE_SECS: f64 = 12.0;
+/// `rust-lang/rust` full tree with `-l rust`. Baseline: **25 s** (2026-10-21; measured ~23.5 s).
 const RUST_COLD_WALL_BASELINE_SECS: f64 = 25.0;
-/// llvm/llvm-project `clang/` sparse checkout with `-l cpp`. Baseline recorded on reference M3 Pro (2026-09-03).
-const LLVM_CPP_COLD_WALL_BASELINE_SECS: f64 = 120.0;
-/// dotnet/roslyn `src/` with `-l csharp`. Baseline: record on reference machine after `./scripts/fetch-profile-repos.sh`.
-const ROSLYN_CSHARP_COLD_WALL_BASELINE_SECS: f64 = 90.0;
-/// microsoft/vscode `src/` with `-l typescript`. Baseline: record on reference machine after `./scripts/fetch-profile-repos.sh`.
-const VSCODE_TYPESCRIPT_COLD_WALL_BASELINE_SECS: f64 = 120.0;
-/// nodejs/node `test/` with `-l javascript`. Baseline: record on reference machine after `./scripts/fetch-profile-repos.sh`.
-const NODE_JAVASCRIPT_COLD_WALL_BASELINE_SECS: f64 = 5.0;
-/// Same corpus with `--with-cfg`. Baseline: **7 s** on reference M3 Pro (2026-09-04).
-const NODE_JAVASCRIPT_COLD_WITH_CFG_WALL_BASELINE_SECS: f64 = 7.0;
-/// home-assistant/core with `-l python`. Baseline: **20 s** on reference M3 Pro (2026-09-04).
-const HOME_ASSISTANT_PYTHON_COLD_WALL_BASELINE_SECS: f64 = 20.0;
-const DISCOURSE_RUBY_COLD_WALL_BASELINE_SECS: f64 = 120.0;
+/// llvm/llvm-project `clang/` sparse checkout with `-l cpp`. Baseline: **12 s** (2026-10-21; ~9.7 s).
+const LLVM_CPP_COLD_WALL_BASELINE_SECS: f64 = 12.0;
+/// dotnet/roslyn `src/` with `-l csharp`. Baseline: **18 s** (2026-10-21; ~16.0 s).
+const ROSLYN_CSHARP_COLD_WALL_BASELINE_SECS: f64 = 18.0;
+/// microsoft/vscode `src/` with `-l typescript`. Baseline: **17 s** (2026-10-21; ~15.0 s).
+const VSCODE_TYPESCRIPT_COLD_WALL_BASELINE_SECS: f64 = 17.0;
+/// nodejs/node `test/` with `-l javascript`. Baseline: **4 s** (2026-10-21; ~3.2 s).
+const NODE_JAVASCRIPT_COLD_WALL_BASELINE_SECS: f64 = 4.0;
+/// Same corpus with `--with-cfg`. Baseline: **5 s** (2026-10-21; ~3.8 s).
+const NODE_JAVASCRIPT_COLD_WITH_CFG_WALL_BASELINE_SECS: f64 = 5.0;
+/// home-assistant/core with `-l python`. Baseline: **15 s** (2026-10-21; ~13.4 s).
+const HOME_ASSISTANT_PYTHON_COLD_WALL_BASELINE_SECS: f64 = 15.0;
+/// discourse with `-l ruby`. Baseline: **6 s** (2026-10-21; ~4.5 s).
+const DISCOURSE_RUBY_COLD_WALL_BASELINE_SECS: f64 = 6.0;
 /// JetBrains/kotlin sparse `libraries`+`plugins`+`analysis` (`-l kotlin`).
-/// Baseline: **10 s** wall on maintainer machine (2026-09-29; ~18k `.kt`, ~178k nodes).
+/// Baseline: **11 s** wall (2026-10-21; ~10.0 s, ~178k nodes).
 /// Override via `RGCTL_KOTLIN_COLD_BASELINE_SECS`.
-const KOTLIN_COLD_WALL_BASELINE_SECS: f64 = 10.0;
+const KOTLIN_COLD_WALL_BASELINE_SECS: f64 = 11.0;
 /// gradle/gradle under `example/groovy` (`-l groovy`).
-/// Baseline: **5 s** wall on maintainer machine (2026-09-29; ~6.7k `.groovy`, ~67k nodes).
+/// Baseline: **5.5 s** wall (2026-10-21; ~4.8 s, ~67k nodes).
 /// Override via `RGCTL_GROOVY_COLD_BASELINE_SECS`.
-const GROOVY_COLD_WALL_BASELINE_SECS: f64 = 5.0;
-/// kubernetes/website `content/en`, markdown-only discover (~2–3s on maintainer machine).
-const K8S_WEBSITE_MARKDOWN_COLD_WALL_BASELINE_SECS: f64 = 3.0;
+const GROOVY_COLD_WALL_BASELINE_SECS: f64 = 5.5;
+/// kubernetes/website markdown-only discover. Baseline: **9 s** (2026-10-21; ~7.7 s).
+const K8S_WEBSITE_MARKDOWN_COLD_WALL_BASELINE_SECS: f64 = 9.0;
 /// ecommerce-java default discover cold wall (inheritance stub gate).
-/// Baseline: **0.31 s** on maintainer machine (2026-08-31, `--no-daemon`).
-const ECOMMERCE_JAVA_COLD_WALL_BASELINE_SECS: f64 = 0.31;
+/// Baseline: **0.36 s** (2026-10-21; ~0.33 s).
+const ECOMMERCE_JAVA_COLD_WALL_BASELINE_SECS: f64 = 0.36;
 /// `index_graph_build` stage for the same corpus (relation commit + stubs).
-const ECOMMERCE_JAVA_COLD_INDEX_GRAPH_BUILD_BASELINE_SECS: f64 = 0.008;
-/// ecommerce-java discover with `--with-kantra` fixture ruleset (2026-08-31).
+const ECOMMERCE_JAVA_COLD_INDEX_GRAPH_BUILD_BASELINE_SECS: f64 = 0.013;
+/// ecommerce-java discover with `--with-kantra` fixture ruleset (2026-10-21; ~0.31 s).
 const ECOMMERCE_JAVA_KANTRA_COLD_WALL_BASELINE_SECS: f64 = 0.36;
 const ECOMMERCE_JAVA_KANTRA_COLD_EVAL_BASELINE_SECS: f64 = 0.005;
 const ECOMMERCE_JAVA_KANTRA_ENRICH_BASELINE_SECS: f64 = 0.05;

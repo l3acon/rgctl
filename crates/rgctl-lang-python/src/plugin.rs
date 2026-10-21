@@ -3,10 +3,11 @@
 //! Extracts symbols, relationships, and complexity metrics from Python source code
 //! using TreeSitter.
 
+use crate::single_pass::{extract_all_single_pass, python_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, infer_python_method_target, ComplexityMetrics, Error,
-    ExtractAllResult, Field, LanguagePlugin, Parameter, Relation, RelationType, Result,
-    SourceLocation, Symbol, SymbolType,
+    callee_name, complexity_from_metadata, containing_function, infer_python_method_target,
+    parse_with_pool, AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field,
+    LanguagePlugin, Parameter, Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
 };
 use rgctl_plugin_helpers::{
     containing_class_name, extract_decorator_relations, extract_python_class_extends_relations,
@@ -14,25 +15,24 @@ use rgctl_plugin_helpers::{
 };
 use rgctl_semantic::type_inference::TypeInferencer;
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Python language plugin
-pub struct PythonPlugin {
-    _parser: Parser,
-}
+pub struct PythonPlugin;
 
 impl PythonPlugin {
     /// Create a new Python plugin
     pub fn new() -> Result<Self> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {}", e)))?;
-        Ok(Self { _parser: parser })
+        Ok(Self)
     }
 
     /// Extract function definition
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut parameters = Vec::new();
@@ -266,7 +266,12 @@ impl PythonPlugin {
     }
 
     /// Extract class definition
-    fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_class(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -559,14 +564,12 @@ impl PythonPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Python source".to_string(),
+        parse_with_pool("python", tree_sitter_python::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
@@ -816,7 +819,7 @@ fn infer_field_type_from_rhs(node: Node, source: &[u8]) -> Option<String> {
     }
 }
 
-fn instantiation_target(
+pub(crate) fn instantiation_target(
     call: Node,
     source: &[u8],
     class_names: &std::collections::HashSet<String>,
@@ -901,11 +904,11 @@ impl LanguagePlugin for PythonPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(python_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -917,18 +920,17 @@ impl LanguagePlugin for PythonPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {}", e)))?;
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("python", tree_sitter_python::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
-            })?;
+                message: e,
+            },
+        )?;
 
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1;
@@ -1147,6 +1149,40 @@ def list_orders():
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
         assert!(relations.iter().any(|r| r.relation_type == RelationType::Extends));
         assert!(relations.iter().any(|r| r.relation_type == RelationType::AnnotatedWith));
+    }
+
+    #[test]
+    fn test_extract_all_single_pass_forward_calls_and_complexity() {
+        let source = br#"
+def caller():
+    helper()
+    if True:
+        return
+
+def helper():
+    pass
+"#;
+        let plugin = PythonPlugin::new().unwrap();
+        let path = Path::new("test.py");
+        let result = plugin.extract_all(path, source).unwrap();
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to.contains("helper")
+            }),
+            "forward Calls -> helper: {:?}",
+            result.relations
+        );
+        let caller = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "caller")
+            .expect("caller");
+        let from_meta =
+            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        assert_eq!(from_meta.cyclomatic, 2);
+        assert_eq!(from_meta.returns, 1);
+        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        assert_eq!(via_api, from_meta);
     }
 
     #[test]

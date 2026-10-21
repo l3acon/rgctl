@@ -3,10 +3,11 @@
 //! Extracts symbols, relationships, and complexity metrics from JavaScript source code
 //! using TreeSitter.
 
+use crate::single_pass::{extract_all_single_pass, javascript_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, ComplexityMetrics, Error, ExtractAllResult,
-    Field, JS_CALL_KINDS, LanguagePlugin, Parameter, Relation, RelationType, Result,
-    SourceLocation, Symbol, SymbolType,
+    callee_name, containing_function, complexity_from_metadata, parse_with_pool, AstHandlerTable,
+    ComplexityMetrics, Error, ExtractAllResult, Field, JS_CALL_KINDS, LanguagePlugin, Parameter,
+    Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
 };
 use rgctl_plugin_helpers::{
     bound_function_expression_name, extract_cjs_require_symbols, extract_class_extends_relations,
@@ -15,7 +16,7 @@ use rgctl_plugin_helpers::{
 };
 use rgctl_semantic::type_inference::TypeInferencer;
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Cap AST walk depth (matches CFG expression walk limit in `rgctl-analysis`).
 const MAX_TREE_DEPTH: usize = 2048;
@@ -53,7 +54,12 @@ impl JavaScriptPlugin {
         None
     }
 
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut parameters = Vec::new();
@@ -195,7 +201,7 @@ impl JavaScriptPlugin {
         Ok(parameters)
     }
 
-    fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -333,7 +339,12 @@ impl JavaScriptPlugin {
         Ok(())
     }
 
-    fn extract_export_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    pub(crate) fn extract_export_symbol(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Option<Symbol> {
         let text = node.utf8_text(source).ok()?.trim().to_string();
         if !text.starts_with("export") {
             return None;
@@ -491,7 +502,7 @@ impl JavaScriptPlugin {
         }
     }
 
-    fn is_unresolved_callee(&self, func: Node, source: &[u8]) -> bool {
+    pub(crate) fn is_unresolved_callee(&self, func: Node, source: &[u8]) -> bool {
         if func.kind() == "subscript_expression" {
             return true;
         }
@@ -507,6 +518,67 @@ impl JavaScriptPlugin {
                 .and_then(|p| p.utf8_text(source).ok())
                 .is_some_and(|t| t.starts_with('[')),
         }
+    }
+
+    /// Emit a JS `Calls` relation with known enclosing function (single-pass flush).
+    pub(crate) fn emit_js_call(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &Path,
+        symbols: &[Symbol],
+        from_fn: &Symbol,
+        relations: &mut Vec<Relation>,
+    ) {
+        let file_path_str = file_path.to_string_lossy();
+        let func = node.child_by_field_name("function");
+        let unresolved = func
+            .map(|f| self.is_unresolved_callee(f, source))
+            .unwrap_or(false)
+            || func.is_some_and(|f| f.kind() == "subscript_expression");
+        let callee = func
+            .and_then(|n| callee_name(n, source))
+            .or_else(|| callee_name(node, source));
+        let callee = if unresolved && callee.as_deref().unwrap_or("").is_empty() {
+            Some("dynamic".to_string())
+        } else {
+            callee
+        };
+        let Some(callee) = callee.filter(|c| !c.is_empty()) else {
+            return;
+        };
+        let from = from_fn
+            .qualified_name
+            .clone()
+            .unwrap_or_else(|| from_fn.name.clone());
+        let mut meta = serde_json::json!({ "language": "javascript" });
+        if unresolved {
+            meta["unresolved"] = serde_json::Value::Bool(true);
+        }
+        let same_file_matches: Vec<_> = symbols
+            .iter()
+            .filter(|s| {
+                s.name == callee
+                    && s.symbol_type == SymbolType::Function
+                    && s.location.file == file_path_str
+            })
+            .collect();
+        let local_target = match same_file_matches.as_slice() {
+            [only] => only
+                .qualified_name
+                .clone()
+                .unwrap_or_else(|| callee.clone()),
+            _ => callee.clone(),
+        };
+        relations.push(Relation {
+            from,
+            to: local_target,
+            relation_type: RelationType::Calls,
+            location: source_location(node, &file_path_str),
+            metadata: meta,
+            to_qualified_hint: None,
+            to_type_hint: None,
+        });
     }
 
     fn extract_heritage(
@@ -724,20 +796,18 @@ impl JavaScriptPlugin {
         count
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_javascript::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set JavaScript grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse JavaScript source".to_string(),
-        })
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
+        parse_with_pool("javascript", tree_sitter_javascript::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            },
+        )
     }
 }
 
-fn source_location(node: Node, file_path: &str) -> SourceLocation {
+pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
     SourceLocation {
         file: file_path.to_string(),
         start_line: node.start_position().row + 1,
@@ -782,11 +852,11 @@ impl LanguagePlugin for JavaScriptPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(javascript_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -798,17 +868,16 @@ impl LanguagePlugin for JavaScriptPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_javascript::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set JavaScript grammar: {}", e)))?;
+        // Prefer metrics harvested during single-pass `extract_all`.
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("javascript", tree_sitter_javascript::LANGUAGE.into(), source)
+            .map_err(|e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
+                message: e,
             })?;
 
         let root = tree.root_node();

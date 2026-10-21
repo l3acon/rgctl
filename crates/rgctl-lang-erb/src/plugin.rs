@@ -1,9 +1,11 @@
 //! ERB `LanguagePlugin` — symbols, relations, translation metadata.
 
+use crate::single_pass::{erb_ast_handlers, extract_all_single_pass};
 use regex::Regex;
 use rgctl_plugin_api::{
-    ComplexityMetrics, Error, ExtractAllResult, LanguagePlugin, Relation, RelationType, Result,
-    SourceLocation, Symbol, SymbolType,
+    complexity_from_metadata, parse_with_pool, AstHandlerTable, ComplexityMetrics, Error,
+    ExtractAllResult, LanguagePlugin, Relation, RelationType, Result, SourceLocation, Symbol,
+    SymbolType,
 };
 use std::path::Path;
 use std::sync::OnceLock;
@@ -86,16 +88,14 @@ impl ErbPlugin {
         Ok(Self { _parser: parser })
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_embedded_template::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set ERB grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse ERB source".to_string(),
-        })
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
+        parse_with_pool("erb", tree_sitter_embedded_template::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            },
+        )
     }
 
     fn loc(node: Node, file_path: &str) -> SourceLocation {
@@ -338,7 +338,7 @@ impl ErbPlugin {
         j2
     }
 
-    fn walk_blocks(
+    pub(crate) fn collect_block_at(
         &self,
         node: Node,
         source: &[u8],
@@ -446,7 +446,17 @@ impl ErbPlugin {
                 }
             }
         }
+    }
 
+    fn walk_blocks(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        symbols: &mut Vec<Symbol>,
+        relations: &mut Vec<Relation>,
+    ) {
+        self.collect_block_at(node, source, file_path, symbols, relations);
         let mut cursor = node.walk();
         for child in node.children(&mut cursor).collect::<Vec<_>>() {
             self.walk_blocks(child, source, file_path, symbols, relations);
@@ -491,12 +501,11 @@ impl LanguagePlugin for ErbPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let path_str = file_path.to_string_lossy();
-        let mut symbols = Vec::new();
-        let mut relations = Vec::new();
-        self.walk_blocks(tree.root_node(), source, &path_str, &mut symbols, &mut relations);
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(erb_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -504,6 +513,9 @@ impl LanguagePlugin for ErbPlugin {
         symbol: &Symbol,
         _source: &[u8],
     ) -> Result<Option<ComplexityMetrics>> {
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
         Ok(Some(ComplexityMetrics {
             cyclomatic: 1,
             cognitive: 0,

@@ -1,7 +1,7 @@
 //! C language plugin using Tree-sitter.
 
+use crate::single_pass::{c_ast_handlers, extract_all_single_pass};
 use rgctl_plugin_api::*;
-use rgctl_plugin_helpers::parse_source;
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -31,7 +31,7 @@ fn normalize_include_path(raw: &str) -> String {
         .to_string()
 }
 
-fn include_path_from_node(node: Node, source: &[u8]) -> Result<String> {
+pub(crate) fn include_path_from_node(node: Node, source: &[u8]) -> Result<String> {
     if let Some(path) = node.child_by_field_name("path") {
         let raw = path.utf8_text(source)?;
         return Ok(normalize_include_path(raw));
@@ -54,11 +54,17 @@ impl CPlugin {
         Ok(Self)
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        parse_source(source, file_path, tree_sitter_c::LANGUAGE.into())
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
+        parse_with_pool("c", tree_sitter_c::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
+        })
     }
 
-    fn extract_function(
+    pub(crate) fn extract_function(
         &self,
         node: Node,
         source: &[u8],
@@ -87,7 +93,7 @@ impl CPlugin {
 
     /// F1: struct fields from `field_declaration` in `field_declaration_list`.
     /// F2: C has no real constructors — do not invent fake ctor symbols.
-    fn extract_struct(
+    pub(crate) fn extract_struct(
         &self,
         node: Node,
         source: &[u8],
@@ -128,11 +134,11 @@ impl CPlugin {
         })
     }
 
-    fn extract_enum(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_enum(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
         self.extract_enum_with_typedef(node, source, file_path, None)
     }
 
-    fn extract_enum_with_typedef(
+    pub(crate) fn extract_enum_with_typedef(
         &self,
         node: Node,
         source: &[u8],
@@ -328,18 +334,23 @@ impl LanguagePlugin for CPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(c_ast_handlers())
     }
 
     fn calculate_complexity(
         &self,
-        _symbol: &Symbol,
+        symbol: &Symbol,
         _source: &[u8],
     ) -> Result<Option<ComplexityMetrics>> {
+        // Prefer metrics harvested during single-pass `extract_all`.
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
+        // C has no dedicated complexity re-walk; leave None when metadata absent.
         Ok(None)
     }
 }
@@ -481,13 +492,13 @@ fn name_from_declarator(root: Node, source: &[u8]) -> Option<String> {
     None
 }
 
-fn struct_name(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn struct_name(node: Node, source: &[u8]) -> Option<String> {
     node.child_by_field_name("name")
         .and_then(|n| n.utf8_text(source).ok().map(str::to_string))
 }
 
 /// Typedef alias from `type_definition` (`typedef struct Foo Bar` → `Bar`).
-fn type_definition_typedef_name(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn type_definition_typedef_name(node: Node, source: &[u8]) -> Option<String> {
     if node.kind() != "type_definition" {
         return None;
     }
@@ -500,7 +511,7 @@ fn type_definition_typedef_name(node: Node, source: &[u8]) -> Option<String> {
     None
 }
 
-fn source_location(node: Node, file_path: &str) -> SourceLocation {
+pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
     SourceLocation {
         file: file_path.to_string(),
         start_line: node.start_position().row + 1,

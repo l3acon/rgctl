@@ -16,7 +16,10 @@ pub use ast_handlers::{AstHandlerTable, HandlerMask};
 pub use kind_dispatch::{KindDispatchOnce, KindDispatchTable, MAX_KIND_ID};
 pub use parser_pool::{parse_with_pool, with_thread_local_parser};
 pub use scope_stack::{ScopeComplexity, ScopeFrame, ScopeKind, ScopeStack};
-pub use single_pass::SinglePassCtx;
+pub use single_pass::{
+    attach_complexity, complexity_from_metadata, coverage_handler_entries,
+    coverage_tables_from_manifest, SinglePassCtx, COMPLEXITY_META_KEY,
+};
 
 pub use call_extraction::{
     infer_python_method_target, ruby_call_callee, ruby_call_unresolved, C_CALL_KINDS,

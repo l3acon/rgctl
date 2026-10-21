@@ -6,6 +6,7 @@ use std::sync::Arc;
 #[cfg(test)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::JavaPlugin;
 
 /// Register this language plugin.

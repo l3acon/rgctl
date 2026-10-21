@@ -1,5 +1,6 @@
 //! C# language plugin using Tree-sitter.
 
+use crate::single_pass::{csharp_ast_handlers, extract_all_single_pass};
 use rgctl_plugin_api::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -35,13 +36,13 @@ enum TraverseFrame<'a> {
 
 /// Namespace and using context during a single-file extract pass.
 #[derive(Debug, Default)]
-struct ExtractCtx {
+pub(crate) struct ExtractCtx {
     namespace_stack: Vec<String>,
     usings: Vec<String>,
 }
 
 impl ExtractCtx {
-    fn qualify(&self, simple: &str) -> String {
+    pub(crate) fn qualify(&self, simple: &str) -> String {
         if self.namespace_stack.is_empty() {
             simple.to_string()
         } else {
@@ -49,15 +50,15 @@ impl ExtractCtx {
         }
     }
 
-    fn push_qualified_namespace(&mut self, qualified: &str) {
+    pub(crate) fn push_qualified_namespace(&mut self, qualified: &str) {
         self.namespace_stack.push(qualified.to_string());
     }
 
-    fn pop_namespace(&mut self) {
+    pub(crate) fn pop_namespace(&mut self) {
         self.namespace_stack.pop();
     }
 
-    fn register_using(&mut self, text: &str) {
+    pub(crate) fn register_using(&mut self, text: &str) {
         let trimmed = text
             .trim()
             .trim_start_matches("using")
@@ -107,18 +108,16 @@ impl CSharpPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set C# grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse C# source".to_string(),
+        parse_with_pool("csharp", tree_sitter_c_sharp::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
-    fn extract_method(
+    pub(crate) fn extract_method(
         &self,
         node: Node,
         source: &[u8],
@@ -160,7 +159,7 @@ impl CSharpPlugin {
         })
     }
 
-    fn extract_constructor(
+    pub(crate) fn extract_constructor(
         &self,
         node: Node,
         source: &[u8],
@@ -201,7 +200,7 @@ impl CSharpPlugin {
         })
     }
 
-    fn extract_delegate(
+    pub(crate) fn extract_delegate(
         &self,
         node: Node,
         source: &[u8],
@@ -328,7 +327,7 @@ impl CSharpPlugin {
         Ok(fields)
     }
 
-    fn extract_type(
+    pub(crate) fn extract_type(
         &self,
         node: Node,
         source: &[u8],
@@ -384,6 +383,21 @@ impl CSharpPlugin {
         Ok(symbols)
     }
 
+    pub(crate) fn collect_non_call_relations(
+        &self,
+        root: Node,
+        source: &[u8],
+        file_path: &Path,
+        symbols: &[Symbol],
+        ctx: &ExtractCtx,
+        relations: &mut Vec<Relation>,
+    ) -> Result<()> {
+        self.extract_inheritance(root, source, file_path, relations)?;
+        self.extract_annotated_with(root, source, file_path, ctx, relations)?;
+        self.extract_instantiations(root, source, file_path, symbols, ctx, relations)?;
+        Ok(())
+    }
+
     fn relations_from_tree(
         &self,
         root: Node,
@@ -402,13 +416,11 @@ impl CSharpPlugin {
             &ctx,
             &mut relations,
         );
-        self.extract_inheritance(root, source, file_path, &mut relations)?;
-        self.extract_annotated_with(root, source, file_path, &ctx, &mut relations)?;
-        self.extract_instantiations(root, source, file_path, symbols, &ctx, &mut relations)?;
+        self.collect_non_call_relations(root, source, file_path, symbols, &ctx, &mut relations)?;
         Ok(relations)
     }
 
-    fn seed_ctx_from_tree(&self, root: Node, source: &[u8], ctx: &mut ExtractCtx) {
+    pub(crate) fn seed_ctx_from_tree(&self, root: Node, source: &[u8], ctx: &mut ExtractCtx) {
         if root.kind() == "compilation_unit" {
             let mut cursor = root.walk();
             for child in root.children(&mut cursor) {
@@ -1213,11 +1225,11 @@ impl LanguagePlugin for CSharpPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(csharp_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -1229,17 +1241,15 @@ impl LanguagePlugin for CSharpPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set C# grammar: {e}")))?;
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("csharp", tree_sitter_c_sharp::LANGUAGE.into(), source)
+            .map_err(|e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
+                message: e,
             })?;
 
         let root = tree.root_node();
@@ -1290,7 +1300,7 @@ fn collect_attributes_from_list(list: Node, source: &[u8], attrs: &mut Vec<(Stri
     }
 }
 
-fn namespace_name(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn namespace_name(node: Node, source: &[u8]) -> Option<String> {
     node.child_by_field_name("name")
         .and_then(|n| type_text(n, source))
 }
@@ -1377,7 +1387,7 @@ fn relation(
     }
 }
 
-fn source_location(node: Node, file_path: &str) -> SourceLocation {
+pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
     SourceLocation {
         file: file_path.to_string(),
         start_line: node.start_position().row + 1,

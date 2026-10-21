@@ -1,14 +1,16 @@
 //! Puppet `LanguagePlugin` — symbols, relations, complexity.
 
+use crate::single_pass::{extract_all_single_pass, puppet_ast_handlers};
 use rgctl_plugin_api::{
-    ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin, Parameter, Relation,
-    RelationType, Result, SourceLocation, Symbol, SymbolType,
+    complexity_from_metadata, parse_with_pool, AstHandlerTable, ComplexityMetrics, Error,
+    ExtractAllResult, Field, LanguagePlugin, Parameter, Relation, RelationType, Result,
+    SourceLocation, Symbol, SymbolType,
 };
 use rgctl_plugin_helpers::ComplexityCalculator;
 use std::path::Path;
 use tree_sitter::{Node, Parser, Tree};
 
-const BRANCH_KINDS: &[&str] = &[
+pub(crate) const PUPPET_BRANCH_KINDS: &[&str] = &[
     "if_statement",
     "unless_statement",
     "case_statement",
@@ -16,6 +18,8 @@ const BRANCH_KINDS: &[&str] = &[
     "iterator_statement",
     "elsif_statement",
 ];
+
+const BRANCH_KINDS: &[&str] = PUPPET_BRANCH_KINDS;
 
 const NESTING_KINDS: &[&str] = &[
     "if_statement",
@@ -39,16 +43,37 @@ impl PuppetPlugin {
         Ok(Self { _parser: parser })
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_puppet::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Puppet grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Puppet source".to_string(),
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
+        parse_with_pool("puppet", tree_sitter_puppet::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
+    }
+
+    /// Emit symbols for a single node (no child walk) — used by single-pass DFS.
+    pub(crate) fn collect_symbol_at(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        symbols: &mut Vec<Symbol>,
+    ) {
+        // Reuse walk_symbols match arm by temporarily walking only this node:
+        // walk_symbols always recurses; instead duplicate the match via a helper flag.
+        self.walk_symbols_node_only(node, source, file_path, symbols);
+    }
+
+    pub(crate) fn collect_relation_at(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        relations: &mut Vec<Relation>,
+    ) {
+        self.walk_relations_node_only(node, source, file_path, relations);
     }
 
     fn loc(node: Node, file_path: &str) -> SourceLocation {
@@ -202,6 +227,20 @@ impl PuppetPlugin {
     }
 
     fn walk_symbols(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        symbols: &mut Vec<Symbol>,
+    ) {
+        self.walk_symbols_node_only(node, source, file_path, symbols);
+        let mut c = node.walk();
+        for child in node.children(&mut c).collect::<Vec<_>>() {
+            self.walk_symbols(child, source, file_path, symbols);
+        }
+    }
+
+    pub(crate) fn walk_symbols_node_only(
         &self,
         node: Node,
         source: &[u8],
@@ -440,14 +479,23 @@ impl PuppetPlugin {
             }
             _ => {}
         }
-
-        let mut c = node.walk();
-        for child in node.children(&mut c).collect::<Vec<_>>() {
-            self.walk_symbols(child, source, file_path, symbols);
-        }
     }
 
     fn walk_relations(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        relations: &mut Vec<Relation>,
+    ) {
+        self.walk_relations_node_only(node, source, file_path, relations);
+        let mut c = node.walk();
+        for child in node.children(&mut c).collect::<Vec<_>>() {
+            self.walk_relations(child, source, file_path, relations);
+        }
+    }
+
+    pub(crate) fn walk_relations_node_only(
         &self,
         node: Node,
         source: &[u8],
@@ -627,14 +675,9 @@ impl PuppetPlugin {
             }
             _ => {}
         }
-
-        let mut c = node.walk();
-        for child in node.children(&mut c).collect::<Vec<_>>() {
-            self.walk_relations(child, source, file_path, relations);
-        }
     }
 
-    fn maybe_module_from_metadata(&self, file_path: &Path, symbols: &mut Vec<Symbol>, relations: &mut Vec<Relation>) {
+    pub(crate) fn maybe_module_from_metadata(&self, file_path: &Path, symbols: &mut Vec<Symbol>, relations: &mut Vec<Relation>) {
         let mut dir = file_path.parent().map(Path::to_path_buf);
         for _ in 0..4 {
             let Some(d) = dir.clone() else { break };
@@ -735,14 +778,11 @@ impl LanguagePlugin for PuppetPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let path_str = file_path.to_string_lossy();
-        let mut symbols = Vec::new();
-        let mut relations = Vec::new();
-        self.walk_symbols(tree.root_node(), source, &path_str, &mut symbols);
-        self.walk_relations(tree.root_node(), source, &path_str, &mut relations);
-        self.maybe_module_from_metadata(file_path, &mut symbols, &mut relations);
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(puppet_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -750,6 +790,9 @@ impl LanguagePlugin for PuppetPlugin {
         symbol: &Symbol,
         source: &[u8],
     ) -> Result<Option<ComplexityMetrics>> {
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
         let file_path = Path::new(&symbol.location.file);
         let tree = self.parse(file_path, source)?;
         let mut stack = vec![tree.root_node()];

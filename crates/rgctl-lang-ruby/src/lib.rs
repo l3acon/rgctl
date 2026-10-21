@@ -10,6 +10,7 @@ use std::sync::Arc;
 #[cfg(test)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::RubyPlugin;
 
 /// Register the Ruby language plugin.

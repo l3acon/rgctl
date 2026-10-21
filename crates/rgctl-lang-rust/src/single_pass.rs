@@ -20,46 +20,19 @@ fn rust_grammar() -> tree_sitter::Language {
     tree_sitter_rust::LANGUAGE.into()
 }
 
-fn coverage_entries() -> Vec<(String, String)> {
-    let v: serde_json::Value =
-        serde_json::from_str(MANIFEST_JSON).expect("rust-ast-coverage.json parse");
-    v["handlers"]
-        .as_object()
-        .expect("handlers object")
-        .iter()
-        .map(|(k, val)| (k.clone(), val.as_str().unwrap_or("Skip").to_string()))
-        .collect()
-}
-
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn rust_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let lang = rust_grammar();
-        AstHandlerTable::from_coverage_entries(&lang, coverage_entries())
+        let (handlers, _) = coverage_tables_from_manifest(&rust_grammar(), MANIFEST_JSON);
+        handlers
     })
 }
 
 fn rust_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let lang = rust_grammar();
-        KindDispatchTable::from_coverage(&lang, coverage_entries())
+        let (_, dispatch) = coverage_tables_from_manifest(&rust_grammar(), MANIFEST_JSON);
+        dispatch
     })
-}
-
-/// Metadata key for complexity harvested during `extract_all`.
-pub const COMPLEXITY_META_KEY: &str = "rgctl_complexity";
-
-pub fn complexity_from_metadata(symbol: &Symbol) -> Option<ComplexityMetrics> {
-    let v = symbol.metadata.get(COMPLEXITY_META_KEY)?;
-    serde_json::from_value(v.clone()).ok()
-}
-
-fn attach_complexity(symbol: &mut Symbol, metrics: &ComplexityMetrics) {
-    if let Ok(v) = serde_json::to_value(metrics) {
-        if let Some(obj) = symbol.metadata.as_object_mut() {
-            obj.insert(COMPLEXITY_META_KEY.to_string(), v);
-        }
-    }
 }
 
 /// Pending call site: flush after the full symbol list exists (forward refs).
@@ -104,17 +77,7 @@ pub fn extract_all_single_pass(
         match visit {
             Visit::LeaveScope => {
                 if let Some(frame) = ctx.leave_scope() {
-                    if frame.kind.is_function_like() {
-                        if let Some(idx) = frame.symbol_idx {
-                            let mut metrics = SinglePassCtx::complexity_metrics(&frame);
-                            if metrics.cyclomatic == 0 {
-                                metrics.cyclomatic = 1;
-                            }
-                            if let Some(sym) = ctx.symbols.get_mut(idx) {
-                                attach_complexity(sym, &metrics);
-                            }
-                        }
-                    }
+                    ctx.harvest_function_complexity(&frame);
                 }
             }
             Visit::LeaveGuard => {

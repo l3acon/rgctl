@@ -80,7 +80,7 @@ Deep stage timings and reference machine notes: [docs/internal/profile.md](docs/
 
 | Corpus | Test gate | Discover | Baseline (ref M3 Pro, +10%) |
 |--------|-----------|----------|------------------------------|
-| Linux kernel | `linux_cold_discover_within_baseline` | default | **145 s** wall |
+| Linux kernel | `linux_cold_discover_within_baseline` | default | **75 s** wall (2026-10-21; post single-pass AST) |
 
 ```bash
 cargo build --release --bin rgctl

@@ -63,19 +63,22 @@ cargo test --release --test cold_profile_gates -- --ignored --nocapture --test-t
 
 | Gate | Corpus | Discover flags | Baseline (wall, +10%) |
 |------|--------|----------------|------------------------|
-| `linux_cold_discover_within_baseline` | `example/linux` | default | **145 s** |
-| `metasfresh_cold_discover_within_baseline` | `example/metasfresh-4.9.8b` | `--full` | **74 s** |
-| `kafka_cold_discover_within_baseline` | `example/kafka` | default | env `RGCTL_KAFKA_COLD_BASELINE_SECS` (default 600 s) |
-| `k8s_website_markdown_cold_discover_within_baseline` | `example/k8s-website` | `-l markdown` | **3 s** |
-| `ecommerce_java_inheritance_cold_discover_within_baseline` | `rgctl-tests/ecommerce-java` | default | **0.31 s** wall; **0.008 s** `index_graph_build` |
+| `linux_cold_discover_within_baseline` | `example/linux` | default | **75 s** (2026-10-21; 3-run mean ~71 s) |
+| `metasfresh_cold_discover_within_baseline` | `example/metasfresh-4.9.8b` | `--full` | **50 s** (2026-10-21; process elapsed ~45 s, final summary ~25 s) |
+| `kafka_cold_discover_within_baseline` | `example/kafka` | default | env `RGCTL_KAFKA_COLD_BASELINE_SECS` (default **12 s**; 2026-10-21 ~9.6 s) |
+| `k8s_website_markdown_cold_discover_within_baseline` | `example/k8s-website` | `-l markdown` | **9 s** (2026-10-21; ~7.7 s) |
+| `ecommerce_java_inheritance_cold_discover_within_baseline` | `rgctl-tests/ecommerce-java` | default | **0.36 s** wall; **0.013 s** `index_graph_build` |
 | `ecommerce_java_kantra_cold_discover_within_baseline` | `rgctl-tests/ecommerce-java` | `--with-kantra --kantra-rules <fixture>` | env `RGCTL_ECOMMERCE_JAVA_KANTRA_*` (fixture catalog; fast CI path) |
-| `rust_cold_discover_within_baseline` | `example/rust` | `-l rust` | **25 s** |
-| `node_javascript_cold_discover_within_baseline` | `example/node/test` | `-l javascript` | **5 s** |
-| `node_javascript_cold_discover_with_cfg_within_baseline` | `example/node/test` | `-l javascript --with-cfg` | **7 s** |
-| `home_assistant_python_cold_discover_within_baseline` | `example/home-assistant` | `-l python` | **20 s** |
-| `discourse_cold_discover_within_baseline` | `example/discourse` | `-l ruby` | env `RGCTL_DISCOURSE_RUBY_COLD_BASELINE_SECS` (default **120 s**; see measured run below) |
-| `kotlin_cold_discover_within_baseline` | `example/kotlin` | `-l kotlin` | **10 s** (JetBrains/kotlin sparse; 2026-09-29) |
-| `groovy_cold_discover_within_baseline` | `example/groovy` | `-l groovy` | **5 s** (gradle/gradle; 2026-09-29) |
+| `rust_cold_discover_within_baseline` | `example/rust` | `-l rust` | **25 s** (2026-10-21; ~23.5 s) |
+| `llvm_cpp_cold_discover_within_baseline` | `example/llvm-project/clang` | `-l cpp` | **12 s** (2026-10-21; ~9.7 s) |
+| `roslyn_csharp_cold_discover_within_baseline` | `example/roslyn/src` | `-l csharp` | **18 s** (2026-10-21; ~16.0 s) |
+| `vscode_typescript_cold_discover_within_baseline` | `example/vscode/src` | `-l typescript` | **17 s** (2026-10-21; ~15.0 s) |
+| `node_javascript_cold_discover_within_baseline` | `example/node/test` | `-l javascript` | **4 s** (2026-10-21; ~3.2 s) |
+| `node_javascript_cold_discover_with_cfg_within_baseline` | `example/node/test` | `-l javascript --with-cfg` | **5 s** (2026-10-21; ~3.8 s) |
+| `home_assistant_python_cold_discover_within_baseline` | `example/home-assistant` | `-l python` | **15 s** (2026-10-21; ~13.4 s) |
+| `discourse_cold_discover_within_baseline` | `example/discourse` | `-l ruby` | env `RGCTL_DISCOURSE_RUBY_COLD_BASELINE_SECS` (default **6 s**; 2026-10-21 ~4.5 s) |
+| `kotlin_cold_discover_within_baseline` | `example/kotlin` | `-l kotlin` | **11 s** (2026-10-21; ~10.0 s) |
+| `groovy_cold_discover_within_baseline` | `example/groovy` | `-l groovy` | **5.5 s** (2026-10-21; ~4.8 s) |
 | `pr_check_rgctl_graph_slice_within_baseline` | `crates/rgctl-graph` | delta `pr-check` (base cache only) | **1.0 s** |
 | `linux_cold_diff_within_baseline` | `example/linux/.rgctl-diff` | `diff` (prep script; not discover) | **30 s** provisional |
 
@@ -177,32 +180,29 @@ Algorithm detail (sampled betweenness, HyperBall, adaptive gating): [analysis-ar
 
 ---
 
-## Gate baselines (2026-08-25)
+## Gate baselines (2026-10-21, single-pass AST)
 
-Recorded on the **reference machine** above, release `rgctl`, cold `.rgctl/` removed. These values are the **`cold_profile_gates`** baselines (+10% tolerance).
+Recorded on the **reference machine** above, release `rgctl`, cold `.rgctl/` removed. These values are the **`cold_profile_gates`** baselines (+10% tolerance). Prior 2026-08/09 envelopes kept in git history for comparison.
 
 ### Linux (`example/linux`) — default discover
 
 | Metric | Value |
 |--------|-------|
-| Wall (real / profile) | **144.7 s** / **143.5 s** |
-| **Gate baseline** | **145 s** (pass ≤ 159.5 s) |
-| Peak RSS | **~14.7 GB** |
-| User / sys CPU | 250.6 s / 47.1 s |
-| Nodes / functions | 2,657,548 / 1,862,845 |
-| Files indexed | 71,341 / 71,348 discovered |
+| Wall (3-run mean / max) | **71.0 s** / **72.3 s** |
+| **Gate baseline** | **75 s** (pass ≤ 82.5 s) |
+| Peak RSS (rgctl) | **~13.1–14.1 GB** |
+| Nodes / functions | 2,700,362 / 1,864,594 |
 
-Top stages (% of wall): `index_extract` **71.9 s** (50%), `index_graph_build` **19.2 s** (13%), `save_tracker` **9.4 s** (7%).
+Top stages (% of wall): `index_extract` **~18 s** (25%), `extract_pass1` **~18 s** (25%), `index_graph_build` **~13 s** (18%), `graph_spill_columnar` **~10 s** (14%).
 
 ### metasfresh (`example/metasfresh-4.9.8b`) — `--full`
 
 | Metric | Value |
 |--------|-------|
-| Wall (real) | **73.9 s** |
-| **Gate baseline** | **74 s** (pass ≤ 81.4 s) |
-| Peak RSS | **~6.4 GB** |
-| User / sys CPU | 242.6 s / 64.4 s |
-| Nodes / functions | 319,175 / 133,112 |
+| Wall (final summary / process elapsed) | **~25 s** / **~45 s** |
+| **Gate baseline** | **50 s** (pass ≤ 55 s; gate times process elapsed) |
+| Peak RSS | **~5.1 GB** (final); ingest ~1.9 GB |
+| Nodes / functions | 311,051 / 133,143 |
 
 Stage walls (profile summaries): **basic ~18 s**, **deep ~46 s**, **semantic ~9 s** (inferred from timestamps; semantic has little `[profile]` logging).
 
@@ -394,6 +394,28 @@ Single-pass CFG/CPG (fused field-write + skeleton), worker-side bincode, and `ST
 | `linux_cold_discover_within_baseline` (default; no CFG) | **133.7 s** (2,700,362 nodes) | 145 s | pass |
 
 `--with-cfg` / `--full` benefit from fused AST reuse and pre-encoded archive writes; Gate A (linux default) stays within the existing envelope (no intentional default-path change).
+
+### `rgctl-all-dimension-supremacy` §2 single-pass AST (2026-10-21)
+
+Tier-1 language `extract_all` migrated to `ScopeStack` + `KindDispatchTable` + `parse_with_pool`. Cold walls re-measured and gate constants tightened:
+
+| Corpus / gate | Measured wall | New baseline | peak_rss_mb |
+|---------------|---------------|--------------|-------------|
+| linux (default) | **~71 s** (3-run) | **75 s** | ~13–14k |
+| metasfresh `--full` | **~25 s** summary / **~45 s** elapsed | **50 s** | ~5.1k |
+| kafka | **9.6 s** | **12 s** | 2194 |
+| rust `-l rust` | **23.5 s** | **25 s** | 4173 |
+| llvm `clang/` `-l cpp` | **9.7 s** | **12 s** | 1539 |
+| roslyn `src/` `-l csharp` | **16.0 s** | **18 s** | 3656 |
+| vscode `src/` `-l typescript` | **15.0 s** | **17 s** | 3149 |
+| node `test/` `-l javascript` | **3.2 s** | **4 s** | 551 |
+| node + `--with-cfg` | **3.8 s** | **5 s** | 1183 |
+| home-assistant `-l python` | **13.4 s** | **15 s** | 2873 |
+| discourse `-l ruby` | **4.5 s** | **6 s** | 643 |
+| kotlin | **10.0 s** | **11 s** | 1285 |
+| groovy | **4.8 s** | **5.5 s** | 415 |
+| k8s-website `-l markdown` | **7.7 s** | **9 s** | 1024 |
+| magento2 `-l php` (no gate yet) | **11.9 s** | — | 2026 |
 
 ---
 

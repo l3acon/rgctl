@@ -2797,6 +2797,7 @@ dependencies = [
  "rgctl-plugin-helpers",
  "rgctl-registry",
  "serde_json",
+ "tracing",
  "tree-sitter",
  "tree-sitter-go",
 ]
@@ -2835,6 +2836,7 @@ dependencies = [
  "rgctl-registry",
  "rgctl-semantic",
  "serde_json",
+ "tracing",
  "tree-sitter",
  "tree-sitter-javascript",
 ]
@@ -2903,6 +2905,7 @@ dependencies = [
  "rgctl-registry",
  "rgctl-semantic",
  "serde_json",
+ "tracing",
  "tree-sitter",
  "tree-sitter-python",
 ]
@@ -2955,6 +2958,7 @@ dependencies = [
  "rgctl-plugin-helpers",
  "rgctl-registry",
  "serde_json",
+ "tracing",
  "tree-sitter",
  "tree-sitter-typescript",
 ]
@@ -2963,6 +2967,7 @@ dependencies = [
 name = "rgctl-languages"
 version = "0.4.20"
 dependencies = [
+ "criterion",
  "rgctl-ast-coverage",
  "rgctl-config-formats",
  "rgctl-lang-c",
@@ -2981,6 +2986,7 @@ dependencies = [
  "rgctl-lang-ruby",
  "rgctl-lang-rust",
  "rgctl-lang-typescript",
+ "rgctl-plugin-api",
  "rgctl-registry",
 ]
 

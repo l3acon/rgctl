@@ -13,3 +13,4 @@ rgctl-plugin-helpers = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-go = "0.25"
 serde_json = "1"
+tracing = "0.1"
