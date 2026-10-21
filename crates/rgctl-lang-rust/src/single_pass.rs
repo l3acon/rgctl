@@ -1,8 +1,9 @@
 //! Single-pass AST extraction for Rust (`ScopeStack` + `KindDispatchTable`).
 
 use crate::extract_depth::{
-    extract_mod_symbol, extract_trait_symbols, extract_use_symbols, module_prefix_from_path,
-    push_children, visit_depth_relation_node, AST_MAX_DEPTH,
+    extract_associated_type, extract_enum_variant_symbol, extract_macro_definition,
+    extract_mod_symbol, extract_trait_symbols, extract_type_item, extract_use_symbols,
+    module_prefix_from_path, push_children, visit_depth_relation_node, AST_MAX_DEPTH,
 };
 use crate::plugin::RustPlugin;
 use rgctl_plugin_api::*;
@@ -247,6 +248,54 @@ pub fn extract_all_single_pass(
                             false,
                         );
                         pushed_scope = true;
+                    }
+                    "type_item" => {
+                        if let Some(t) = extract_type_item(node, source, &file_path_str) {
+                            ctx.symbols.push(t);
+                        }
+                    }
+                    "macro_definition" => {
+                        if let Some(m) = extract_macro_definition(node, source, &file_path_str) {
+                            ctx.symbols.push(m);
+                        }
+                    }
+                    "associated_type" => {
+                        // Trait-associated types are emitted inside `extract_trait_symbols`.
+                        let under_trait = ctx
+                            .scopes
+                            .current_type()
+                            .is_some_and(|f| f.kind == ScopeKind::Trait);
+                        if !under_trait {
+                            let owner = ctx
+                                .scopes
+                                .current_type()
+                                .map(|f| f.qualified_prefix.clone());
+                            if let Some(at) = extract_associated_type(
+                                node,
+                                source,
+                                &file_path_str,
+                                owner.as_deref(),
+                            ) {
+                                ctx.symbols.push(at);
+                            }
+                        }
+                    }
+                    "enum_variant" => {
+                        if let Some(frame) = ctx.scopes.current_type() {
+                            if frame.kind == ScopeKind::Enum {
+                                let enum_name = frame.name.clone().unwrap_or_default();
+                                let enum_qn = frame.qualified_prefix.clone();
+                                if let Some(v) = extract_enum_variant_symbol(
+                                    node,
+                                    source,
+                                    &file_path_str,
+                                    &enum_name,
+                                    &enum_qn,
+                                ) {
+                                    ctx.symbols.push(v);
+                                }
+                            }
+                        }
                     }
                     _ => {}
                 }

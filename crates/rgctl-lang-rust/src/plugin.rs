@@ -7,8 +7,9 @@ use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 
 use crate::extract_depth::{
-    extract_mod_symbol, extract_trait_symbols, extract_use_symbols, module_prefix_from_path,
-    push_children, qualify_with_module, walk_depth_relations, AST_MAX_DEPTH,
+    extract_macro_definition, extract_mod_symbol, extract_trait_symbols, extract_type_item,
+    extract_use_symbols, module_prefix_from_path, push_children, qualify_with_module,
+    walk_depth_relations, AST_MAX_DEPTH,
 };
 use crate::single_pass::{extract_all_single_pass, rust_ast_handlers};
 use std::path::Path;
@@ -249,6 +250,9 @@ impl RustPlugin {
                 "field_declaration_list" => {
                     fields = self.extract_fields(child, source)?;
                 }
+                "enum_variant_list" => {
+                    fields = self.extract_enum_variant_fields(child, source)?;
+                }
                 _ => {}
             }
         }
@@ -285,6 +289,33 @@ impl RustPlugin {
             documentation: None,
             metadata: serde_json::json!({}),
         })
+    }
+
+    /// Collect `enum_variant` names as [`Field`] entries on the enum symbol.
+    pub(crate) fn extract_enum_variant_fields(
+        &self,
+        variant_list: Node,
+        source: &[u8],
+    ) -> Result<Vec<Field>> {
+        let mut fields = Vec::new();
+        let mut cursor = variant_list.walk();
+        for child in variant_list.children(&mut cursor) {
+            if child.kind() != "enum_variant" {
+                continue;
+            }
+            let name = child
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source).ok())
+                .map(str::to_string);
+            if let Some(name) = name {
+                fields.push(Field {
+                    name,
+                    field_type: None,
+                    visibility: None,
+                });
+            }
+        }
+        Ok(fields)
     }
 
     /// Extract struct fields
@@ -507,6 +538,16 @@ impl RustPlugin {
                         &file_path_str,
                         module_prefix.as_deref(),
                     ));
+                }
+                "type_item" => {
+                    if let Some(t) = extract_type_item(node, source, &file_path_str) {
+                        symbols.push(t);
+                    }
+                }
+                "macro_definition" => {
+                    if let Some(m) = extract_macro_definition(node, source, &file_path_str) {
+                        symbols.push(m);
+                    }
                 }
                 _ => {}
             }
@@ -993,5 +1034,142 @@ fn helper() {}
         assert_eq!(from_meta.returns, 1);
         let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
         assert_eq!(via_api, from_meta);
+    }
+
+    #[test]
+    fn test_rust_depth_scoped_self_and_turbofish_calls() {
+        let source = br#"
+struct Widget { id: u32 }
+
+impl Widget {
+    fn new() -> Self { Self { id: 0 } }
+    fn helper(&self) {}
+    fn build(&self) {
+        let _w = Widget::new();
+        Self::helper(self);
+        let _ = parse::<Widget>("");
+        self.helper();
+    }
+}
+
+fn parse<T>(_s: &str) -> Option<T> { None }
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("widget.rs"), source)
+            .unwrap();
+        let calls: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::Calls)
+            .collect();
+        let widget_new = calls.iter().find(|r| {
+            r.to_type_hint.as_deref() == Some("Widget")
+                && (r.to.contains("new")
+                    || r.to.contains("<init>")
+                    || r.to_qualified_hint
+                        .as_deref()
+                        .is_some_and(|h| h.contains("Widget") && h.contains("new")))
+        });
+        assert!(
+            widget_new.is_some(),
+            "expected Widget::new type hint, calls={calls:?}"
+        );
+        let self_helper = calls.iter().find(|r| {
+            r.to.contains("helper")
+                && r.to_type_hint.as_deref() == Some("Widget")
+                && r.from.contains("build")
+        });
+        assert!(
+            self_helper.is_some(),
+            "expected Self::helper -> Widget, calls={calls:?}"
+        );
+        let turbofish = calls.iter().find(|r| r.to.contains("parse"));
+        assert!(
+            turbofish.is_some(),
+            "expected parse::<Widget> call, calls={calls:?}"
+        );
+    }
+
+    #[test]
+    fn test_rust_depth_enum_variants_type_alias_macro_trait() {
+        let source = br#"
+enum Status { Active, Inactive }
+
+type Point = (i32, i32);
+
+macro_rules! say {
+    ($x:expr) => { $x };
+}
+
+trait Drawable {
+    type Brush;
+    fn draw(&self);
+}
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("depth.rs"), source)
+            .unwrap();
+        let status = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "Status" && s.symbol_type == SymbolType::Enum)
+            .expect("enum");
+        assert!(
+            status.fields.iter().any(|f| f.name == "Active"),
+            "enum fields: {:?}",
+            status.fields
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "Active"
+                    && s.metadata
+                        .get("is_enum_variant")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "variant symbol missing: {:?}",
+            result.symbols
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Point" && s.symbol_type == SymbolType::TypeAlias),
+            "type alias: {:?}",
+            result.symbols
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "say" && s.symbol_type == SymbolType::Macro),
+            "macro: {:?}",
+            result.symbols
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "Brush"
+                    && s.symbol_type == SymbolType::TypeAlias
+                    && s.metadata
+                        .get("associated")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "associated type: {:?}",
+            result.symbols
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "draw"
+                    && s.metadata
+                        .get("trait_method")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "trait method signature: {:?}",
+            result.symbols
+        );
     }
 }

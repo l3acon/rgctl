@@ -277,10 +277,18 @@ pub fn extract_trait_symbols(
 
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
-        if n.kind() == "function_signature_item" || n.kind() == "function_item" {
-            if let Some(method) = extract_trait_method(n, source, file_path, &trait_name, &qn) {
-                out.push(method);
+        match n.kind() {
+            "function_signature_item" | "function_item" => {
+                if let Some(method) = extract_trait_method(n, source, file_path, &trait_name, &qn) {
+                    out.push(method);
+                }
             }
+            "associated_type" => {
+                if let Some(at) = extract_associated_type(n, source, file_path, Some(&qn)) {
+                    out.push(at);
+                }
+            }
+            _ => {}
         }
         let mut c = n.walk();
         for ch in n.children(&mut c) {
@@ -288,6 +296,129 @@ pub fn extract_trait_symbols(
         }
     }
     out
+}
+
+/// `type Foo = Bar;` → [`SymbolType::TypeAlias`].
+pub fn extract_type_item(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let aliased = node
+        .child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(|s| s.trim().to_string());
+    let module_prefix = module_prefix_from_path(Path::new(file_path));
+    let qn = qualify_with_module(module_prefix.as_deref(), &name);
+    let mut meta = serde_json::json!({ "language": "rust", "kind": "type_item" });
+    if let Some(ref ty) = aliased {
+        meta["aliased_type"] = serde_json::Value::String(ty.clone());
+    }
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::TypeAlias,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: aliased,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: meta,
+    })
+}
+
+/// `macro_rules! name { ... }` → [`SymbolType::Macro`].
+pub fn extract_macro_definition(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let module_prefix = module_prefix_from_path(Path::new(file_path));
+    let qn = qualify_with_module(module_prefix.as_deref(), &name);
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::Macro,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: Some("macro_rules!".to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({ "language": "rust", "kind": "macro_definition" }),
+    })
+}
+
+/// Trait / impl associated type (`type Item;`).
+pub fn extract_associated_type(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    owner_qn: Option<&str>,
+) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let qn = match owner_qn {
+        Some(owner) => format!("{owner}::{name}"),
+        None => {
+            let module_prefix = module_prefix_from_path(Path::new(file_path));
+            qualify_with_module(module_prefix.as_deref(), &name)
+        }
+    };
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::TypeAlias,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({
+            "language": "rust",
+            "kind": "associated_type",
+            "associated": true,
+        }),
+    })
+}
+
+/// Standalone enum variant symbol (`Status::Active`).
+pub fn extract_enum_variant_symbol(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    enum_name: &str,
+    enum_qn: &str,
+) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    Some(Symbol {
+        name: name.clone(),
+        symbol_type: SymbolType::Variable,
+        qualified_name: Some(format!("{enum_qn}::{name}")),
+        location: loc(node, file_path),
+        signature: None,
+        return_type: Some(enum_name.to_string()),
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({
+            "language": "rust",
+            "kind": "enum_variant",
+            "enum": enum_name,
+            "is_enum_variant": true,
+        }),
+    })
 }
 
 fn extract_trait_method(
