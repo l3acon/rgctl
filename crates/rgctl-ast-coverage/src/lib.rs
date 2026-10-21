@@ -8,6 +8,10 @@
 //! between a plugin's [`AstHandlerTable`] and the coverage JSON (when plugins
 //! expose handlers via `LanguagePlugin::declared_ast_handlers`).
 
+mod tracker;
+
+pub use tracker::AstCoverageTracker;
+
 use rgctl_plugin_api::{AstHandlerTable, HandlerMask};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
