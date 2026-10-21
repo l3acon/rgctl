@@ -172,7 +172,7 @@ impl CPlugin {
             signature: None,
             return_type: None,
             parameters: vec![],
-            fields: vec![],
+            fields: crate::depth::extract_enumerator_fields(node, source),
             modifiers: vec![],
             documentation: None,
             metadata,
@@ -409,7 +409,7 @@ fn extract_parameters(node: Node, source: &[u8]) -> Result<Vec<Parameter>> {
     Ok(parameters)
 }
 
-fn extract_struct_fields(struct_node: Node, source: &[u8]) -> Result<Vec<Field>> {
+pub(crate) fn extract_struct_fields(struct_node: Node, source: &[u8]) -> Result<Vec<Field>> {
     let mut fields = Vec::new();
     let Some(body) = struct_node.child_by_field_name("body") else {
         return Ok(fields);

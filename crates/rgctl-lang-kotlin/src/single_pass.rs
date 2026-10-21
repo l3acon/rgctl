@@ -198,6 +198,58 @@ pub fn extract_all_single_pass(
                     "import" => {
                         plugin.emit_import(node, source, &file_path_str, &mut ctx.symbols);
                     }
+                    "type_alias" => {
+                        // Grammar: `typealias` keyword, then `identifier` name, then aliased type.
+                        let mut name = None;
+                        let mut aliased = None;
+                        let mut c = node.walk();
+                        for ch in node.children(&mut c) {
+                            match ch.kind() {
+                                "identifier" | "simple_identifier" | "type_identifier"
+                                    if name.is_none() =>
+                                {
+                                    name = ch.utf8_text(source).ok().map(|s| s.trim().to_string());
+                                }
+                                "user_type" | "nullable_type" | "function_type" => {
+                                    aliased =
+                                        ch.utf8_text(source).ok().map(|s| s.trim().to_string());
+                                }
+                                _ => {}
+                            }
+                        }
+                        if let Some(name) = name {
+                            ctx.symbols.push(Symbol {
+                                name: name.clone(),
+                                symbol_type: SymbolType::TypeAlias,
+                                qualified_name: Some(
+                                    package
+                                        .as_ref()
+                                        .map(|p| format!("{p}.{name}"))
+                                        .unwrap_or(name),
+                                ),
+                                location: SourceLocation {
+                                    file: file_path_str.to_string(),
+                                    start_line: node.start_position().row + 1,
+                                    end_line: node.end_position().row + 1,
+                                    start_column: node.start_position().column,
+                                    end_column: node.end_position().column,
+                                },
+                                signature: node
+                                    .utf8_text(source)
+                                    .ok()
+                                    .map(|s| s.trim().to_string()),
+                                return_type: aliased,
+                                parameters: vec![],
+                                fields: vec![],
+                                modifiers: vec![],
+                                documentation: None,
+                                metadata: serde_json::json!({
+                                    "language": "kotlin",
+                                    "kind": "type_alias",
+                                }),
+                            });
+                        }
+                    }
                     _ => {}
                 }
 

@@ -134,6 +134,12 @@ pub fn extract_all_single_pass(
                         f.complexity.loc = loc;
                     }
                     pushed_scope = true;
+                    plugin.emit_decorators_for_node(
+                        node,
+                        source,
+                        file_path,
+                        &mut relations,
+                    );
                 }
 
                 match kind {
@@ -158,6 +164,12 @@ pub fn extract_all_single_pass(
                             "javascript",
                             &mut relations,
                         );
+                        plugin.emit_decorators_for_node(
+                            node,
+                            source,
+                            file_path,
+                            &mut relations,
+                        );
                     }
                     "import_statement" => {
                         ctx.symbols.extend(extract_import_symbols(
@@ -172,6 +184,14 @@ pub fn extract_all_single_pass(
                         {
                             ctx.symbols.push(sym);
                         }
+                    }
+                    "export_specifier" => {
+                        plugin.collect_export_specifier_relations(
+                            node,
+                            source,
+                            &file_path_str,
+                            &mut relations,
+                        );
                     }
                     "new_expression" => {
                         if let Some(from_fn) =

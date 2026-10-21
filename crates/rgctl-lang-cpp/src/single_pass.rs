@@ -1,5 +1,6 @@
 //! Single-pass AST extraction for C++ (`ScopeStack` + `KindDispatchTable`).
 
+use crate::depth;
 use crate::plugin::{
     collect_base_relations, enrich_cpp_namespace_hint, scoped_type_name, source_location,
     template_enclosed_type, type_name, type_name_from_type_node, using_import_names, CppPlugin,
@@ -323,6 +324,11 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "namespace_definition" => {
+                        if let Some(sym) =
+                            depth::extract_namespace_definition(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
                         let name = next_scope.clone();
                         let qn = name.clone().unwrap_or_default();
                         ctx.enter_scope(
@@ -334,6 +340,51 @@ pub fn extract_all_single_pass(
                             false,
                         );
                         pushed_scope = true;
+                    }
+                    "alias_declaration" => {
+                        if let Some(sym) =
+                            depth::extract_alias_declaration(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "concept_definition" => {
+                        if let Some(sym) =
+                            depth::extract_concept_definition(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "union_specifier" => {
+                        if let Some(sym) =
+                            depth::extract_union_specifier(node, source, &file_path_str)
+                        {
+                            let name = sym.name.clone();
+                            ctx.symbols.push(sym);
+                            ctx.enter_scope(
+                                ScopeKind::Struct,
+                                Some(name.clone()),
+                                name,
+                                node.start_byte(),
+                                node.end_byte(),
+                                true,
+                            );
+                            pushed_scope = true;
+                        }
+                    }
+                    "preproc_def" => {
+                        if let Some(sym) =
+                            depth::extract_preproc_def(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "preproc_function_def" => {
+                        if let Some(sym) =
+                            depth::extract_preproc_function_def(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
                     }
                     "preproc_include" => {
                         let text = node.utf8_text(source)?.trim().to_string();
@@ -366,6 +417,11 @@ pub fn extract_all_single_pass(
                             documentation: None,
                             metadata: serde_json::json!({ "language": "cpp", "import_kind": "using" }),
                         });
+                        if let Some(rel) =
+                            depth::using_declaration_relation(node, source, &file_path_str)
+                        {
+                            relations.push(rel);
+                        }
                     }
                     "new_expression" => {
                         if let Some(from_fn) =

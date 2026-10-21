@@ -231,6 +231,30 @@ impl KotlinPlugin {
         let mut fields = Vec::new();
         let mut stack = vec![body];
         while let Some(node) = stack.pop() {
+            if node.kind() == "enum_entry" {
+                let name = node
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(|s| s.trim().to_string())
+                    .or_else(|| {
+                        let mut c = node.walk();
+                        node.children(&mut c).find_map(|n| {
+                            if matches!(n.kind(), "simple_identifier" | "identifier") {
+                                n.utf8_text(source).ok().map(|s| s.trim().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                if let Some(name) = name {
+                    fields.push(Field {
+                        name,
+                        field_type: None,
+                        visibility: None,
+                    });
+                }
+                continue;
+            }
             if node.kind() == "property_declaration" {
                 let name = node
                     .child_by_field_name("name")

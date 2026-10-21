@@ -63,44 +63,52 @@ fn extract_type_declaration_symbols(
 ) -> Result<()> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() != "type_spec" {
-            continue;
-        }
-        let mut handled = false;
-        let mut spec_cursor = child.walk();
-        for spec_child in child.children(&mut spec_cursor) {
-            match spec_child.kind() {
-                "struct_type" => {
-                    let mut st = plugin.extract_struct(child, source, file_path)?;
-                    if let Some(tp) = plugin.type_params_of(child, source) {
-                        st.metadata["type_params"] = serde_json::Value::String(tp);
+        match child.kind() {
+            // Go 1.9+ `type ID = string` uses `type_alias`, not `type_spec`.
+            "type_alias" => {
+                if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
+                    symbols.push(alias);
+                }
+            }
+            "type_spec" => {
+                let mut handled = false;
+                let mut spec_cursor = child.walk();
+                for spec_child in child.children(&mut spec_cursor) {
+                    match spec_child.kind() {
+                        "struct_type" => {
+                            let mut st = plugin.extract_struct(child, source, file_path)?;
+                            if let Some(tp) = plugin.type_params_of(child, source) {
+                                st.metadata["type_params"] = serde_json::Value::String(tp);
+                            }
+                            symbols.push(st);
+                            handled = true;
+                            break;
+                        }
+                        "interface_type" => {
+                            let iface = plugin.extract_interface(child, source, file_path)?;
+                            let iface_name = iface.name.clone();
+                            symbols.push(iface);
+                            let methods = plugin.extract_interface_methods(
+                                spec_child,
+                                &iface_name,
+                                source,
+                                file_path,
+                                symbols,
+                            )?;
+                            symbols.extend(methods);
+                            handled = true;
+                            break;
+                        }
+                        _ => {}
                     }
-                    symbols.push(st);
-                    handled = true;
-                    break;
                 }
-                "interface_type" => {
-                    let iface = plugin.extract_interface(child, source, file_path)?;
-                    let iface_name = iface.name.clone();
-                    symbols.push(iface);
-                    let methods = plugin.extract_interface_methods(
-                        spec_child,
-                        &iface_name,
-                        source,
-                        file_path,
-                        symbols,
-                    )?;
-                    symbols.extend(methods);
-                    handled = true;
-                    break;
+                if !handled {
+                    if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
+                        symbols.push(alias);
+                    }
                 }
-                _ => {}
             }
-        }
-        if !handled {
-            if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
-                symbols.push(alias);
-            }
+            _ => {}
         }
     }
     Ok(())
@@ -175,6 +183,10 @@ pub fn extract_all_single_pass(
                     "const_declaration" => {
                         ctx.symbols
                             .extend(plugin.extract_consts(node, source, &file_path_str)?);
+                    }
+                    "var_declaration" => {
+                        ctx.symbols
+                            .extend(plugin.extract_vars(node, source, &file_path_str)?);
                     }
                     "function_declaration" | "method_declaration" => {
                         let mut func = plugin.extract_function(node, source, &file_path_str)?;

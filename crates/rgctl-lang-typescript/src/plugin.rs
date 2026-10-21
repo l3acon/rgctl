@@ -64,6 +64,50 @@ impl TypeScriptPlugin {
         file_path: &str,
         interface_name: &str,
     ) -> Result<Symbol> {
+        self.extract_signature_method(
+            node,
+            source,
+            file_path,
+            interface_name,
+            serde_json::json!({
+                "language": "typescript",
+                "is_interface_method": true,
+            }),
+        )
+    }
+
+    /// `abstract foo(): void` on an abstract class.
+    pub(crate) fn extract_abstract_method_signature(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        class_name: &str,
+    ) -> Result<Symbol> {
+        let mut sym = self.extract_signature_method(
+            node,
+            source,
+            file_path,
+            class_name,
+            serde_json::json!({
+                "language": "typescript",
+                "is_abstract": true,
+            }),
+        )?;
+        if !sym.modifiers.iter().any(|m| m == "abstract") {
+            sym.modifiers.push("abstract".to_string());
+        }
+        Ok(sym)
+    }
+
+    fn extract_signature_method(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        owner_name: &str,
+        metadata: serde_json::Value,
+    ) -> Result<Symbol> {
         let mut name = None;
         let mut parameters = Vec::new();
         let mut return_type = None;
@@ -74,6 +118,11 @@ impl TypeScriptPlugin {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
+                "property_identifier" | "identifier" => {
+                    if name.is_none() {
+                        name = child.utf8_text(source).ok().map(str::to_string);
+                    }
+                }
                 "formal_parameters" => {
                     parameters = self.extract_parameters(child, source)?;
                 }
@@ -94,7 +143,7 @@ impl TypeScriptPlugin {
         Ok(Symbol {
             name: name.clone(),
             symbol_type: SymbolType::Function,
-            qualified_name: Some(format!("{interface_name}.{name}")),
+            qualified_name: Some(format!("{owner_name}.{name}")),
             location: SourceLocation {
                 file: file_path.to_string(),
                 start_line: node.start_position().row + 1,
@@ -115,11 +164,96 @@ impl TypeScriptPlugin {
             fields: vec![],
             modifiers: vec![],
             documentation: None,
+            metadata,
+        })
+    }
+
+    /// `namespace N { ... }` / ambient `module M`.
+    pub(crate) fn extract_internal_module(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string)
+            .or_else(|| {
+                let mut c = node.walk();
+                node.children(&mut c).find_map(|ch| {
+                    if matches!(ch.kind(), "identifier" | "string") {
+                        ch.utf8_text(source).ok().map(str::to_string)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or_else(|| "anonymous".to_string());
+        Ok(Symbol {
+            name: name.clone(),
+            symbol_type: SymbolType::Module,
+            qualified_name: Some(name),
+            location: SourceLocation {
+                file: file_path.to_string(),
+                start_line: node.start_position().row + 1,
+                end_line: node.end_position().row + 1,
+                start_column: node.start_position().column,
+                end_column: node.end_position().column,
+            },
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
             metadata: serde_json::json!({
                 "language": "typescript",
-                "is_interface_method": true,
+                "kind": node.kind(),
             }),
         })
+    }
+
+    /// `export { foo as bar } from './m'` → Uses edges per specifier.
+    pub(crate) fn collect_export_specifier_relations(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        relations: &mut Vec<Relation>,
+    ) {
+        if node.kind() != "export_specifier" {
+            return;
+        }
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string);
+        let alias = node
+            .child_by_field_name("alias")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string);
+        let Some(name) = name else {
+            return;
+        };
+        let exported = alias.clone().unwrap_or_else(|| name.clone());
+        let mut meta = serde_json::json!({
+            "language": "typescript",
+            "kind": "export_specifier",
+            "name": name,
+        });
+        if let Some(a) = alias {
+            meta["alias"] = serde_json::Value::String(a);
+        }
+        relations.push(Relation {
+            from: file_path.to_string(),
+            to: exported,
+            relation_type: RelationType::Uses,
+            location: source_location(node, file_path),
+            metadata: meta,
+            to_qualified_hint: None,
+            to_type_hint: None,
+        });
     }
 
     pub(crate) fn extract_export_type_symbol(
@@ -751,6 +885,16 @@ impl TypeScriptPlugin {
                 "class_declaration" | "abstract_class_declaration" => {
                     symbols.push(plugin.extract_class(node, source, file_path)?);
                 }
+                "abstract_method_signature" => {
+                    if let Some(owner) = plugin.find_containing_class_name(node, source) {
+                        symbols.push(plugin.extract_abstract_method_signature(
+                            node,
+                            source,
+                            file_path,
+                            &owner,
+                        )?);
+                    }
+                }
                 "interface_declaration" => {
                     let iface = plugin.extract_interface(node, source, file_path)?;
                     let iface_name = iface.name.clone();
@@ -774,6 +918,9 @@ impl TypeScriptPlugin {
                 }
                 "type_alias_declaration" => {
                     symbols.push(plugin.extract_type_alias(node, source, file_path)?);
+                }
+                "internal_module" | "module" => {
+                    symbols.push(plugin.extract_internal_module(node, source, file_path)?);
                 }
                 "import_statement" => {
                     symbols.extend(extract_import_symbols(
@@ -1153,11 +1300,21 @@ impl TypeScriptPlugin {
                 .child_by_field_name("name")
                 .and_then(|n| n.utf8_text(source).ok())
                 .map(str::to_string),
-            "method_definition" | "method_signature" => {
+            "method_definition" | "method_signature" | "abstract_method_signature" => {
                 let method = node
                     .child_by_field_name("name")
                     .and_then(|n| n.utf8_text(source).ok())
-                    .map(str::to_string);
+                    .map(str::to_string)
+                    .or_else(|| {
+                        let mut c = node.walk();
+                        node.children(&mut c).find_map(|ch| {
+                            if matches!(ch.kind(), "property_identifier" | "identifier") {
+                                ch.utf8_text(source).ok().map(str::to_string)
+                            } else {
+                                None
+                            }
+                        })
+                    });
                 method.and_then(|m| {
                     self.find_containing_class_name(node, source)
                         .or_else(|| self.find_containing_interface_name(node, source))
@@ -1255,11 +1412,21 @@ impl TypeScriptPlugin {
                 .child_by_field_name("name")
                 .and_then(|n| n.utf8_text(source).ok())
                 .map(str::to_string),
-            "method_definition" | "method_signature" => {
+            "method_definition" | "method_signature" | "abstract_method_signature" => {
                 let method = node
                     .child_by_field_name("name")
                     .and_then(|n| n.utf8_text(source).ok())
-                    .map(str::to_string);
+                    .map(str::to_string)
+                    .or_else(|| {
+                        let mut c = node.walk();
+                        node.children(&mut c).find_map(|ch| {
+                            if matches!(ch.kind(), "property_identifier" | "identifier") {
+                                ch.utf8_text(source).ok().map(str::to_string)
+                            } else {
+                                None
+                            }
+                        })
+                    });
                 method.and_then(|m| {
                     self.find_containing_class_name(node, source)
                         .or_else(|| self.find_containing_interface_name(node, source))

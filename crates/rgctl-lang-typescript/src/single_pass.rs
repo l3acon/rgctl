@@ -265,6 +265,49 @@ pub fn extract_all_single_pass(
                             ctx.symbols.push(sym);
                         }
                     }
+                    "export_specifier" => {
+                        plugin.collect_export_specifier_relations(
+                            node,
+                            source,
+                            &file_path_str,
+                            &mut relations,
+                        );
+                    }
+                    "abstract_method_signature" => {
+                        if let Some(owner) = ctx
+                            .scopes
+                            .current_type()
+                            .and_then(|f| f.name.clone())
+                        {
+                            ctx.symbols.push(plugin.extract_abstract_method_signature(
+                                node,
+                                source,
+                                &file_path_str,
+                                &owner,
+                            )?);
+                            plugin.emit_decorators_for_node(
+                                node,
+                                source,
+                                file_path,
+                                &mut relations,
+                            );
+                        }
+                    }
+                    "internal_module" | "module" => {
+                        let sym =
+                            plugin.extract_internal_module(node, source, &file_path_str)?;
+                        let name = sym.name.clone();
+                        ctx.symbols.push(sym);
+                        ctx.enter_scope(
+                            ScopeKind::Module,
+                            Some(name.clone()),
+                            name,
+                            node.start_byte(),
+                            node.end_byte(),
+                            true,
+                        );
+                        pushed_scope = true;
+                    }
                     "new_expression" => {
                         if let Some(from_fn) =
                             containing_function_from_scope(&ctx.scopes, &ctx.symbols)

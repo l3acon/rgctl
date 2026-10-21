@@ -748,6 +748,69 @@ impl GoPlugin {
         Ok(out)
     }
 
+    pub(crate) fn extract_vars(
+        &self,
+        var_decl: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Vec<Symbol>> {
+        let mut out = Vec::new();
+        let mut stack = vec![var_decl];
+        while let Some(node) = stack.pop() {
+            if node.kind() == "var_spec" {
+                let mut names = Vec::new();
+                if let Some(n) = node.child_by_field_name("name") {
+                    if let Ok(s) = n.utf8_text(source) {
+                        names.push(s.to_string());
+                    }
+                }
+                let mut c = node.walk();
+                for ch in node.children(&mut c) {
+                    if ch.kind() == "identifier" {
+                        if let Ok(s) = ch.utf8_text(source) {
+                            if !names.iter().any(|n| n == s) {
+                                names.push(s.to_string());
+                            }
+                        }
+                    }
+                }
+                let ty = node
+                    .child_by_field_name("type")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(str::to_string);
+                for name in names {
+                    out.push(Symbol {
+                        name: name.clone(),
+                        symbol_type: SymbolType::Variable,
+                        qualified_name: Some(name),
+                        location: SourceLocation {
+                            file: file_path.to_string(),
+                            start_line: node.start_position().row + 1,
+                            end_line: node.end_position().row + 1,
+                            start_column: node.start_position().column,
+                            end_column: node.end_position().column,
+                        },
+                        signature: ty.clone(),
+                        return_type: ty.clone(),
+                        parameters: vec![],
+                        fields: vec![],
+                        modifiers: vec![],
+                        documentation: None,
+                        metadata: serde_json::json!({
+                            "language": "go",
+                            "kind": "var_spec",
+                        }),
+                    });
+                }
+            }
+            let mut c = node.walk();
+            for ch in node.children(&mut c) {
+                stack.push(ch);
+            }
+        }
+        Ok(out)
+    }
+
     /// Best-effort method-set satisfaction → `Implements`, and embed → `Extends`.
     pub(crate) fn emit_implements_and_embeds(
         &self,
@@ -904,45 +967,57 @@ fn go_traverse_for_symbols(
         "type_declaration" => {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                if child.kind() != "type_spec" {
-                    continue;
-                }
-                let mut handled = false;
-                let mut spec_cursor = child.walk();
-                for spec_child in child.children(&mut spec_cursor) {
-                    match spec_child.kind() {
-                        "struct_type" => {
-                            let mut st = plugin.extract_struct(child, source, file_path)?;
-                            if let Some(tp) = plugin.type_params_of(child, source) {
-                                st.metadata["type_params"] = serde_json::Value::String(tp);
+                match child.kind() {
+                    "type_alias" => {
+                        if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
+                            symbols.push(alias);
+                        }
+                    }
+                    "type_spec" => {
+                        let mut handled = false;
+                        let mut spec_cursor = child.walk();
+                        for spec_child in child.children(&mut spec_cursor) {
+                            match spec_child.kind() {
+                                "struct_type" => {
+                                    let mut st =
+                                        plugin.extract_struct(child, source, file_path)?;
+                                    if let Some(tp) = plugin.type_params_of(child, source) {
+                                        st.metadata["type_params"] =
+                                            serde_json::Value::String(tp);
+                                    }
+                                    symbols.push(st);
+                                    handled = true;
+                                    break;
+                                }
+                                "interface_type" => {
+                                    let iface =
+                                        plugin.extract_interface(child, source, file_path)?;
+                                    let iface_name = iface.name.clone();
+                                    symbols.push(iface);
+                                    let methods = plugin.extract_interface_methods(
+                                        spec_child,
+                                        &iface_name,
+                                        source,
+                                        file_path,
+                                        symbols,
+                                    )?;
+                                    symbols.extend(methods);
+                                    handled = true;
+                                    break;
+                                }
+                                _ => {}
                             }
-                            symbols.push(st);
-                            handled = true;
-                            break;
                         }
-                        "interface_type" => {
-                            let iface = plugin.extract_interface(child, source, file_path)?;
-                            let iface_name = iface.name.clone();
-                            symbols.push(iface);
-                            let methods = plugin.extract_interface_methods(
-                                spec_child,
-                                &iface_name,
-                                source,
-                                file_path,
-                                symbols,
-                            )?;
-                            symbols.extend(methods);
-                            handled = true;
-                            break;
+                        if !handled {
+                            // Defined type (LF-10): `type UserID string`
+                            if let Some(alias) =
+                                plugin.extract_type_alias(child, source, file_path)?
+                            {
+                                symbols.push(alias);
+                            }
                         }
-                        _ => {}
                     }
-                }
-                if !handled {
-                    // type alias / defined type (LF-10): `type UserID string`
-                    if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
-                        symbols.push(alias);
-                    }
+                    _ => {}
                 }
             }
         }

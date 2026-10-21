@@ -33,7 +33,7 @@
     "comment": "Literal",
     "compound_statement": "CfgStatement",
     "conditional_expression": "Skip",
-    "const_declaration": "Skip",
+    "const_declaration": "Symbol",
     "const_element": "Symbol",
     "continue_statement": "CfgStatement",
     "declaration_list": "Skip",

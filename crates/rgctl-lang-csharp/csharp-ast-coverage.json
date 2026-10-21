@@ -66,7 +66,7 @@
     "enum_member_declaration_list": "Skip",
     "escape_sequence": "Literal",
     "event_declaration": "Symbol",
-    "event_field_declaration": "Skip",
+    "event_field_declaration": "Symbol",
     "explicit_interface_specifier": "Skip",
     "expression_element": "Skip",
     "expression_statement": "Skip",

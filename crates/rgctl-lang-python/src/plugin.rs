@@ -315,8 +315,12 @@ impl PythonPlugin {
         })
     }
 
-    /// Extract class fields from class-body assignments and `self.attr =` in `__init__`.
-    fn extract_class_fields(&self, block_node: Node, source: &[u8]) -> Result<Vec<Field>> {
+    /// Extract class fields: annotated attrs, body assigns, lambdas, `self`/`cls` in methods.
+    pub(crate) fn extract_class_fields(
+        &self,
+        block_node: Node,
+        source: &[u8],
+    ) -> Result<Vec<Field>> {
         let mut fields = Vec::new();
         let mut seen = std::collections::HashSet::new();
         let mut cursor = block_node.walk();
@@ -326,40 +330,52 @@ impl PythonPlugin {
                 "expression_statement" => {
                     let mut expr_cursor = child.walk();
                     for expr_child in child.children(&mut expr_cursor) {
-                        if expr_child.kind() == "assignment" {
-                            let mut assign_cursor = expr_child.walk();
-                            for assign_child in expr_child.children(&mut assign_cursor) {
-                                if assign_child.kind() == "identifier" {
-                                    let name = assign_child.utf8_text(source)?.to_string();
-                                    if seen.insert(name.clone()) {
-                                        fields.push(Field {
-                                            name,
-                                            field_type: None,
-                                            visibility: None,
-                                        });
-                                    }
-                                    break;
-                                }
+                        if expr_child.kind() != "assignment" {
+                            continue;
+                        }
+                        if expr_child.child_by_field_name("type").is_some() {
+                            if let Some((name, ty)) =
+                                crate::depth::annotated_assignment_field(expr_child, source)
+                            {
+                                crate::depth::push_field(&mut fields, &mut seen, name, ty);
+                                continue;
+                            }
+                        }
+                        if let Some(name) =
+                            crate::depth::class_lambda_binding_name(expr_child, source)
+                        {
+                            crate::depth::push_field(
+                                &mut fields,
+                                &mut seen,
+                                name,
+                                Some("Callable".to_string()),
+                            );
+                            continue;
+                        }
+                        // Plain class attr / enum member (`PENDING = "x"`).
+                        if let Some(left) = expr_child.child_by_field_name("left") {
+                            if left.kind() == "identifier" {
+                                let name = left.utf8_text(source)?.to_string();
+                                crate::depth::push_field(&mut fields, &mut seen, name, None);
                             }
                         }
                     }
                 }
                 "function_definition" => {
-                    let fn_name = child
-                        .child_by_field_name("name")
-                        .and_then(|n| n.utf8_text(source).ok().map(str::to_string))
-                        .or_else(|| {
-                            let mut c = child.walk();
-                            for n in child.children(&mut c) {
-                                if n.kind() == "identifier" {
-                                    return n.utf8_text(source).ok().map(str::to_string);
-                                }
-                            }
-                            None
-                        });
-                    if fn_name.as_deref() == Some("__init__") {
-                        self.collect_self_assignments(child, source, &mut fields, &mut seen)?;
-                        self.infer_init_param_field_types(child, source, &mut fields)?;
+                    self.harvest_method_fields(child, source, &mut fields, &mut seen)?;
+                }
+                "decorated_definition" => {
+                    // `@classmethod` / `@staticmethod` wrap the real function_definition.
+                    let mut dc = child.walk();
+                    for inner in child.children(&mut dc) {
+                        if inner.kind() == "function_definition" {
+                            self.harvest_method_fields(
+                                inner,
+                                source,
+                                &mut fields,
+                                &mut seen,
+                            )?;
+                        }
                     }
                 }
                 _ => {}
@@ -367,6 +383,24 @@ impl PythonPlugin {
         }
 
         Ok(fields)
+    }
+
+    fn harvest_method_fields(
+        &self,
+        fn_node: Node,
+        source: &[u8],
+        fields: &mut Vec<Field>,
+        seen: &mut std::collections::HashSet<String>,
+    ) -> Result<()> {
+        // All methods: harvest `self.x` / `cls.x` (not only `__init__`).
+        self.collect_self_assignments(fn_node, source, fields, seen)?;
+        let fn_name = fn_node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok().map(str::to_string));
+        if fn_name.as_deref() == Some("__init__") {
+            self.infer_init_param_field_types(fn_node, source, fields)?;
+        }
+        Ok(())
     }
 
     fn infer_init_param_field_types(
@@ -405,38 +439,14 @@ impl PythonPlugin {
     ) -> Result<()> {
         if node.kind() == "assignment" {
             if let Some(left) = node.child_by_field_name("left") {
-                if left.kind() == "attribute" {
-                    let object = left.child_by_field_name("object");
-                    let attr = left.child_by_field_name("attribute");
-                    let is_self = object
-                        .and_then(|o| o.utf8_text(source).ok())
-                        .is_some_and(|t| t == "self");
-                    if is_self {
-                        if let Some(name) = attr
-                            .and_then(|a| a.utf8_text(source).ok())
-                            .map(str::to_string)
-                        {
-                            let field_type = node
-                                .child_by_field_name("right")
-                                .and_then(|r| infer_field_type_from_rhs(r, source));
-                            if seen.insert(name.clone()) {
-                                fields.push(Field {
-                                    name,
-                                    field_type,
-                                    visibility: None,
-                                });
-                            } else if let Some(field) =
-                                fields.iter_mut().find(|f| f.name == name)
-                            {
-                                if field.field_type.is_none() {
-                                    field.field_type = field_type;
-                                }
-                            }
-                        }
-                    }
+                if let Some(name) = crate::depth::self_or_cls_attr_name(left, source) {
+                    let field_type = node
+                        .child_by_field_name("right")
+                        .and_then(|r| infer_field_type_from_rhs(r, source));
+                    crate::depth::push_field(fields, seen, name, field_type);
                 }
             } else {
-                // Fallback without field names: attribute whose first identifier is self
+                // Fallback without field names: attribute whose first identifier is self/cls
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.kind() == "attribute" {
@@ -447,15 +457,9 @@ impl PythonPlugin {
                             .collect();
                         if parts.len() >= 2 {
                             let obj = parts[0].utf8_text(source)?;
-                            if obj == "self" {
+                            if obj == "self" || obj == "cls" {
                                 let name = parts[1].utf8_text(source)?.to_string();
-                                if seen.insert(name.clone()) {
-                                    fields.push(Field {
-                                        name,
-                                        field_type: None,
-                                        visibility: None,
-                                    });
-                                }
+                                crate::depth::push_field(fields, seen, name, None);
                             }
                         }
                         break;
@@ -603,6 +607,33 @@ impl PythonPlugin {
                         file_path,
                         "python",
                     ));
+                }
+                "type_alias_statement" => {
+                    if let Some(sym) =
+                        crate::depth::extract_type_alias_statement(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "as_pattern_target" => {
+                    if let Some(sym) =
+                        crate::depth::extract_as_pattern_target(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "named_expression" => {
+                    if let Some(sym) =
+                        crate::depth::extract_named_expression(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "lambda" => {
+                    if let Some(sym) = crate::depth::extract_lambda_symbol(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
                 }
                 "decorated_definition" => {}
                 _ => {}

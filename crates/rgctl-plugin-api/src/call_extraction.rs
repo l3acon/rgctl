@@ -162,6 +162,17 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
                     stack.push((n, depth + 1));
                 }
             }
+            // C++ `obj.template meth<T>()` wraps the method in `dependent_name`.
+            "dependent_name" => {
+                let mut c = node.walk();
+                for ch in node.children(&mut c) {
+                    if matches!(ch.kind(), "template_method" | "template_function" | "field_identifier" | "identifier")
+                    {
+                        stack.push((ch, depth + 1));
+                        break;
+                    }
+                }
+            }
             "scoped_identifier" | "qualified_type" | "qualified_identifier" => {
                 if let Some(n) = last_named_child_by_field(node, "name") {
                     stack.push((n, depth + 1));

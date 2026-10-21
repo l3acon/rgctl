@@ -1,5 +1,6 @@
 //! Single-pass AST extraction for Python (`ScopeStack` + `KindDispatchTable`).
 
+use crate::depth;
 use crate::plugin::{instantiation_target, PythonPlugin};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -51,12 +52,21 @@ struct PendingCall<'a> {
     from_symbol_idx: usize,
 }
 
+/// Pending subscript → `__getitem__` / `__setitem__` after symbols exist.
+struct PendingSubscript<'a> {
+    node: Node<'a>,
+    from_symbol_idx: usize,
+    is_store: bool,
+}
+
 enum Visit<'a> {
     Pre(Node<'a>, usize),
     /// Pop one scope frame pushed on the matching Pre.
     LeaveScope,
     /// Pop a control-flow GuardBlock and decrement cognitive nesting.
     LeaveGuard,
+    /// Leave module-level typing / ImportError guard (binding harvest).
+    LeaveTypingGuard,
 }
 
 fn decorator_from_name(node: Node, source: &[u8]) -> Option<String> {
@@ -124,7 +134,9 @@ pub fn extract_all_single_pass(
     let mut ctx = SinglePassCtx::new(dispatch.clone());
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
+    let mut pending_subscripts: Vec<PendingSubscript<'_>> = Vec::new();
     let mut cognitive_nesting: u32 = 0;
+    let mut typing_guard_depth: u32 = 0;
     let mut depth_warned = false;
 
     let mut stack = vec![Visit::Pre(root, 0)];
@@ -139,6 +151,9 @@ pub fn extract_all_single_pass(
             Visit::LeaveGuard => {
                 cognitive_nesting = cognitive_nesting.saturating_sub(1);
                 let _ = ctx.leave_scope();
+            }
+            Visit::LeaveTypingGuard => {
+                typing_guard_depth = typing_guard_depth.saturating_sub(1);
             }
             Visit::Pre(node, depth) => {
                 if depth > AST_MAX_DEPTH {
@@ -212,14 +227,74 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "import_statement" | "import_from_statement" => {
-                        ctx.symbols.extend(extract_python_import_symbols(
+                        let mut imports = extract_python_import_symbols(
                             node,
                             source,
                             &file_path_str,
                             "python",
-                        ));
+                        );
+                        if typing_guard_depth > 0 {
+                            for sym in &mut imports {
+                                sym.metadata["guard"] = serde_json::json!("typing");
+                            }
+                        }
+                        ctx.symbols.extend(imports);
+                    }
+                    "type_alias_statement" => {
+                        if let Some(sym) =
+                            depth::extract_type_alias_statement(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "as_pattern_target" => {
+                        if let Some(sym) =
+                            depth::extract_as_pattern_target(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "named_expression" => {
+                        if let Some(sym) =
+                            depth::extract_named_expression(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "lambda" => {
+                        if let Some(sym) =
+                            depth::extract_lambda_symbol(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "assignment"
+                        if typing_guard_depth > 0 && ctx.scopes.current_function().is_none() =>
+                    {
+                        if let Some(mut sym) = depth::extract_simple_binding(
+                            node,
+                            source,
+                            &file_path_str,
+                            "guard_binding",
+                        ) {
+                            sym.metadata["guard"] = serde_json::json!("typing");
+                            ctx.symbols.push(sym);
+                        }
                     }
                     _ => {}
+                }
+
+                // Module-level typing / ImportError guards (harvest bindings inside).
+                if ctx.scopes.current_function().is_none() {
+                    let enter_typing = match kind {
+                        "if_statement" => depth::is_typing_guard_if(node, source),
+                        "try_statement" => depth::is_import_error_try(node, source),
+                        _ => false,
+                    };
+                    if enter_typing {
+                        typing_guard_depth = typing_guard_depth.saturating_add(1);
+                        stack.push(Visit::LeaveTypingGuard);
+                    }
                 }
 
                 // --- Calls (deferred) ---
@@ -229,6 +304,19 @@ pub fn extract_all_single_pass(
                             pending_calls.push(PendingCall {
                                 node,
                                 from_symbol_idx: idx,
+                            });
+                        }
+                    }
+                }
+
+                // --- Subscript → __getitem__ / __setitem__ (deferred) ---
+                if kind == "subscript" {
+                    if let Some(frame) = ctx.scopes.current_function() {
+                        if let Some(idx) = frame.symbol_idx {
+                            pending_subscripts.push(PendingSubscript {
+                                node,
+                                from_symbol_idx: idx,
+                                is_store: depth::subscript_is_store(node),
                             });
                         }
                     }
@@ -322,6 +410,21 @@ pub fn extract_all_single_pass(
                 to_qualified_hint: Some(target),
                 to_type_hint: None,
             });
+        }
+    }
+
+    for pending in pending_subscripts {
+        let Some(from_fn) = ctx.symbols.get(pending.from_symbol_idx) else {
+            continue;
+        };
+        if let Some(rel) = depth::maybe_subscript_call_relation(
+            pending.node,
+            source,
+            &file_path_str,
+            from_fn,
+            pending.is_store,
+        ) {
+            relations.push(rel);
         }
     }
 

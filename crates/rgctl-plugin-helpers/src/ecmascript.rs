@@ -377,7 +377,10 @@ pub fn find_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
 
 /// True for arrow / anonymous function expressions (not declarations or methods).
 pub fn is_function_expression_kind(kind: &str) -> bool {
-    matches!(kind, "arrow_function" | "function_expression")
+    matches!(
+        kind,
+        "arrow_function" | "function_expression" | "generator_function"
+    )
 }
 
 /// True when `node` is a real JS/TS callable CST node (not the anonymous

@@ -18,7 +18,7 @@
     "class_body": "Skip",
     "class_declaration": "Symbol",
     "class_modifier": "Skip",
-    "class_parameter": "Skip",
+    "class_parameter": "Symbol",
     "class_parameters": "Skip",
     "collection_literal": "Skip",
     "companion_object": "Symbol",

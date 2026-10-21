@@ -85,10 +85,11 @@ impl CppPlugin {
             message: "Type missing name".to_string(),
         })?;
 
-        // F1: fields from field_declaration in class/struct body.
-        // Enums have no fields; leave empty.
+        // Class/struct: field_declaration; enum: enumerator list.
         let fields = if matches!(symbol_type, SymbolType::Class | SymbolType::Struct) {
             extract_type_fields(node, source)?
+        } else if symbol_type == SymbolType::Enum {
+            crate::depth::extract_enumerator_fields(node, source)
         } else {
             vec![]
         };
@@ -790,7 +791,7 @@ fn extract_parameters(node: Node, source: &[u8]) -> Result<Vec<Parameter>> {
     Ok(parameters)
 }
 
-fn extract_type_fields(type_node: Node, source: &[u8]) -> Result<Vec<Field>> {
+pub(crate) fn extract_type_fields(type_node: Node, source: &[u8]) -> Result<Vec<Field>> {
     let mut fields = Vec::new();
     let Some(body) = type_node.child_by_field_name("body") else {
         return Ok(fields);

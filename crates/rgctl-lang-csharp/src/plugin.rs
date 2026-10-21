@@ -321,6 +321,66 @@ impl CSharpPlugin {
                         });
                     }
                 }
+                "event_declaration" | "event_field_declaration" => {
+                    // `event EventHandler Changed;` uses variable_declaration like fields.
+                    let visibility = field_visibility(child, source);
+                    if let Some(name) = child
+                        .child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(source).ok())
+                        .map(str::to_string)
+                    {
+                        let field_type = child
+                            .child_by_field_name("type")
+                            .and_then(|n| type_text(n, source));
+                        fields.push(Field {
+                            name,
+                            field_type,
+                            visibility,
+                        });
+                    } else if let Some(var_decl) =
+                        find_direct_child_kind(child, "variable_declaration")
+                    {
+                        let field_type = var_decl
+                            .child_by_field_name("type")
+                            .and_then(|n| type_text(n, source));
+                        let mut decl_cursor = var_decl.walk();
+                        for declarator in var_decl.children(&mut decl_cursor) {
+                            if declarator.kind() != "variable_declarator" {
+                                continue;
+                            }
+                            if let Some(name_node) = declarator.child_by_field_name("name") {
+                                fields.push(Field {
+                                    name: name_node.utf8_text(source)?.to_string(),
+                                    field_type: field_type.clone(),
+                                    visibility: visibility.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+                "enum_member_declaration" => {
+                    let name = child
+                        .child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(source).ok())
+                        .map(str::to_string)
+                        .or_else(|| {
+                            let mut c = child.walk();
+                            child.children(&mut c).find_map(|n| {
+                                if n.kind() == "identifier" {
+                                    n.utf8_text(source).ok().map(str::to_string)
+                                } else {
+                                    None
+                                }
+                            })
+                        });
+                    if let Some(name) = name {
+                        fields.push(Field {
+                            name,
+                            field_type: None,
+                            visibility: None,
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -342,7 +402,10 @@ impl CSharpPlugin {
             message: "Type missing name".to_string(),
         })?;
 
-        let fields = if symbol_type == SymbolType::Class {
+        let fields = if matches!(
+            symbol_type,
+            SymbolType::Class | SymbolType::Enum | SymbolType::Interface
+        ) {
             self.extract_type_fields(node, source)?
         } else {
             vec![]

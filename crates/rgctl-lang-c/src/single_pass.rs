@@ -1,7 +1,9 @@
 //! Single-pass AST extraction for C (`ScopeStack` + `KindDispatchTable`).
 
+use crate::depth;
 use crate::plugin::{
-    include_path_from_node, source_location, struct_name, type_definition_typedef_name, CPlugin,
+    extract_struct_fields, include_path_from_node, source_location, struct_name,
+    type_definition_typedef_name, CPlugin,
 };
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -199,6 +201,47 @@ pub fn extract_all_single_pass(
                                     typedef_name.as_deref(),
                                 )?);
                             }
+                        }
+                    }
+                    "union_specifier" => {
+                        if node.child_by_field_name("name").is_some() {
+                            let fields = extract_struct_fields(node, source).unwrap_or_default();
+                            if let Some(sym) = depth::extract_union_specifier(
+                                node,
+                                source,
+                                &file_path_str,
+                                fields,
+                            ) {
+                                let name = sym.name.clone();
+                                let qn = sym
+                                    .qualified_name
+                                    .clone()
+                                    .unwrap_or_else(|| name.clone());
+                                ctx.symbols.push(sym);
+                                ctx.enter_scope(
+                                    ScopeKind::Struct,
+                                    Some(name),
+                                    qn,
+                                    node.start_byte(),
+                                    node.end_byte(),
+                                    true,
+                                );
+                                pushed_scope = true;
+                            }
+                        }
+                    }
+                    "preproc_def" => {
+                        if let Some(sym) =
+                            depth::extract_preproc_def(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
+                        }
+                    }
+                    "preproc_function_def" => {
+                        if let Some(sym) =
+                            depth::extract_preproc_function_def(node, source, &file_path_str)
+                        {
+                            ctx.symbols.push(sym);
                         }
                     }
                     "preproc_include" | "preprocessor_include" => {

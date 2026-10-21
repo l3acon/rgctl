@@ -805,6 +805,135 @@ impl JavaScriptPlugin {
             },
         )
     }
+
+    /// Emit decorator `AnnotatedWith` relations for a single node (no child walk).
+    pub(crate) fn emit_decorators_for_node(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &Path,
+        relations: &mut Vec<Relation>,
+    ) {
+        let from = match node.kind() {
+            "class_declaration" => node
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source).ok())
+                .map(str::to_string),
+            "method_definition" => {
+                let method = node
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(str::to_string);
+                method.and_then(|m| {
+                    self.find_containing_class_name(node, source)
+                        .map(|owner| format!("{owner}.{m}"))
+                })
+            }
+            _ => None,
+        };
+        if let Some(from) = from {
+            for (decorator_name, args) in js_decorators_for_node(node, source) {
+                let mut meta = serde_json::json!({ "language": "javascript" });
+                if let Some(args) = args {
+                    meta["arguments"] = serde_json::Value::String(args);
+                }
+                relations.push(Relation {
+                    from: from.clone(),
+                    to: decorator_name,
+                    relation_type: RelationType::AnnotatedWith,
+                    location: source_location(node, &file_path.to_string_lossy()),
+                    metadata: meta,
+                    to_qualified_hint: None,
+                    to_type_hint: None,
+                });
+            }
+        }
+    }
+
+    /// `export { foo as bar } from './m'` → Uses per specifier.
+    pub(crate) fn collect_export_specifier_relations(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        relations: &mut Vec<Relation>,
+    ) {
+        if node.kind() != "export_specifier" {
+            return;
+        }
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string);
+        let alias = node
+            .child_by_field_name("alias")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(str::to_string);
+        let Some(name) = name else {
+            return;
+        };
+        let exported = alias.clone().unwrap_or_else(|| name.clone());
+        let mut meta = serde_json::json!({
+            "language": "javascript",
+            "kind": "export_specifier",
+            "name": name,
+        });
+        if let Some(a) = alias {
+            meta["alias"] = serde_json::Value::String(a);
+        }
+        relations.push(Relation {
+            from: file_path.to_string(),
+            to: exported,
+            relation_type: RelationType::Uses,
+            location: source_location(node, file_path),
+            metadata: meta,
+            to_qualified_hint: None,
+            to_type_hint: None,
+        });
+    }
+}
+
+fn js_collect_decorators(node: Node, source: &[u8]) -> Vec<(String, Option<String>)> {
+    let mut out = Vec::new();
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "decorator" {
+            if let Some((name, args)) = js_decorator_name_and_args(child, source) {
+                out.push((name, args));
+            }
+        }
+    }
+    out
+}
+
+fn js_decorators_for_node(node: Node, source: &[u8]) -> Vec<(String, Option<String>)> {
+    let mut out = js_collect_decorators(node, source);
+    if let Some(parent) = node.parent() {
+        if parent.kind() == "export_statement" {
+            out.extend(js_collect_decorators(parent, source));
+        }
+    }
+    out
+}
+
+fn js_decorator_name_and_args(decorator: Node, source: &[u8]) -> Option<(String, Option<String>)> {
+    let inner = decorator.named_child(0)?;
+    match inner.kind() {
+        "identifier" => {
+            let name = inner.utf8_text(source).ok()?.to_string();
+            Some((name, None))
+        }
+        "call_expression" => {
+            let name = inner
+                .child_by_field_name("function")
+                .and_then(|f| callee_name(f, source))?;
+            let args = inner
+                .child_by_field_name("arguments")
+                .and_then(|a| a.utf8_text(source).ok().map(str::to_string));
+            Some((name, args))
+        }
+        _ => None,
+    }
 }
 
 pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
