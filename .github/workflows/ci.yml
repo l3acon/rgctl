@@ -1,6 +1,7 @@
 # Triggers:
 #   - workflow_dispatch  — full suite manually from the Actions tab (any branch/ref).
-#   - pull_request       — always runs a cheap `cargo check` (default features).
+#   - pull_request       — always runs a cheap `cargo check` (default features) and
+#                         a no-AI-commit-trailer gate on the PR commit range.
 #                         Full format/lint/test suite only when a maintainer adds the
 #                         `ci` label (create that label in the repo if missing).
 #
@@ -31,6 +32,27 @@ env:
   FEATURES: ${{ github.event_name == 'workflow_dispatch' && inputs.features || '' }}
 
 jobs:
+  # Block PR commits that advertise AI agent co-authorship / assistance trailers
+  # (Cursor, Claude, Copilot, …). Does not rewrite history — fails the check only.
+  no-ai-commit-trailers:
+    name: no AI commit trailers
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR commits for AI agent trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/check-no-ai-commit-trailers.py \
+            --range "${BASE_SHA}..${HEAD_SHA}"
+
   # Always-on cold-compile gate so ignored/missing Cargo.lock + pre-release crates
   # cannot break `cargo build` unnoticed (#123).
   check:
