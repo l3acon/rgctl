@@ -87,6 +87,7 @@ export default function HomePage() {
           <TerminalBlock
             className="mt-8 max-w-3xl"
             lines={[
+              "curl -fsSL https://shaaf.dev/rgctl/install.sh | sh",
               "rgctl --version",
               "rgctl install --skill --tools cursor,claude,codex,antigravity,agents",
             ]}

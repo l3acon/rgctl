@@ -42,7 +42,16 @@ End-to-end guide for installing rgctl, indexing an in-tree example, and querying
 
 > **Standalone guide:** [Installation](installation.md) covers prerequisites, CLI and HTTP modes, agent pack setup, upgrading, and troubleshooting.
 
-### Option A — GitHub release (recommended)
+### Option A — One-line installer (macOS / Linux, recommended)
+
+```bash
+curl -fsSL https://shaaf.dev/rgctl/install.sh | sh
+rgctl --version
+```
+
+Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Ensure that directory is on your `PATH` (see [§2](#2-add-rgctl-to-your-path)). Source: [`scripts/install.sh`](../scripts/install.sh) (also served as `https://shaaf.dev/rgctl/install.sh`).
+
+### Option B — GitHub release (manual)
 
 Pre-built binaries are published on the project **Releases** page:
 
@@ -72,9 +81,9 @@ Expand-Archive rgctl-*-x86_64-pc-windows-msvc.zip -DestinationPath .
 .\rgctl.exe --version
 ```
 
-If no release is published yet for your platform, use [Option B](#option-b--build-from-source).
+If no release is published yet for your platform, use [Option C](#option-c--build-from-source).
 
-### Option B — Build from source
+### Option C — Build from source
 
 Requires **Rust 1.99+** (Edition 2024; [rustup.rs](https://rustup.rs/)).
 

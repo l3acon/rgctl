@@ -41,7 +41,7 @@ need_cmd mktemp
 
 json="$(curl -fsSL -H "Accept: application/vnd.github+json" "${API}")"
 # Extract browser_download_url lines (portable-ish without jq).
-urls="$(printf '%s' "${json}" | tr '"' '\n' | grep -E '^https://github.com/.*/releases/download/.*\\.tar\\.gz$' || true)"
+urls="$(printf '%s' "${json}" | tr '"' '\n' | grep -E '^https://github.com/.*/releases/download/.*\.tar\.gz$' || true)"
 if [ -z "${urls}" ]; then
   echo "error: could not list release assets from ${API}" >&2
   exit 1
