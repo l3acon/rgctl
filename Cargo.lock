@@ -2937,6 +2937,7 @@ dependencies = [
 name = "rgctl-lang-rust"
 version = "0.4.20"
 dependencies = [
+ "criterion",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",

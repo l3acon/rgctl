@@ -10,8 +10,9 @@ use crate::extract_depth::{
     extract_mod_symbol, extract_trait_symbols, extract_use_symbols, module_prefix_from_path,
     push_children, qualify_with_module, walk_depth_relations, AST_MAX_DEPTH,
 };
+use crate::single_pass::{complexity_from_metadata, extract_all_single_pass, rust_ast_handlers};
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Rust language plugin
 pub struct RustPlugin;
@@ -23,7 +24,12 @@ impl RustPlugin {
     }
 
     /// Extract function node details
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut parameters = Vec::new();
@@ -220,7 +226,7 @@ impl RustPlugin {
     }
 
     /// Extract struct or enum definition
-    fn extract_type_definition(
+    pub(crate) fn extract_type_definition(
         &self,
         node: Node,
         source: &[u8],
@@ -442,14 +448,12 @@ impl RustPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Rust grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Rust source".to_string(),
+        parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
@@ -570,11 +574,11 @@ impl LanguagePlugin for RustPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(rust_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -586,21 +590,19 @@ impl LanguagePlugin for RustPlugin {
             return Ok(None);
         }
 
-        // Re-parse to find the function node
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Rust grammar: {}", e)))?;
+        // Prefer metrics harvested during single-pass `extract_all`.
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
-            })?;
+                message: e,
+            },
+        )?;
 
-        // Find the function node by location
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1; // TreeSitter uses 0-indexed lines
 
@@ -956,5 +958,40 @@ impl Default for Item {
             item.qualified_name.as_deref(),
             Some("item::Item")
         );
+    }
+
+    #[test]
+    fn test_extract_all_single_pass_forward_calls_and_complexity() {
+        let source = br#"
+fn caller() {
+    helper();
+    if true {
+        return;
+    }
+}
+
+fn helper() {}
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let path = Path::new("test.rs");
+        let result = plugin.extract_all(path, source).unwrap();
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to.contains("helper")
+            }),
+            "forward Calls -> helper: {:?}",
+            result.relations
+        );
+        let caller = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "caller")
+            .expect("caller");
+        let from_meta = crate::single_pass::complexity_from_metadata(caller)
+            .expect("rgctl_complexity on extract_all");
+        assert_eq!(from_meta.cyclomatic, 2);
+        assert_eq!(from_meta.returns, 1);
+        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        assert_eq!(via_api, from_meta);
     }
 }

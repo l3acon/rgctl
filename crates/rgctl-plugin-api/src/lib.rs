@@ -23,7 +23,7 @@ pub use call_extraction::{
     CPP_CALL_KINDS, CSHARP_CALL_KINDS, GO_CALL_KINDS, JS_CALL_KINDS, KOTLIN_CALL_KINDS,
     PHP_CALL_KINDS, PYTHON_CALL_KINDS, RUBY_CALL_KINDS, RUST_CALL_KINDS, TS_CALL_KINDS,
     callee_name, containing_function, containing_function_from_scope, kotlin_call_callee,
-    push_call_relation, walk_calls,
+    push_call_relation, push_call_relation_from, push_call_relation_scoped, walk_calls,
 };
 
 pub use error::{Error, Result};

@@ -211,6 +211,9 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
 }
 
 /// Push a `Calls` relation when `node` is a recognized call site.
+///
+/// Resolves the enclosing function via an `O(F)` line scan. Prefer
+/// [`push_call_relation_scoped`] during single-pass extraction.
 #[allow(clippy::too_many_arguments)]
 pub fn push_call_relation(
     node: Node,
@@ -225,7 +228,48 @@ pub fn push_call_relation(
     if !call_kinds.contains(&node.kind()) {
         return;
     }
+    let Some(from_fn) = containing_function(node, function_symbols) else {
+        return;
+    };
+    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+}
 
+/// Push a `Calls` relation using [`ScopeStack`] for `O(1)` enclosing-function lookup.
+///
+/// Call sites visited before later same-file callees are extracted still resolve
+/// correctly because `symbols` is the in-progress vec and local-target matching
+/// runs at emission time — defer emission until the pass finishes if forward
+/// references must see the full symbol list (see Rust single-pass flush).
+#[allow(clippy::too_many_arguments)]
+pub fn push_call_relation_scoped(
+    node: Node,
+    source: &[u8],
+    file_path: &Path,
+    symbols: &[Symbol],
+    scopes: &ScopeStack,
+    call_kinds: &[&str],
+    language: &str,
+    relations: &mut Vec<Relation>,
+) {
+    if !call_kinds.contains(&node.kind()) {
+        return;
+    }
+    let Some(from_fn) = containing_function_from_scope(scopes, symbols) else {
+        return;
+    };
+    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+}
+
+/// Emit a `Calls` relation with a known enclosing function symbol.
+pub fn push_call_relation_from(
+    node: Node,
+    source: &[u8],
+    file_path: &Path,
+    symbols: &[Symbol],
+    from_fn: &Symbol,
+    language: &str,
+    relations: &mut Vec<Relation>,
+) {
     let callee = if language == "ruby" && node.kind() == "call" {
         ruby_call_callee(node, source)
     } else if language == "kotlin" && node.kind() == "call_expression" {
@@ -247,10 +291,6 @@ pub fn push_call_relation(
     if callee.is_empty() {
         return;
     }
-
-    let Some(from_fn) = containing_function(node, function_symbols) else {
-        return;
-    };
 
     let from = from_fn
         .qualified_name
