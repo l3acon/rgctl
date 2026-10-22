@@ -33,19 +33,42 @@ pub fn extract_enumerator_fields(enum_node: Node, source: &[u8]) -> Vec<Field> {
     fields
 }
 
-/// `union U { ... }`
+/// `union U { ... }` or anonymous `typedef union { ... } Alias;`
 pub fn extract_union_specifier(
     node: Node,
     source: &[u8],
     file_path: &str,
     fields: Vec<Field>,
 ) -> Option<Symbol> {
+    extract_union_specifier_named(node, source, file_path, fields, None)
+}
+
+/// Like [`extract_union_specifier`], with optional typedef alias override.
+pub fn extract_union_specifier_named(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    fields: Vec<Field>,
+    typedef_name: Option<&str>,
+) -> Option<Symbol> {
     if node.kind() != "union_specifier" {
         return None;
     }
-    let name = node
+    let tag = node
         .child_by_field_name("name")
-        .and_then(|n| text(n, source))?;
+        .and_then(|n| text(n, source));
+    let name = typedef_name
+        .map(str::to_string)
+        .or(tag.clone())?;
+    let mut metadata = serde_json::json!({
+        "language": "c",
+        "kind": "union_specifier",
+    });
+    if let (Some(alias), Some(tag)) = (typedef_name, tag.as_deref()) {
+        if alias != tag {
+            metadata["underlying_type"] = serde_json::Value::String(tag.to_string());
+        }
+    }
     Some(Symbol {
         name: name.clone(),
         symbol_type: SymbolType::Struct,
@@ -57,10 +80,7 @@ pub fn extract_union_specifier(
         fields,
         modifiers: vec![],
         documentation: None,
-        metadata: serde_json::json!({
-            "language": "c",
-            "kind": "union_specifier",
-        }),
+        metadata,
     })
 }
 

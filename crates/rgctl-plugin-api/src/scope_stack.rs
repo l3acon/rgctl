@@ -42,6 +42,9 @@ pub struct ScopeComplexity {
     pub return_count: u32,
     pub loc: u32,
     pub param_count: u32,
+    /// Cognitive nesting depth local to this function/closure (starts at 0;
+    /// nested lambdas do not inherit the outer frame's branch depth).
+    pub cognitive_nesting: u32,
 }
 
 /// One frame on the [`ScopeStack`].
@@ -140,13 +143,65 @@ impl ScopeStack {
         self.frames.len() as u32
     }
 
+    /// Join active module/type frame names into a qualified prefix for `local` (`.` sep).
+    pub fn qualified_name(&self, local: &str) -> String {
+        self.qualified_name_sep(local, ".")
+    }
+
+    /// Join active module/type frame names with `sep` (e.g. `::` for C++).
+    pub fn qualified_name_sep(&self, local: &str, sep: &str) -> String {
+        let mut parts: SmallVec<[&str; 4]> = SmallVec::new();
+        for frame in &self.frames {
+            if matches!(
+                frame.kind,
+                ScopeKind::Module
+                    | ScopeKind::Class
+                    | ScopeKind::Struct
+                    | ScopeKind::Enum
+                    | ScopeKind::Impl
+                    | ScopeKind::Trait
+                    | ScopeKind::Interface
+            ) {
+                if let Some(name) = frame.name.as_deref() {
+                    if !name.is_empty() {
+                        parts.push(name);
+                    }
+                }
+            }
+        }
+        if parts.is_empty() {
+            return local.to_string();
+        }
+        let mut out = parts.join(sep);
+        out.push_str(sep);
+        out.push_str(local);
+        out
+    }
+
     /// Bump cyclomatic (+1) and optional cognitive on the active function frame.
+    ///
+    /// `max_nesting` is derived from the function frame's own `cognitive_nesting`
+    /// (not `frames.len()`, which falsely includes Module/Class/Impl frames).
     pub fn note_branch(&mut self, cognitive_delta: u32) {
-        let depth = self.depth();
         if let Some(f) = self.current_function_mut() {
             f.complexity.cyclomatic = f.complexity.cyclomatic.saturating_add(1);
             f.complexity.cognitive = f.complexity.cognitive.saturating_add(cognitive_delta);
-            f.complexity.max_nesting = f.complexity.max_nesting.max(depth);
+            let nest = f.complexity.cognitive_nesting.saturating_add(1);
+            f.complexity.max_nesting = f.complexity.max_nesting.max(nest);
+        }
+    }
+
+    /// Enter a control-flow / nesting construct inside the active function.
+    pub fn enter_branch(&mut self) {
+        if let Some(f) = self.current_function_mut() {
+            f.complexity.cognitive_nesting = f.complexity.cognitive_nesting.saturating_add(1);
+        }
+    }
+
+    /// Leave a control-flow / nesting construct inside the active function.
+    pub fn leave_branch(&mut self) {
+        if let Some(f) = self.current_function_mut() {
+            f.complexity.cognitive_nesting = f.complexity.cognitive_nesting.saturating_sub(1);
         }
     }
 

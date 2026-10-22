@@ -3,7 +3,8 @@
 use crate::depth;
 use crate::plugin::{
     collect_base_relations, enrich_cpp_namespace_hint, scoped_type_name, source_location,
-    template_enclosed_type, type_name, type_name_from_type_node, using_import_names, CppPlugin,
+    template_enclosed_type, type_definition_typedef_name, type_name, type_name_from_type_node,
+    using_import_names, CppPlugin,
 };
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -12,6 +13,53 @@ use std::sync::OnceLock;
 use tree_sitter::Node;
 
 const MANIFEST_JSON: &str = include_str!("../cpp-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("alias_declaration", HandlerMask::SYMBOL),
+    ("assignment_expression", HandlerMask::AST_SKELETON),
+    ("base_class_clause", HandlerMask::RELATION),
+    ("break_statement", HandlerMask::CFG_STMT),
+    ("call_expression", HandlerMask::RELATION),
+    ("case_statement", HandlerMask::CFG_STMT),
+    ("catch_clause", HandlerMask::CFG_STMT),
+    ("class_specifier", HandlerMask::SYMBOL),
+    ("co_await_expression", HandlerMask::CFG_STMT),
+    ("co_return_statement", HandlerMask::CFG_STMT),
+    ("co_yield_statement", HandlerMask::CFG_STMT),
+    ("compound_statement", HandlerMask::CFG_STMT),
+    ("concept_definition", HandlerMask::SYMBOL),
+    ("continue_statement", HandlerMask::CFG_STMT),
+    ("do_statement", HandlerMask::CFG_STMT),
+    ("else_clause", HandlerMask::CFG_STMT),
+    ("enum_specifier", HandlerMask::SYMBOL),
+    ("enumerator", HandlerMask::SYMBOL),
+    ("field_declaration", HandlerMask::SYMBOL),
+    ("for_range_loop", HandlerMask::CFG_STMT),
+    ("for_statement", HandlerMask::CFG_STMT),
+    ("function_definition", HandlerMask::SYMBOL),
+    ("goto_statement", HandlerMask::CFG_STMT),
+    ("if_statement", HandlerMask::CFG_STMT),
+    ("namespace_definition", HandlerMask::SYMBOL),
+    ("new_expression", HandlerMask::RELATION),
+    ("preproc_def", HandlerMask::SYMBOL),
+    ("preproc_function_def", HandlerMask::SYMBOL),
+    ("preproc_if", HandlerMask::CFG_STMT),
+    ("preproc_ifdef", HandlerMask::CFG_STMT),
+    ("preproc_include", HandlerMask::RELATION),
+    ("return_statement", HandlerMask::CFG_STMT),
+    ("struct_specifier", HandlerMask::SYMBOL),
+    ("switch_statement", HandlerMask::CFG_STMT),
+    ("template_function", HandlerMask::RELATION),
+    ("template_method", HandlerMask::RELATION),
+    ("throw_statement", HandlerMask::CFG_STMT),
+    ("try_statement", HandlerMask::CFG_STMT),
+    ("type_definition", HandlerMask::SYMBOL),
+    ("union_specifier", HandlerMask::SYMBOL),
+    ("using_declaration", HandlerMask::RELATION),
+    ("while_statement", HandlerMask::CFG_STMT),
+];
+
 const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
@@ -24,15 +72,14 @@ fn cpp_grammar() -> tree_sitter::Language {
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn cpp_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let (handlers, _) = coverage_tables_from_manifest(&cpp_grammar(), MANIFEST_JSON);
-        handlers
+        
+        handler_table_from_kinds(&cpp_grammar(), HANDLED_KINDS)
     })
 }
 
 fn cpp_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let (_, dispatch) = coverage_tables_from_manifest(&cpp_grammar(), MANIFEST_JSON);
-        dispatch
+        dispatch_table_from_manifest(&cpp_grammar(), MANIFEST_JSON)
     })
 }
 
@@ -63,10 +110,9 @@ pub fn extract_all_single_pass(
     let file_path_str = file_path.to_string_lossy();
     let dispatch = cpp_dispatch();
 
-    let mut ctx = SinglePassCtx::new(dispatch.clone());
+    let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
-    let mut cognitive_nesting: u32 = 0;
     let mut depth_warned = false;
 
     let mut stack = vec![Visit::Pre(root, 0, None)];
@@ -79,7 +125,7 @@ pub fn extract_all_single_pass(
                 }
             }
             Visit::LeaveGuard => {
-                cognitive_nesting = cognitive_nesting.saturating_sub(1);
+                ctx.scopes.leave_branch();
                 let _ = ctx.leave_scope();
             }
             Visit::Pre(node, depth, scope) => {
@@ -95,7 +141,8 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let _mask = dispatch.lookup(node.kind_id());
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask; // keep for future passive skip
                 let kind = node.kind();
 
                 let next_scope = match kind {
@@ -304,6 +351,7 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "type_definition" => {
+                        let typedef_name = type_definition_typedef_name(node, source);
                         let mut cursor = node.walk();
                         for child in node.children(&mut cursor) {
                             if matches!(child.kind(), "class_specifier" | "struct_specifier")
@@ -320,6 +368,18 @@ pub fn extract_all_single_pass(
                                     &file_path_str,
                                     st,
                                 )?);
+                            } else if child.kind() == "union_specifier"
+                                && (type_name(child, source).is_some() || typedef_name.is_some())
+                            {
+                                if let Some(sym) = depth::extract_union_specifier_named(
+                                    child,
+                                    source,
+                                    &file_path_str,
+                                    &ctx.scopes,
+                                    typedef_name.as_deref(),
+                                ) {
+                                    ctx.symbols.push(sym);
+                                }
                             }
                         }
                     }
@@ -342,29 +402,42 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "alias_declaration" => {
-                        if let Some(sym) =
-                            depth::extract_alias_declaration(node, source, &file_path_str)
-                        {
+                        if let Some(sym) = depth::extract_alias_declaration(
+                            node,
+                            source,
+                            &file_path_str,
+                            &ctx.scopes,
+                        ) {
                             ctx.symbols.push(sym);
                         }
                     }
                     "concept_definition" => {
-                        if let Some(sym) =
-                            depth::extract_concept_definition(node, source, &file_path_str)
-                        {
+                        if let Some(sym) = depth::extract_concept_definition(
+                            node,
+                            source,
+                            &file_path_str,
+                            &ctx.scopes,
+                        ) {
                             ctx.symbols.push(sym);
                         }
                     }
                     "union_specifier" => {
-                        if let Some(sym) =
-                            depth::extract_union_specifier(node, source, &file_path_str)
-                        {
+                        if let Some(sym) = depth::extract_union_specifier(
+                            node,
+                            source,
+                            &file_path_str,
+                            &ctx.scopes,
+                        ) {
                             let name = sym.name.clone();
+                            let qn = sym
+                                .qualified_name
+                                .clone()
+                                .unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Struct,
-                                Some(name.clone()),
-                                name,
+                                Some(name),
+                                qn,
                                 node.start_byte(),
                                 node.end_byte(),
                                 true,
@@ -472,16 +545,17 @@ pub fn extract_all_single_pass(
                         | "switch_statement"
                         | "while_statement"
                         | "for_statement"
+                        | "for_range_loop"
                         | "do_statement"
                         | "conditional_expression"
                         | "catch_clause" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
-                            if let Some(f) = ctx.scopes.current_function_mut() {
-                                f.complexity.max_nesting =
-                                    f.complexity.max_nesting.max(cognitive_nesting + 1);
-                            }
-                            cognitive_nesting = cognitive_nesting.saturating_add(1);
+                            ctx.scopes.enter_branch();
                             let d = ctx.scopes.depth();
                             ctx.scopes.push(ScopeFrame::new(
                                 ScopeKind::GuardBlock,
@@ -494,7 +568,11 @@ pub fn extract_all_single_pass(
                             stack.push(Visit::LeaveGuard);
                         }
                         "case_statement" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
                         "return_statement" => {
@@ -508,10 +586,10 @@ pub fn extract_all_single_pass(
                     stack.push(Visit::LeaveScope);
                 }
 
-                let mut cursor = node.walk();
-                let children: Vec<Node> = node.children(&mut cursor).collect();
-                for child in children.into_iter().rev() {
-                    stack.push(Visit::Pre(child, depth + 1, child_scope.clone()));
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1, child_scope.clone()));
+                    }
                 }
             }
         }

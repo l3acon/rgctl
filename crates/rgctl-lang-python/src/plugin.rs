@@ -630,8 +630,13 @@ impl PythonPlugin {
                     }
                 }
                 "lambda" => {
-                    if let Some(sym) = crate::depth::extract_lambda_symbol(node, source, file_path)
-                    {
+                    let class_qn = containing_class_name(node, source);
+                    if let Some(sym) = crate::depth::extract_lambda_symbol(
+                        node,
+                        source,
+                        file_path,
+                        class_qn.as_deref(),
+                    ) {
                         symbols.push(sym);
                     }
                 }

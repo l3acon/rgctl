@@ -680,6 +680,89 @@ impl PhpPlugin {
         Ok(())
     }
 
+    /// Top-level / class `const FOO = 1;` → Variable symbols (top-level) or Field names.
+    pub(crate) fn extract_const_elements(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Result<Vec<(String, Option<String>)>> {
+        if node.kind() != "const_declaration" {
+            return Ok(Vec::new());
+        }
+        let visibility = visibility_modifiers(node, source).join(" ");
+        let vis = if visibility.is_empty() {
+            Some("const".to_string())
+        } else {
+            Some(format!("{visibility} const"))
+        };
+        let mut out = Vec::new();
+        let mut cursor = node.walk();
+        for elem in node.children(&mut cursor) {
+            if elem.kind() != "const_element" {
+                continue;
+            }
+            if let Some(name_node) = elem
+                .children(&mut elem.walk())
+                .find(|c| c.kind() == "name")
+            {
+                let name = name_node.utf8_text(source)?.to_string();
+                out.push((name, vis.clone()));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Emit top-level `const` as Variable symbols.
+    pub(crate) fn extract_const(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        namespace: Option<&str>,
+    ) -> Result<Vec<Symbol>> {
+        let mut symbols = Vec::new();
+        for (name, _) in self.extract_const_elements(node, source)? {
+            let qn = qualify(namespace, &name);
+            symbols.push(Symbol {
+                name: name.clone(),
+                symbol_type: SymbolType::Variable,
+                qualified_name: Some(qn),
+                location: source_location(node, file_path),
+                signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+                return_type: None,
+                parameters: vec![],
+                fields: vec![],
+                modifiers: visibility_modifiers(node, source),
+                documentation: None,
+                metadata: serde_json::json!({
+                    "language": "php",
+                    "kind": "const_declaration",
+                }),
+            });
+        }
+        Ok(symbols)
+    }
+
+    /// Append class-constant fields onto an existing class/interface/trait/enum symbol.
+    pub(crate) fn append_const_fields(
+        &self,
+        node: Node,
+        source: &[u8],
+        class_sym: &mut Symbol,
+    ) -> Result<()> {
+        for (name, vis) in self.extract_const_elements(node, source)? {
+            if class_sym.fields.iter().any(|f| f.name == name) {
+                continue;
+            }
+            class_sym.fields.push(Field {
+                name,
+                field_type: None,
+                visibility: vis,
+            });
+        }
+        Ok(())
+    }
+
     pub(crate) fn extract_namespace_imports(
         &self,
         node: Node,

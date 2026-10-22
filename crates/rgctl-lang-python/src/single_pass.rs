@@ -14,6 +14,53 @@ use std::sync::OnceLock;
 use tree_sitter::Node;
 
 const MANIFEST_JSON: &str = include_str!("../python-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("aliased_import", HandlerMask::RELATION),
+    ("as_pattern_target", HandlerMask::SYMBOL),
+    ("assert_statement", HandlerMask::CFG_STMT),
+    ("assignment", HandlerMask::AST_SKELETON),
+    ("attribute", HandlerMask::RELATION),
+    ("augmented_assignment", HandlerMask::AST_SKELETON),
+    ("block", HandlerMask::CFG_STMT),
+    ("break_statement", HandlerMask::CFG_STMT),
+    ("call", HandlerMask::RELATION),
+    ("case_clause", HandlerMask::CFG_STMT),
+    ("class_definition", HandlerMask::SYMBOL),
+    ("continue_statement", HandlerMask::CFG_STMT),
+    ("decorated_definition", HandlerMask::RELATION),
+    ("decorator", HandlerMask::RELATION),
+    ("dictionary_comprehension", HandlerMask::CFG_STMT),
+    ("elif_clause", HandlerMask::CFG_STMT),
+    ("else_clause", HandlerMask::CFG_STMT),
+    ("except_clause", HandlerMask::CFG_STMT),
+    ("finally_clause", HandlerMask::CFG_STMT),
+    ("for_statement", HandlerMask::CFG_STMT),
+    ("function_definition", HandlerMask::SYMBOL),
+    ("future_import_statement", HandlerMask::RELATION),
+    ("if_statement", HandlerMask::CFG_STMT),
+    ("import_from_statement", HandlerMask::RELATION),
+    ("import_prefix", HandlerMask::RELATION),
+    ("import_statement", HandlerMask::RELATION),
+    ("lambda", HandlerMask::SYMBOL),
+    ("list_comprehension", HandlerMask::CFG_STMT),
+    ("match_statement", HandlerMask::CFG_STMT),
+    ("named_expression", HandlerMask::SYMBOL),
+    ("raise_statement", HandlerMask::CFG_STMT),
+    ("relative_import", HandlerMask::RELATION),
+    ("return_statement", HandlerMask::CFG_STMT),
+    ("set_comprehension", HandlerMask::CFG_STMT),
+    ("subscript", HandlerMask::RELATION),
+    ("try_statement", HandlerMask::CFG_STMT),
+    ("type_alias_statement", HandlerMask::SYMBOL),
+    ("while_statement", HandlerMask::CFG_STMT),
+    ("wildcard_import", HandlerMask::RELATION),
+    ("with_item", HandlerMask::CFG_STMT),
+    ("with_statement", HandlerMask::CFG_STMT),
+    ("yield", HandlerMask::CFG_STMT),
+];
+
 const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
@@ -26,25 +73,17 @@ fn python_grammar() -> tree_sitter::Language {
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn python_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let (handlers, _) = coverage_tables_from_manifest(&python_grammar(), MANIFEST_JSON);
-        handlers
+        
+        handler_table_from_kinds(&python_grammar(), HANDLED_KINDS)
     })
 }
 
 fn python_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let (_, dispatch) = coverage_tables_from_manifest(&python_grammar(), MANIFEST_JSON);
-        dispatch
+        dispatch_table_from_manifest(&python_grammar(), MANIFEST_JSON)
     })
 }
 
-fn push_children<'a>(stack: &mut Vec<(Node<'a>, usize)>, node: Node<'a>, depth: usize) {
-    let mut cursor = node.walk();
-    let children: Vec<Node> = node.children(&mut cursor).collect();
-    for child in children.into_iter().rev() {
-        stack.push((child, depth + 1));
-    }
-}
 
 /// Pending call site: flush after the full symbol list exists (forward refs).
 struct PendingCall<'a> {
@@ -131,11 +170,10 @@ pub fn extract_all_single_pass(
     let file_path_str = file_path.to_string_lossy();
     let dispatch = python_dispatch();
 
-    let mut ctx = SinglePassCtx::new(dispatch.clone());
+    let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
     let mut pending_subscripts: Vec<PendingSubscript<'_>> = Vec::new();
-    let mut cognitive_nesting: u32 = 0;
     let mut typing_guard_depth: u32 = 0;
     let mut depth_warned = false;
 
@@ -149,7 +187,7 @@ pub fn extract_all_single_pass(
                 }
             }
             Visit::LeaveGuard => {
-                cognitive_nesting = cognitive_nesting.saturating_sub(1);
+                ctx.scopes.leave_branch();
                 let _ = ctx.leave_scope();
             }
             Visit::LeaveTypingGuard => {
@@ -168,7 +206,8 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let _mask = dispatch.lookup(node.kind_id());
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask; // keep for future passive skip
                 let kind = node.kind();
 
                 // --- Symbols + scope enter ---
@@ -262,9 +301,19 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "lambda" => {
-                        if let Some(sym) =
-                            depth::extract_lambda_symbol(node, source, &file_path_str)
-                        {
+                        let class_qn = ctx.scopes.current_type().and_then(|f| {
+                            if f.kind == ScopeKind::Class {
+                                Some(f.qualified_prefix.clone())
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(sym) = depth::extract_lambda_symbol(
+                            node,
+                            source,
+                            &file_path_str,
+                            class_qn.as_deref(),
+                        ) {
                             ctx.symbols.push(sym);
                         }
                     }
@@ -332,13 +381,13 @@ pub fn extract_all_single_pass(
                         | "for_statement"
                         | "match_statement"
                         | "with_statement" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
-                            if let Some(f) = ctx.scopes.current_function_mut() {
-                                f.complexity.max_nesting =
-                                    f.complexity.max_nesting.max(cognitive_nesting + 1);
-                            }
-                            cognitive_nesting = cognitive_nesting.saturating_add(1);
+                            ctx.scopes.enter_branch();
                             let scope_depth = ctx.scopes.depth();
                             ctx.scopes.push(ScopeFrame::new(
                                 ScopeKind::GuardBlock,
@@ -352,7 +401,11 @@ pub fn extract_all_single_pass(
                         }
                         "elif_clause" | "except_clause" | "assert_statement"
                         | "boolean_operator" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
                         "return_statement" => {
@@ -366,10 +419,10 @@ pub fn extract_all_single_pass(
                 if pushed_scope {
                     stack.push(Visit::LeaveScope);
                 }
-                let mut child_stack = Vec::new();
-                push_children(&mut child_stack, node, depth);
-                for (child, child_depth) in child_stack {
-                    stack.push(Visit::Pre(child, child_depth));
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
                 }
             }
         }
@@ -417,12 +470,20 @@ pub fn extract_all_single_pass(
         let Some(from_fn) = ctx.symbols.get(pending.from_symbol_idx) else {
             continue;
         };
+        let enclosing_class = from_fn.qualified_name.as_deref().and_then(|qn| {
+            let owner = qn.rsplit_once('.').map(|(o, _)| o)?;
+            ctx.symbols.iter().find(|s| {
+                s.symbol_type == SymbolType::Class
+                    && (s.qualified_name.as_deref() == Some(owner) || s.name == owner)
+            })
+        });
         if let Some(rel) = depth::maybe_subscript_call_relation(
             pending.node,
             source,
             &file_path_str,
             from_fn,
             pending.is_store,
+            enclosing_class,
         ) {
             relations.push(rel);
         }

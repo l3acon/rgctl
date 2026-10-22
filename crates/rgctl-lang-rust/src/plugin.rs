@@ -7,6 +7,7 @@ use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 
 use crate::extract_depth::{
+    extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
     extract_macro_definition, extract_mod_symbol, extract_trait_symbols, extract_type_item,
     extract_use_symbols, module_prefix_from_path, push_children, qualify_with_module,
     walk_depth_relations, AST_MAX_DEPTH,
@@ -24,12 +25,16 @@ impl RustPlugin {
         Ok(Self)
     }
 
-    /// Extract function node details
+    /// Extract function node details.
+    ///
+    /// `impl_type` is the active `impl` receiver from [`ScopeStack`] (single-pass)
+    /// or a parent CST walk (legacy `symbols_from_tree`).
     pub(crate) fn extract_function(
         &self,
         node: Node,
         source: &[u8],
         file_path: &str,
+        impl_type: Option<&str>,
     ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
@@ -92,11 +97,15 @@ impl RustPlugin {
             message: "Function missing name".to_string(),
         })?;
 
-        let impl_type = self.find_containing_impl_type(node, source);
         let module_prefix = module_prefix_from_path(Path::new(file_path));
         let is_constructor = raw_name == "new" && impl_type.is_some();
+        let symbol_type = if impl_type.is_some() {
+            SymbolType::Method
+        } else {
+            SymbolType::Function
+        };
         let (qualified_name, metadata) = if is_constructor {
-            let ty = impl_type.clone().unwrap_or_else(|| "Unknown".to_string());
+            let ty = impl_type.unwrap_or("Unknown");
             let local = format!("{ty}::<init>");
             (
                 Some(qualify_with_module(module_prefix.as_deref(), &local)),
@@ -119,7 +128,7 @@ impl RustPlugin {
 
         Ok(Symbol {
             name: raw_name,
-            symbol_type: SymbolType::Function,
+            symbol_type,
             qualified_name,
             location: SourceLocation {
                 file: file_path.to_string(),
@@ -145,6 +154,7 @@ impl RustPlugin {
         })
     }
 
+    /// Parent-walk fallback when no [`ScopeStack`] is available (legacy symbol walk).
     fn find_containing_impl_type(&self, node: Node, source: &[u8]) -> Option<String> {
         let mut current = node;
         while let Some(parent) = current.parent() {
@@ -152,7 +162,13 @@ impl RustPlugin {
                 if let Some(ty) = parent
                     .child_by_field_name("type")
                     .and_then(|n| n.utf8_text(source).ok())
-                    .map(str::to_string)
+                    .map(|s| {
+                        s.rsplit("::")
+                            .next()
+                            .unwrap_or(s)
+                            .trim()
+                            .to_string()
+                    })
                 {
                     return Some(ty);
                 }
@@ -515,7 +531,13 @@ impl RustPlugin {
 
             match node.kind() {
                 "function_item" => {
-                    symbols.push(self.extract_function(node, source, &file_path_str)?);
+                    let impl_ty = self.find_containing_impl_type(node, source);
+                    symbols.push(self.extract_function(
+                        node,
+                        source,
+                        &file_path_str,
+                        impl_ty.as_deref(),
+                    )?);
                 }
                 "struct_item" => {
                     symbols.push(self.extract_type_definition(node, source, &file_path_str, false)?);
@@ -547,6 +569,67 @@ impl RustPlugin {
                 "macro_definition" => {
                     if let Some(m) = extract_macro_definition(node, source, &file_path_str) {
                         symbols.push(m);
+                    }
+                }
+                "associated_type" => {
+                    // Trait-associated types are emitted inside `extract_trait_symbols`.
+                    let under_trait = {
+                        let mut cur = node;
+                        let mut found = false;
+                        while let Some(parent) = cur.parent() {
+                            if parent.kind() == "trait_item" {
+                                found = true;
+                                break;
+                            }
+                            if matches!(
+                                parent.kind(),
+                                "function_item" | "impl_item" | "struct_item" | "enum_item"
+                            ) {
+                                break;
+                            }
+                            cur = parent;
+                        }
+                        found
+                    };
+                    if !under_trait {
+                        if let Some(at) =
+                            extract_associated_type(node, source, &file_path_str, None)
+                        {
+                            symbols.push(at);
+                        }
+                    }
+                }
+                "enum_variant" => {
+                    let mut cur = node;
+                    let mut enum_name = None;
+                    let mut enum_qn = None;
+                    while let Some(parent) = cur.parent() {
+                        if parent.kind() == "enum_item" {
+                            enum_name = parent
+                                .child_by_field_name("name")
+                                .and_then(|n| n.utf8_text(source).ok())
+                                .map(str::to_string);
+                            if let Some(ref name) = enum_name {
+                                enum_qn = Some(qualify_with_module(
+                                    module_prefix.as_deref(),
+                                    name,
+                                ));
+                            }
+                            break;
+                        }
+                        cur = parent;
+                    }
+                    if let (Some(en), Some(eqn)) = (enum_name, enum_qn) {
+                        if let Some(v) =
+                            extract_enum_variant_symbol(node, source, &file_path_str, &en, &eqn)
+                        {
+                            symbols.push(v);
+                        }
+                    }
+                }
+                "extern_crate_declaration" => {
+                    if let Some(c) = extract_extern_crate(node, source, &file_path_str) {
+                        symbols.push(c);
                     }
                 }
                 _ => {}
@@ -767,7 +850,7 @@ impl User {
         let ctor = symbols
             .iter()
             .find(|s| {
-                s.symbol_type == SymbolType::Function
+                matches!(s.symbol_type, SymbolType::Function | SymbolType::Method)
                     && s.metadata.get("is_constructor").and_then(|v| v.as_bool()) == Some(true)
             })
             .expect("constructor");
@@ -793,9 +876,18 @@ impl User {
             .extract_symbols(Path::new("test.rs"), source)
             .unwrap();
 
-        assert_eq!(symbols.len(), 1);
-        assert_eq!(symbols[0].name, "Status");
-        assert_eq!(symbols[0].symbol_type, SymbolType::Enum);
+        let status = symbols
+            .iter()
+            .find(|s| s.name == "Status" && s.symbol_type == SymbolType::Enum)
+            .expect("Status enum");
+        assert_eq!(status.fields.len(), 3);
+        assert!(symbols.iter().any(|s| {
+            s.name == "Active"
+                && s.metadata
+                    .get("is_enum_variant")
+                    .and_then(|v| v.as_bool())
+                    == Some(true)
+        }));
     }
 
     #[test]

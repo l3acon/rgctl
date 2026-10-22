@@ -395,7 +395,10 @@ fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Pre
     for symbol in symbols {
         let body = symbol_body_from_source(source, &offsets, symbol);
         let code_hash = body.map(hash_code);
-        let token_bloom = if matches!(symbol.symbol_type, SymbolType::Function) {
+        let token_bloom = if matches!(
+            symbol.symbol_type,
+            SymbolType::Function | SymbolType::Method
+        ) {
             Some(build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),

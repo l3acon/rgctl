@@ -12,6 +12,54 @@ use std::sync::OnceLock;
 use tree_sitter::Node;
 
 const MANIFEST_JSON: &str = include_str!("../javascript-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("arrow_function", HandlerMask::SYMBOL),
+    ("assignment_expression", HandlerMask::AST_SKELETON),
+    ("augmented_assignment_expression", HandlerMask::AST_SKELETON),
+    ("await_expression", HandlerMask::CFG_STMT),
+    ("break_statement", HandlerMask::CFG_STMT),
+    ("call_expression", HandlerMask::RELATION),
+    ("catch_clause", HandlerMask::CFG_STMT),
+    ("class", HandlerMask::SYMBOL),
+    ("class_declaration", HandlerMask::SYMBOL),
+    ("continue_statement", HandlerMask::CFG_STMT),
+    ("decorator", HandlerMask::RELATION),
+    ("do_statement", HandlerMask::CFG_STMT),
+    ("else_clause", HandlerMask::CFG_STMT),
+    ("export_specifier", HandlerMask::RELATION),
+    ("export_statement", HandlerMask::RELATION),
+    ("field_definition", HandlerMask::SYMBOL),
+    ("finally_clause", HandlerMask::CFG_STMT),
+    ("for_in_statement", HandlerMask::CFG_STMT),
+    ("for_statement", HandlerMask::CFG_STMT),
+    ("function_declaration", HandlerMask::SYMBOL),
+    ("function_expression", HandlerMask::SYMBOL),
+    ("generator_function", HandlerMask::SYMBOL),
+    ("generator_function_declaration", HandlerMask::SYMBOL),
+    ("if_statement", HandlerMask::CFG_STMT),
+    ("import", HandlerMask::RELATION),
+    ("import_attribute", HandlerMask::RELATION),
+    ("import_clause", HandlerMask::RELATION),
+    ("import_specifier", HandlerMask::RELATION),
+    ("import_statement", HandlerMask::RELATION),
+    ("method_definition", HandlerMask::SYMBOL),
+    ("named_imports", HandlerMask::RELATION),
+    ("namespace_import", HandlerMask::RELATION),
+    ("new_expression", HandlerMask::RELATION),
+    ("return_statement", HandlerMask::CFG_STMT),
+    ("statement_block", HandlerMask::CFG_STMT),
+    ("switch_case", HandlerMask::CFG_STMT),
+    ("switch_default", HandlerMask::CFG_STMT),
+    ("switch_statement", HandlerMask::CFG_STMT),
+    ("ternary_expression", HandlerMask::CFG_STMT),
+    ("throw_statement", HandlerMask::CFG_STMT),
+    ("try_statement", HandlerMask::CFG_STMT),
+    ("while_statement", HandlerMask::CFG_STMT),
+    ("yield_expression", HandlerMask::CFG_STMT),
+];
+
 const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
@@ -24,25 +72,17 @@ fn js_grammar() -> tree_sitter::Language {
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn javascript_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let (handlers, _) = coverage_tables_from_manifest(&js_grammar(), MANIFEST_JSON);
-        handlers
+        
+        handler_table_from_kinds(&js_grammar(), HANDLED_KINDS)
     })
 }
 
 fn js_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let (_, dispatch) = coverage_tables_from_manifest(&js_grammar(), MANIFEST_JSON);
-        dispatch
+        dispatch_table_from_manifest(&js_grammar(), MANIFEST_JSON)
     })
 }
 
-fn push_children<'a>(stack: &mut Vec<(Node<'a>, usize)>, node: Node<'a>, depth: usize) {
-    let mut cursor = node.walk();
-    let children: Vec<Node<'a>> = node.children(&mut cursor).collect();
-    for child in children.into_iter().rev() {
-        stack.push((child, depth + 1));
-    }
-}
 
 fn function_scope_kind(node: Node) -> ScopeKind {
     match node.kind() {
@@ -82,10 +122,9 @@ pub fn extract_all_single_pass(
     let file_path_str = file_path.to_string_lossy();
     let dispatch = js_dispatch();
 
-    let mut ctx = SinglePassCtx::new(dispatch.clone());
+    let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
-    let mut cognitive_nesting: u32 = 0;
 
     let mut stack = vec![Visit::Pre(root, 0)];
 
@@ -97,7 +136,7 @@ pub fn extract_all_single_pass(
                 }
             }
             Visit::LeaveGuard => {
-                cognitive_nesting = cognitive_nesting.saturating_sub(1);
+                ctx.scopes.leave_branch();
                 let _ = ctx.leave_scope();
             }
             Visit::Pre(node, depth) => {
@@ -105,7 +144,8 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let _mask = dispatch.lookup(node.kind_id());
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask; // keep for future passive skip
                 let kind = node.kind();
                 let mut pushed_scope = false;
 
@@ -236,15 +276,16 @@ pub fn extract_all_single_pass(
                         | "switch_statement"
                         | "while_statement"
                         | "for_statement"
+                        | "for_in_statement"
                         | "catch_clause"
                         | "ternary_expression" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
-                            if let Some(f) = ctx.scopes.current_function_mut() {
-                                f.complexity.max_nesting =
-                                    f.complexity.max_nesting.max(cognitive_nesting + 1);
-                            }
-                            cognitive_nesting = cognitive_nesting.saturating_add(1);
+                            ctx.scopes.enter_branch();
                             let d = ctx.scopes.depth();
                             ctx.scopes.push(ScopeFrame::new(
                                 ScopeKind::GuardBlock,
@@ -257,7 +298,11 @@ pub fn extract_all_single_pass(
                             stack.push(Visit::LeaveGuard);
                         }
                         "case" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
                         "return_statement" => {
@@ -270,10 +315,10 @@ pub fn extract_all_single_pass(
                 if pushed_scope {
                     stack.push(Visit::LeaveScope);
                 }
-                let mut child_stack = Vec::new();
-                push_children(&mut child_stack, node, depth);
-                for (child, child_depth) in child_stack {
-                    stack.push(Visit::Pre(child, child_depth));
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
                 }
             }
         }

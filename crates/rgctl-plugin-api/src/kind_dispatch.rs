@@ -3,7 +3,10 @@
 use crate::HandlerMask;
 use std::sync::OnceLock;
 
-/// Practical upper bound for named kind ids in Tier-1 grammars (fits L1).
+/// Minimum capacity for kind-id tables (L1-friendly default).
+///
+/// Grammars with more total token + rule kinds (C++, TypeScript, C#, PHP, Kotlin)
+/// size up to `language.node_kind_count()` via [`KindDispatchTable::from_coverage`].
 pub const MAX_KIND_ID: usize = 512;
 
 /// Direct-indexed handler mask table: `slots[kind_id]`.
@@ -21,12 +24,18 @@ impl Default for KindDispatchTable {
 impl KindDispatchTable {
     /// All-`SKIP` table of [`MAX_KIND_ID`] slots.
     pub fn empty() -> Self {
+        Self::with_capacity(MAX_KIND_ID)
+    }
+
+    /// All-`SKIP` table with explicit capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        let n = capacity.max(1);
         Self {
-            slots: vec![HandlerMask::SKIP; MAX_KIND_ID].into_boxed_slice(),
+            slots: vec![HandlerMask::SKIP; n].into_boxed_slice(),
         }
     }
 
-    /// Build from `(kind_id, mask)` pairs (ids ≥ [`MAX_KIND_ID`] are ignored).
+    /// Build from `(kind_id, mask)` pairs (grows if needed).
     pub fn from_entries(entries: impl IntoIterator<Item = (u16, HandlerMask)>) -> Self {
         let mut table = Self::empty();
         for (id, mask) in entries {
@@ -36,11 +45,15 @@ impl KindDispatchTable {
     }
 
     /// Build from coverage `(kind_name, label)` using a live grammar.
+    ///
+    /// Capacity is `language.node_kind_count().max(MAX_KIND_ID)` so kinds with
+    /// `kind_id >= 512` are not silently dropped.
     pub fn from_coverage(
         language: &tree_sitter::Language,
         entries: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
     ) -> Self {
-        let mut table = Self::empty();
+        let capacity = (language.node_kind_count() as usize).max(MAX_KIND_ID);
+        let mut table = Self::with_capacity(capacity);
         for (name, label) in entries {
             let Some(mask) = HandlerMask::from_coverage_label(label.as_ref()) else {
                 continue;
@@ -54,12 +67,20 @@ impl KindDispatchTable {
         table
     }
 
-    /// Set/union mask at `kind_id`.
-    pub fn set(&mut self, kind_id: u16, mask: HandlerMask) {
-        let idx = kind_id as usize;
-        if idx >= self.slots.len() {
+    fn ensure_capacity(&mut self, idx: usize) {
+        if idx < self.slots.len() {
             return;
         }
+        let mut slots = Vec::with_capacity(idx + 1);
+        slots.extend_from_slice(&self.slots);
+        slots.resize(idx + 1, HandlerMask::SKIP);
+        self.slots = slots.into_boxed_slice();
+    }
+
+    /// Set/union mask at `kind_id` (grows the table if needed).
+    pub fn set(&mut self, kind_id: u16, mask: HandlerMask) {
+        let idx = kind_id as usize;
+        self.ensure_capacity(idx);
         self.slots[idx] |= mask;
     }
 
@@ -103,6 +124,10 @@ mod tests {
         assert!(t.lookup(42).intersects(HandlerMask::SYMBOL));
         assert_eq!(t.lookup(0), HandlerMask::SKIP);
         assert_eq!(t.lookup(600), HandlerMask::SKIP);
+        // kind_id >= MAX_KIND_ID must be storable (C++/TS/C#/PHP/Kotlin).
+        t.set(600, HandlerMask::SYMBOL);
+        assert!(t.is_active(600));
+        assert!(t.len() > MAX_KIND_ID);
     }
 
     #[test]

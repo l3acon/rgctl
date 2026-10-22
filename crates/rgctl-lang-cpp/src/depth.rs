@@ -1,7 +1,7 @@
 //! Deep C++ AST extraction helpers (OpenSpec 3.4).
 
 use crate::plugin::source_location;
-use rgctl_plugin_api::{Field, Relation, RelationType, Symbol, SymbolType};
+use rgctl_plugin_api::{Field, Relation, RelationType, ScopeStack, Symbol, SymbolType};
 use tree_sitter::Node;
 
 fn text(node: Node, source: &[u8]) -> Option<String> {
@@ -34,7 +34,12 @@ pub fn extract_enumerator_fields(enum_node: Node, source: &[u8]) -> Vec<Field> {
 }
 
 /// `using IntVec = std::vector<int>;`
-pub fn extract_alias_declaration(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+pub fn extract_alias_declaration(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    scopes: &ScopeStack,
+) -> Option<Symbol> {
     if node.kind() != "alias_declaration" {
         return None;
     }
@@ -42,10 +47,11 @@ pub fn extract_alias_declaration(node: Node, source: &[u8], file_path: &str) -> 
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
     let aliased = node.child_by_field_name("type").and_then(|n| text(n, source));
+    let qn = scopes.qualified_name_sep(&name, "::");
     Some(Symbol {
-        name: name.clone(),
+        name,
         symbol_type: SymbolType::TypeAlias,
-        qualified_name: Some(name),
+        qualified_name: Some(qn),
         location: source_location(node, file_path),
         signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
         return_type: aliased,
@@ -61,17 +67,23 @@ pub fn extract_alias_declaration(node: Node, source: &[u8], file_path: &str) -> 
 }
 
 /// `concept Addable = ...`
-pub fn extract_concept_definition(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+pub fn extract_concept_definition(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    scopes: &ScopeStack,
+) -> Option<Symbol> {
     if node.kind() != "concept_definition" {
         return None;
     }
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
+    let qn = scopes.qualified_name_sep(&name, "::");
     Some(Symbol {
-        name: name.clone(),
+        name,
         symbol_type: SymbolType::TypeAlias,
-        qualified_name: Some(name),
+        qualified_name: Some(qn),
         location: source_location(node, file_path),
         signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
         return_type: None,
@@ -86,19 +98,48 @@ pub fn extract_concept_definition(node: Node, source: &[u8], file_path: &str) ->
     })
 }
 
-/// `union U { ... }`
-pub fn extract_union_specifier(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+/// `union U { ... }` or anonymous `typedef union { ... } Alias;`
+pub fn extract_union_specifier(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    scopes: &ScopeStack,
+) -> Option<Symbol> {
+    extract_union_specifier_named(node, source, file_path, scopes, None)
+}
+
+/// Like [`extract_union_specifier`], with optional typedef alias override.
+pub fn extract_union_specifier_named(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    scopes: &ScopeStack,
+    typedef_name: Option<&str>,
+) -> Option<Symbol> {
     if node.kind() != "union_specifier" {
         return None;
     }
-    let name = node
+    let tag = node
         .child_by_field_name("name")
-        .and_then(|n| text(n, source))?;
+        .and_then(|n| text(n, source));
+    let name = typedef_name
+        .map(str::to_string)
+        .or(tag.clone())?;
     let fields = crate::plugin::extract_type_fields(node, source).unwrap_or_default();
+    let qn = scopes.qualified_name_sep(&name, "::");
+    let mut metadata = serde_json::json!({
+        "language": "cpp",
+        "kind": "union_specifier",
+    });
+    if let (Some(alias), Some(tag)) = (typedef_name, tag.as_deref()) {
+        if alias != tag {
+            metadata["underlying_type"] = serde_json::Value::String(tag.to_string());
+        }
+    }
     Some(Symbol {
-        name: name.clone(),
+        name,
         symbol_type: SymbolType::Struct,
-        qualified_name: Some(name),
+        qualified_name: Some(qn),
         location: source_location(node, file_path),
         signature: None,
         return_type: None,
@@ -106,10 +147,7 @@ pub fn extract_union_specifier(node: Node, source: &[u8], file_path: &str) -> Op
         fields,
         modifiers: vec![],
         documentation: None,
-        metadata: serde_json::json!({
-            "language": "cpp",
-            "kind": "union_specifier",
-        }),
+        metadata,
     })
 }
 

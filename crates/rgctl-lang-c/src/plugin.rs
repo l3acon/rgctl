@@ -269,6 +269,21 @@ impl CPlugin {
                                     typedef_name.as_deref(),
                                 )?,
                             );
+                        } else if child.kind() == "union_specifier"
+                            && (child.child_by_field_name("name").is_some()
+                                || typedef_name.is_some())
+                        {
+                            let fields =
+                                extract_struct_fields(child, source).unwrap_or_default();
+                            if let Some(sym) = crate::depth::extract_union_specifier_named(
+                                child,
+                                source,
+                                file_path,
+                                fields,
+                                typedef_name.as_deref(),
+                            ) {
+                                symbols.push(sym);
+                            }
                         }
                     }
                 }

@@ -91,7 +91,7 @@
     "namespace_definition": "Symbol",
     "namespace_name": "Skip",
     "namespace_use_clause": "Skip",
-    "namespace_use_declaration": "Skip",
+    "namespace_use_declaration": "Symbol",
     "namespace_use_group": "Skip",
     "nowdoc": "Skip",
     "nowdoc_body": "Skip",

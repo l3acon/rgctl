@@ -8,6 +8,48 @@ use std::sync::OnceLock;
 use tree_sitter::Node;
 
 const MANIFEST_JSON: &str = include_str!("../csharp-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("assignment_expression", HandlerMask::AST_SKELETON),
+    ("base_list", HandlerMask::RELATION),
+    ("block", HandlerMask::CFG_STMT),
+    ("break_statement", HandlerMask::CFG_STMT),
+    ("catch_clause", HandlerMask::CFG_STMT),
+    ("class_declaration", HandlerMask::SYMBOL),
+    ("constructor_declaration", HandlerMask::SYMBOL),
+    ("continue_statement", HandlerMask::CFG_STMT),
+    ("delegate_declaration", HandlerMask::SYMBOL),
+    ("do_statement", HandlerMask::CFG_STMT),
+    ("enum_declaration", HandlerMask::SYMBOL),
+    ("enum_member_declaration", HandlerMask::SYMBOL),
+    ("event_declaration", HandlerMask::SYMBOL),
+    ("event_field_declaration", HandlerMask::SYMBOL),
+    ("field_declaration", HandlerMask::SYMBOL),
+    ("finally_clause", HandlerMask::CFG_STMT),
+    ("for_statement", HandlerMask::CFG_STMT),
+    ("foreach_statement", HandlerMask::CFG_STMT),
+    ("goto_statement", HandlerMask::CFG_STMT),
+    ("if_statement", HandlerMask::CFG_STMT),
+    ("interface_declaration", HandlerMask::SYMBOL),
+    ("invocation_expression", HandlerMask::RELATION),
+    ("local_function_statement", HandlerMask::SYMBOL),
+    ("method_declaration", HandlerMask::SYMBOL),
+    ("namespace_declaration", HandlerMask::SYMBOL),
+    ("property_declaration", HandlerMask::SYMBOL),
+    ("record_declaration", HandlerMask::SYMBOL),
+    ("return_statement", HandlerMask::CFG_STMT),
+    ("struct_declaration", HandlerMask::SYMBOL),
+    ("switch_expression", HandlerMask::CFG_STMT),
+    ("switch_statement", HandlerMask::CFG_STMT),
+    ("throw_expression", HandlerMask::CFG_STMT),
+    ("throw_statement", HandlerMask::CFG_STMT),
+    ("try_statement", HandlerMask::CFG_STMT),
+    ("using_directive", HandlerMask::SYMBOL),
+    ("while_statement", HandlerMask::CFG_STMT),
+    ("yield_statement", HandlerMask::CFG_STMT),
+];
+
 const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
@@ -20,24 +62,15 @@ fn csharp_grammar() -> tree_sitter::Language {
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn csharp_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let (handlers, _) = coverage_tables_from_manifest(&csharp_grammar(), MANIFEST_JSON);
-        handlers
+        
+        handler_table_from_kinds(&csharp_grammar(), HANDLED_KINDS)
     })
 }
 
 fn csharp_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let (_, dispatch) = coverage_tables_from_manifest(&csharp_grammar(), MANIFEST_JSON);
-        dispatch
+        dispatch_table_from_manifest(&csharp_grammar(), MANIFEST_JSON)
     })
-}
-
-fn push_children<'a>(stack: &mut Vec<(Node<'a>, usize)>, node: Node<'a>, depth: usize) {
-    let mut cursor = node.walk();
-    let children: Vec<Node<'a>> = node.children(&mut cursor).collect();
-    for child in children.into_iter().rev() {
-        stack.push((child, depth + 1));
-    }
 }
 
 struct PendingCall<'a> {
@@ -70,10 +103,9 @@ pub fn extract_all_single_pass(
     let mut extract_ctx = ExtractCtx::default();
     plugin.seed_ctx_from_tree(root, source, &mut extract_ctx);
 
-    let mut ctx = SinglePassCtx::new(dispatch.clone());
+    let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
-    let mut cognitive_nesting: u32 = 0;
 
     let mut stack = vec![Visit::Pre(root, 0)];
 
@@ -85,7 +117,7 @@ pub fn extract_all_single_pass(
                 }
             }
             Visit::LeaveGuard => {
-                cognitive_nesting = cognitive_nesting.saturating_sub(1);
+                ctx.scopes.leave_branch();
                 let _ = ctx.leave_scope();
             }
             Visit::LeaveNamespace => {
@@ -96,7 +128,8 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let _mask = dispatch.lookup(node.kind_id());
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask; // keep for future passive skip
                 let kind = node.kind();
 
                 if kind == "namespace_declaration" {
@@ -104,10 +137,10 @@ pub fn extract_all_single_pass(
                         extract_ctx.push_qualified_namespace(&ns);
                         stack.push(Visit::LeaveNamespace);
                         if let Some(body) = node.child_by_field_name("body") {
-                            let mut child_stack = Vec::new();
-                            push_children(&mut child_stack, body, depth);
-                            for (child, child_depth) in child_stack {
-                                stack.push(Visit::Pre(child, child_depth));
+                            for i in (0..body.child_count()).rev() {
+                                if let Some(child) = body.child(i) {
+                                    stack.push(Visit::Pre(child, depth + 1));
+                                }
                             }
                         }
                     }
@@ -328,12 +361,12 @@ pub fn extract_all_single_pass(
                         | "conditional_expression"
                         | "switch_expression"
                         | "switch_statement" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
-                            if let Some(f) = ctx.scopes.current_function_mut() {
-                                f.complexity.max_nesting =
-                                    f.complexity.max_nesting.max(cognitive_nesting + 1);
-                            }
                             if matches!(
                                 kind,
                                 "if_statement"
@@ -343,7 +376,7 @@ pub fn extract_all_single_pass(
                                     | "switch_statement"
                                     | "switch_expression"
                             ) {
-                                cognitive_nesting = cognitive_nesting.saturating_add(1);
+                                ctx.scopes.enter_branch();
                                 let depth_s = ctx.scopes.depth();
                                 ctx.scopes.push(ScopeFrame::new(
                                     ScopeKind::GuardBlock,
@@ -357,7 +390,11 @@ pub fn extract_all_single_pass(
                             }
                         }
                         "switch_section" => {
-                            let delta = 1 + cognitive_nesting;
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
                         "return_statement" => {
@@ -370,10 +407,10 @@ pub fn extract_all_single_pass(
                 if pushed_scope {
                     stack.push(Visit::LeaveScope);
                 }
-                let mut child_stack = Vec::new();
-                push_children(&mut child_stack, node, depth);
-                for (child, child_depth) in child_stack {
-                    stack.push(Visit::Pre(child, child_depth));
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
                 }
             }
         }

@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 rgctl-registry = { workspace = true }
 rgctl-config-formats = { workspace = true }
+rgctl-ast-coverage = { workspace = true }
 rgctl-lang-rust = { workspace = true }
 rgctl-lang-python = { workspace = true }
 rgctl-lang-javascript = { workspace = true }

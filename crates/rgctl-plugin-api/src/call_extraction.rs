@@ -124,8 +124,11 @@ pub fn containing_function_from_scope<'a>(
     let frame = stack.current_function()?;
     let idx = frame.symbol_idx?;
     let sym = symbols.get(idx)?;
-    // Methods are stored as `SymbolType::Function` in most language plugins.
-    if sym.symbol_type == SymbolType::Function {
+    // Methods may be `SymbolType::Method` (Rust impl) or still `Function` elsewhere.
+    if matches!(
+        sym.symbol_type,
+        SymbolType::Function | SymbolType::Method
+    ) {
         Some(sym)
     } else {
         None
@@ -750,7 +753,13 @@ fn rust_scoped_path_type_hint(func: Node, source: &[u8], from_fn: &Symbol) -> Op
 }
 
 /// Inherent / trait-impl methods store `Type::method` or `Type::<init>` in `qualified_name`.
+///
+/// Only [`SymbolType::Method`] resolves `Self` — free functions whose QN is
+/// `module::path::fn` must not treat the last path segment as an impl type.
 fn rust_enclosing_impl_type(from_fn: &Symbol) -> Option<String> {
+    if from_fn.symbol_type != SymbolType::Method {
+        return None;
+    }
     let qn = from_fn.qualified_name.as_deref()?;
     let (owner, _) = qn.rsplit_once("::")?;
     let simple = owner

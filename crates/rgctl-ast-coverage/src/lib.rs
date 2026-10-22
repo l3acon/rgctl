@@ -10,7 +10,9 @@
 
 mod tracker;
 
-pub use tracker::AstCoverageTracker;
+pub use tracker::{
+    clear_hit_callback, install_hit_callback, AstCoverageTracker,
+};
 
 use rgctl_plugin_api::{AstHandlerTable, HandlerMask};
 use std::collections::{HashMap, HashSet};

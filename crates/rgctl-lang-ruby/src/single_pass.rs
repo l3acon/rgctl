@@ -8,6 +8,53 @@ use std::sync::OnceLock;
 use tree_sitter::Node;
 
 const MANIFEST_JSON: &str = include_str!("../ruby-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("assignment", HandlerMask::AST_SKELETON),
+    ("begin", HandlerMask::CFG_STMT),
+    ("begin_block", HandlerMask::CFG_STMT),
+    ("block", HandlerMask::CFG_STMT),
+    ("body_statement", HandlerMask::CFG_STMT),
+    ("break", HandlerMask::CFG_STMT),
+    ("call", HandlerMask::RELATION),
+    ("case", HandlerMask::CFG_STMT),
+    ("case_match", HandlerMask::CFG_STMT),
+    ("class", HandlerMask::SYMBOL),
+    ("do_block", HandlerMask::CFG_STMT),
+    ("else", HandlerMask::CFG_STMT),
+    ("elsif", HandlerMask::CFG_STMT),
+    ("ensure", HandlerMask::CFG_STMT),
+    ("for", HandlerMask::CFG_STMT),
+    ("if", HandlerMask::CFG_STMT),
+    ("if_modifier", HandlerMask::CFG_STMT),
+    ("lambda", HandlerMask::SYMBOL),
+    ("method", HandlerMask::SYMBOL),
+    ("module", HandlerMask::SYMBOL),
+    ("next", HandlerMask::CFG_STMT),
+    ("operator_assignment", HandlerMask::AST_SKELETON),
+    ("parenthesized_statements", HandlerMask::CFG_STMT),
+    ("redo", HandlerMask::CFG_STMT),
+    ("rescue", HandlerMask::CFG_STMT),
+    ("rescue_modifier", HandlerMask::CFG_STMT),
+    ("retry", HandlerMask::CFG_STMT),
+    ("return", HandlerMask::CFG_STMT),
+    ("singleton_class", HandlerMask::SYMBOL),
+    ("singleton_method", HandlerMask::SYMBOL),
+    ("subshell", HandlerMask::CFG_STMT),
+    ("superclass", HandlerMask::RELATION),
+    ("then", HandlerMask::CFG_STMT),
+    ("undef", HandlerMask::CFG_STMT),
+    ("unless", HandlerMask::CFG_STMT),
+    ("unless_modifier", HandlerMask::CFG_STMT),
+    ("until", HandlerMask::CFG_STMT),
+    ("until_modifier", HandlerMask::CFG_STMT),
+    ("when", HandlerMask::CFG_STMT),
+    ("while", HandlerMask::CFG_STMT),
+    ("while_modifier", HandlerMask::CFG_STMT),
+    ("yield", HandlerMask::CFG_STMT),
+];
+
 const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
@@ -20,27 +67,17 @@ fn ruby_grammar() -> tree_sitter::Language {
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn ruby_ast_handlers() -> &'static AstHandlerTable {
     HANDLERS.get_or_init(|| {
-        let (handlers, _) = coverage_tables_from_manifest(&ruby_grammar(), MANIFEST_JSON);
-        handlers
+        
+        handler_table_from_kinds(&ruby_grammar(), HANDLED_KINDS)
     })
 }
 
 fn ruby_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
-        let (_, dispatch) = coverage_tables_from_manifest(&ruby_grammar(), MANIFEST_JSON);
-        dispatch
+        dispatch_table_from_manifest(&ruby_grammar(), MANIFEST_JSON)
     })
 }
 
-fn push_children<'a>(stack: &mut Vec<(Node<'a>, usize)>, node: Node<'a>, depth: usize) {
-    let mut cursor = node.walk();
-    let children: Vec<Node> = node.children(&mut cursor).collect();
-    for child in children.into_iter().rev() {
-        if child.is_named() {
-            stack.push((child, depth + 1));
-        }
-    }
-}
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -70,11 +107,10 @@ pub fn extract_all_single_pass(
     let file_path_str = file_path.to_string_lossy();
     let dispatch = ruby_dispatch();
 
-    let mut ctx = SinglePassCtx::new(dispatch.clone());
+    let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
     let mut name_scope: Vec<String> = Vec::new();
-    let mut cognitive_nesting: u32 = 0;
     let mut depth_warned = false;
 
     let mut stack = vec![Visit::Pre(root, 0)];
@@ -87,7 +123,7 @@ pub fn extract_all_single_pass(
                 }
             }
             Visit::LeaveGuard => {
-                cognitive_nesting = cognitive_nesting.saturating_sub(1);
+                ctx.scopes.leave_branch();
                 let _ = ctx.leave_scope();
             }
             Visit::LeaveNameScope => {
@@ -106,7 +142,8 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let _mask = dispatch.lookup(node.kind_id());
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask; // keep for future passive skip
                 let kind = node.kind();
                 let mut pushed_scope = false;
                 let mut pushed_name = false;
@@ -117,7 +154,7 @@ pub fn extract_all_single_pass(
                     .map(|t| t.qualified_prefix.clone());
 
                 match kind {
-                    "class" => {
+                    "class" if node.is_named() && node.child_by_field_name("name").is_some() => {
                         let (sym, type_qn) = plugin.extract_class_or_module(
                             node,
                             source,
@@ -126,6 +163,28 @@ pub fn extract_all_single_pass(
                             false,
                         )?;
                         let name = sym.name.clone();
+                        if let Some(sc) = node.child_by_field_name("superclass") {
+                            if let Some(base) = RubyPlugin::constant_text(sc, source)
+                                .or_else(|| {
+                                    let mut c = sc.walk();
+                                    sc.children(&mut c)
+                                        .find_map(|ch| RubyPlugin::constant_text(ch, source))
+                                })
+                            {
+                                relations.push(Relation {
+                                    from: type_qn.clone(),
+                                    to: base.clone(),
+                                    relation_type: RelationType::Extends,
+                                    location: RubyPlugin::loc(sc, &file_path_str),
+                                    metadata: serde_json::json!({
+                                        "language": "ruby",
+                                        "kind": "superclass",
+                                    }),
+                                    to_qualified_hint: Some(base),
+                                    to_type_hint: None,
+                                });
+                            }
+                        }
                         ctx.symbols.push(sym);
                         name_scope.push(name.clone());
                         pushed_name = true;
@@ -139,7 +198,7 @@ pub fn extract_all_single_pass(
                         );
                         pushed_scope = true;
                     }
-                    "module" => {
+                    "module" if node.is_named() && node.child_by_field_name("name").is_some() => {
                         let (sym, type_qn) = plugin.extract_class_or_module(
                             node,
                             source,
@@ -233,6 +292,47 @@ pub fn extract_all_single_pass(
                             }
                         }
                     }
+                    "lambda" => {
+                        let line = node.start_position().row + 1;
+                        let name = format!("<lambda@{line}>");
+                        let qn = match owner_type_qn.as_deref() {
+                            Some(o) => format!("{o}.{name}"),
+                            None => name.clone(),
+                        };
+                        ctx.symbols.push(Symbol {
+                            name,
+                            symbol_type: SymbolType::Function,
+                            qualified_name: Some(qn.clone()),
+                            location: RubyPlugin::loc(node, &file_path_str),
+                            signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+                            return_type: None,
+                            parameters: vec![],
+                            fields: vec![],
+                            modifiers: vec![],
+                            documentation: None,
+                            metadata: serde_json::json!({
+                                "language": "ruby",
+                                "kind": "lambda",
+                            }),
+                        });
+                        let params = 0u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1)
+                            .max(1) as u32;
+                        ctx.enter_scope(
+                            ScopeKind::Lambda,
+                            None,
+                            qn,
+                            node.start_byte(),
+                            node.end_byte(),
+                            true,
+                        );
+                        if let Some(f) = ctx.scopes.current_function_mut() {
+                            f.complexity.cyclomatic = 1;
+                            f.complexity.param_count = params;
+                            f.complexity.loc = loc;
+                        }
+                        pushed_scope = true;
+                    }
                     _ => {}
                 }
 
@@ -249,13 +349,13 @@ pub fn extract_all_single_pass(
 
                 if ctx.scopes.current_function().is_some() {
                     if RUBY_COMPLEXITY_BRANCH_KINDS.contains(&kind) {
-                        let delta = 1 + cognitive_nesting;
-                        ctx.scopes.note_branch(delta);
-                        if let Some(f) = ctx.scopes.current_function_mut() {
-                            f.complexity.max_nesting =
-                                f.complexity.max_nesting.max(cognitive_nesting + 1);
-                        }
-                        cognitive_nesting = cognitive_nesting.saturating_add(1);
+                        let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
+                            ctx.scopes.note_branch(delta);
+                            ctx.scopes.enter_branch();
                         let d = ctx.scopes.depth();
                         ctx.scopes.push(ScopeFrame::new(
                             ScopeKind::GuardBlock,
@@ -277,10 +377,10 @@ pub fn extract_all_single_pass(
                 if pushed_scope {
                     stack.push(Visit::LeaveScope);
                 }
-                let mut child_stack = Vec::new();
-                push_children(&mut child_stack, node, depth);
-                for (child, child_depth) in child_stack {
-                    stack.push(Visit::Pre(child, child_depth));
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
                 }
             }
         }

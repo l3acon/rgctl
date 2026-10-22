@@ -5,12 +5,12 @@
 //! non-`Skip` / non-`Literal` entry in `{lang}-ast-coverage.json` has ≥1 hit.
 //!
 //! Enable with env `RGCTL_AST_COVERAGE_TRACK=1` or construct explicitly in tests.
-//! Until plugins wire hits for newly promoted kinds, prefer opt-in usage so
-//! existing suites stay green.
+//! Single-pass extractors call [`rgctl_plugin_api::dispatch_lookup_tracked`], which
+//! forwards to a process-wide hit callback installed via [`install_hit_callback`].
 
 use crate::HandlerMask;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 /// Records hit counts per grammar `kind_id` (and optionally by kind name).
 #[derive(Debug, Default)]
@@ -128,6 +128,30 @@ impl AstCoverageTracker {
             missing.join(", ")
         ))
     }
+}
+
+static PROCESS_TRACKER: OnceLock<AstCoverageTracker> = OnceLock::new();
+
+fn forward_process_hit(kind_id: u16) {
+    if let Some(t) = PROCESS_TRACKER.get() {
+        t.hit(kind_id);
+    }
+}
+
+/// Install `tracker` as the process-wide hit sink for
+/// [`rgctl_plugin_api::dispatch_lookup_tracked`] (single-pass extractors).
+///
+/// Call once per test process when `RGCTL_AST_COVERAGE_TRACK=1`. Subsequent
+/// installs are ignored (`OnceLock`).
+pub fn install_hit_callback(tracker: AstCoverageTracker) {
+    if PROCESS_TRACKER.set(tracker).is_ok() {
+        rgctl_plugin_api::set_ast_coverage_hit_fn(Some(forward_process_hit));
+    }
+}
+
+/// Clear the plugin-api hit callback (does not drop an already-installed tracker).
+pub fn clear_hit_callback() {
+    rgctl_plugin_api::set_ast_coverage_hit_fn(None);
 }
 
 #[cfg(test)]

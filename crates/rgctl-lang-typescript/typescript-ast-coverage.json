@@ -59,7 +59,7 @@
     "for_statement": "CfgStatement",
     "formal_parameters": "Skip",
     "function_declaration": "Symbol",
-    "function_expression": "Skip",
+    "function_expression": "Symbol",
     "function_signature": "Skip",
     "function_type": "Skip",
     "generator_function": "Symbol",

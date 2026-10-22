@@ -40,7 +40,7 @@
     "enum_variant_list": "Skip",
     "escape_sequence": "Literal",
     "expression_statement": "Skip",
-    "extern_crate_declaration": "Skip",
+    "extern_crate_declaration": "Symbol",
     "extern_modifier": "Skip",
     "field_declaration": "Symbol",
     "field_declaration_list": "Skip",

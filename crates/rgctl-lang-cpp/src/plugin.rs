@@ -882,6 +882,20 @@ pub(crate) fn type_name(node: Node, source: &[u8]) -> Option<String> {
         .and_then(|n| n.utf8_text(source).ok().map(str::to_string))
 }
 
+/// Typedef alias from `type_definition` (`typedef union { ... } Alias` → `Alias`).
+pub(crate) fn type_definition_typedef_name(node: Node, source: &[u8]) -> Option<String> {
+    if node.kind() != "type_definition" {
+        return None;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "type_identifier" {
+            return child.utf8_text(source).ok().map(str::to_string);
+        }
+    }
+    None
+}
+
 pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
     SourceLocation {
         file: file_path.to_string(),

@@ -7,16 +7,21 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use tree_sitter::{Language, Parser, Tree};
 
-thread_local! {
-    static PARSERS: RefCell<HashMap<String, Parser>> = RefCell::new(HashMap::new());
+struct PooledParser {
+    parser: Parser,
+    /// True after a successful `set_language` for this entry.
+    language_set: bool,
 }
 
-/// Borrow the thread-local parser for `lang_id`, set `grammar`, and run `f`.
+thread_local! {
+    static PARSERS: RefCell<HashMap<String, PooledParser>> = RefCell::new(HashMap::new());
+}
+
+/// Borrow the thread-local parser for `lang_id`, ensuring `grammar` is set once
+/// on first use, and run `f`.
 ///
-/// `lang_id` should be stable (e.g. `"rust"`, `"python"`) so consecutive files
-/// of the same language skip redundant `set_language` when possible — we still
-/// call `set_language` each time because the grammar object may differ across
-/// versions; tree-sitter makes that cheap when unchanged.
+/// Looks up by `&str` before allocating a new `String` key. `set_language` runs
+/// only when the entry is first created (or if a prior set failed).
 pub fn with_thread_local_parser<R>(
     lang_id: &str,
     grammar: Language,
@@ -24,10 +29,22 @@ pub fn with_thread_local_parser<R>(
 ) -> R {
     PARSERS.with(|cell| {
         let mut map = cell.borrow_mut();
-        let parser = map.entry(lang_id.to_string()).or_insert_with(Parser::new);
-        // Ignore set_language errors here; callers that need Result use parse_with_pool.
-        let _ = parser.set_language(&grammar);
-        f(parser)
+        if !map.contains_key(lang_id) {
+            let mut parser = Parser::new();
+            let language_set = parser.set_language(&grammar).is_ok();
+            map.insert(
+                lang_id.to_string(),
+                PooledParser {
+                    parser,
+                    language_set,
+                },
+            );
+        }
+        let entry = map.get_mut(lang_id).expect("parser entry just ensured");
+        if !entry.language_set {
+            entry.language_set = entry.parser.set_language(&grammar).is_ok();
+        }
+        f(&mut entry.parser)
     })
 }
 
@@ -37,11 +54,31 @@ pub fn parse_with_pool(
     grammar: Language,
     source: &[u8],
 ) -> Result<Tree, String> {
-    with_thread_local_parser(lang_id, grammar.clone(), |parser| {
-        parser
-            .set_language(&grammar)
-            .map_err(|e| format!("set_language({lang_id}): {e}"))?;
-        parser
+    PARSERS.with(|cell| {
+        let mut map = cell.borrow_mut();
+        if !map.contains_key(lang_id) {
+            let mut parser = Parser::new();
+            parser
+                .set_language(&grammar)
+                .map_err(|e| format!("set_language({lang_id}): {e}"))?;
+            map.insert(
+                lang_id.to_string(),
+                PooledParser {
+                    parser,
+                    language_set: true,
+                },
+            );
+        }
+        let entry = map.get_mut(lang_id).expect("parser entry just ensured");
+        if !entry.language_set {
+            entry
+                .parser
+                .set_language(&grammar)
+                .map_err(|e| format!("set_language({lang_id}): {e}"))?;
+            entry.language_set = true;
+        }
+        entry
+            .parser
             .parse(source, None)
             .ok_or_else(|| format!("parse failed for language `{lang_id}`"))
     })

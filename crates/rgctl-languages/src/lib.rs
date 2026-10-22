@@ -131,4 +131,57 @@ mod tests {
                 .is_err()
         );
     }
+
+    /// Bi-directional sync: each Tier-1 plugin's `declared_ast_handlers()` vs
+    /// `{lang}-ast-coverage.json` (non-tautological — handlers come from plugin code).
+    #[test]
+    fn tier1_declared_ast_handlers_sync_with_coverage_manifests() {
+        let registry = default_registry();
+        let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut failures = Vec::new();
+
+        for spec in rgctl_ast_coverage::bundled_specs() {
+            if spec.id == "markdown" {
+                // Markdown stays on the legacy multi-pass path (not CST jump-table).
+                continue;
+            }
+            let Some(plugin) = registry.get_language_plugin(spec.id) else {
+                failures.push(format!("{}: not in default_registry()", spec.id));
+                continue;
+            };
+            let Some(table) = plugin.declared_ast_handlers() else {
+                failures.push(format!(
+                    "{}: declared_ast_handlers() returned None",
+                    spec.id
+                ));
+                continue;
+            };
+            let manifest_path = crates_dir
+                .join(spec.crate_dir)
+                .join(spec.manifest_file);
+            let manifest_json = match std::fs::read_to_string(&manifest_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    failures.push(format!("{}: read {}: {e}", spec.id, manifest_path.display()));
+                    continue;
+                }
+            };
+            let lang = (spec.language)();
+            let issues = rgctl_ast_coverage::check_plugin_manifest_sync(
+                spec.id,
+                &manifest_json,
+                table,
+                &lang,
+            );
+            for issue in issues {
+                failures.push(format!("{}: {}", spec.id, issue.message));
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "plugin ↔ ast-coverage sync failures:\n{}",
+            failures.join("\n")
+        );
+    }
 }

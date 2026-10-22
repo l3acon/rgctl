@@ -484,8 +484,22 @@ impl GraphBuilder {
         if let Some(doc) = &symbol.documentation {
             node = node.with_property("documentation".to_string(), doc.clone());
         }
+        if let Some(metrics) = rgctl_plugin_api::complexity_from_metadata(symbol) {
+            node = node
+                .with_property("cyclomatic".to_string(), metrics.cyclomatic.to_string())
+                .with_property("cognitive".to_string(), metrics.cognitive.to_string())
+                .with_property("loc".to_string(), metrics.loc.to_string())
+                .with_property(
+                    "nesting_depth".to_string(),
+                    metrics.nesting_depth.to_string(),
+                )
+                .with_property("returns".to_string(), metrics.returns.to_string());
+        }
         if let Some(obj) = symbol.metadata.as_object() {
             for (k, v) in obj {
+                if k == rgctl_plugin_api::COMPLEXITY_META_KEY {
+                    continue;
+                }
                 let prop_val = match v {
                     serde_json::Value::String(s) => Some(s.clone()),
                     serde_json::Value::Bool(b) => Some(b.to_string()),
@@ -1326,12 +1340,12 @@ fn single_c_preferred_impl(ids: &[Uuid], symbol_files: &HashMap<Uuid, String>) -
 }
 
 fn should_sketch_symbol(symbol_type: SymbolType) -> bool {
-    matches!(symbol_type, SymbolType::Function)
+    matches!(symbol_type, SymbolType::Function | SymbolType::Method)
 }
 
 fn symbol_type_to_node_type(symbol_type: SymbolType) -> NodeType {
     match symbol_type {
-        SymbolType::Function => NodeType::Function,
+        SymbolType::Function | SymbolType::Method => NodeType::Function,
         SymbolType::Class => NodeType::Class,
         SymbolType::Struct => NodeType::Struct,
         SymbolType::Enum => NodeType::Enum,

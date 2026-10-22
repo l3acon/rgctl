@@ -352,6 +352,48 @@ pub fn extract_macro_definition(node: Node, source: &[u8], file_path: &str) -> O
     })
 }
 
+/// `extern crate foo;` / `extern crate foo as bar;` → Import symbol.
+pub fn extract_extern_crate(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    if node.kind() != "extern_crate_declaration" {
+        return None;
+    }
+    let name = node
+        .child_by_field_name("name")
+        .or_else(|| {
+            let mut c = node.walk();
+            node.children(&mut c)
+                .find(|ch| matches!(ch.kind(), "identifier" | "crate"))
+        })
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let alias = node
+        .child_by_field_name("alias")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string);
+    let binding = alias.clone().unwrap_or_else(|| name.clone());
+    let mut meta = serde_json::json!({
+        "language": "rust",
+        "kind": "extern_crate_declaration",
+        "module_path": name,
+    });
+    if let Some(a) = alias {
+        meta["alias"] = serde_json::Value::String(a);
+    }
+    Some(Symbol {
+        name: binding.clone(),
+        symbol_type: SymbolType::Import,
+        qualified_name: Some(binding),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: meta,
+    })
+}
+
 /// Trait / impl associated type (`type Item;`).
 pub fn extract_associated_type(
     node: Node,

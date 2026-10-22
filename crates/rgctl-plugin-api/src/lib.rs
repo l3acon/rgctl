@@ -17,8 +17,10 @@ pub use kind_dispatch::{KindDispatchOnce, KindDispatchTable, MAX_KIND_ID};
 pub use parser_pool::{parse_with_pool, with_thread_local_parser};
 pub use scope_stack::{ScopeComplexity, ScopeFrame, ScopeKind, ScopeStack};
 pub use single_pass::{
-    attach_complexity, complexity_from_metadata, coverage_handler_entries,
-    coverage_tables_from_manifest, SinglePassCtx, COMPLEXITY_META_KEY,
+    ast_coverage_track_enabled, attach_complexity, complexity_from_metadata,
+    coverage_handler_entries, coverage_tables_from_manifest, dispatch_lookup_tracked,
+    dispatch_table_from_manifest, handler_table_from_kinds, set_ast_coverage_hit_fn,
+    track_ast_kind, SinglePassCtx, COMPLEXITY_META_KEY,
 };
 
 pub use call_extraction::{
@@ -77,6 +79,8 @@ pub struct Symbol {
 pub enum SymbolType {
     /// Function or method
     Function,
+    /// Inherent / instance method (distinct from free `Function` for `Self` resolution).
+    Method,
     /// Class or struct
     Class,
     /// Struct (languages without classes)
@@ -760,6 +764,7 @@ mod tests {
     fn test_symbol_type_variants() {
         let types = vec![
             SymbolType::Function,
+            SymbolType::Method,
             SymbolType::Class,
             SymbolType::Struct,
             SymbolType::Enum,
@@ -775,7 +780,7 @@ mod tests {
             SymbolType::Job,
             SymbolType::BuildStep,
         ];
-        assert_eq!(types.len(), 15);
+        assert_eq!(types.len(), 16);
     }
 
     #[test]

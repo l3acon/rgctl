@@ -234,34 +234,56 @@ pub fn is_import_error_try(node: Node, source: &[u8]) -> bool {
 }
 
 /// Emit `__getitem__` / `__setitem__` Calls when subscript receiver has a type hint.
+///
+/// Resolves:
+/// - bare `param[k]` against typed parameters on `from_fn`
+/// - `self.<field>[k]` / `cls.<field>[k]` against typed [`Field`] entries on `enclosing_class`
 pub fn maybe_subscript_call_relation(
     node: Node,
     source: &[u8],
     file_path: &str,
     from_fn: &Symbol,
     is_store: bool,
+    enclosing_class: Option<&Symbol>,
 ) -> Option<Relation> {
     if node.kind() != "subscript" {
         return None;
     }
     let value = node.child_by_field_name("value")?;
-    let recv_name = if value.kind() == "identifier" {
-        text(value, source)?
-    } else {
-        return None;
+    let ty = match value.kind() {
+        "identifier" => {
+            let recv_name = text(value, source)?;
+            from_fn
+                .parameters
+                .iter()
+                .find(|p| p.name == recv_name)
+                .and_then(|p| p.param_type.as_deref())
+                .map(str::to_string)?
+        }
+        "attribute" => {
+            let obj = value.child_by_field_name("object")?;
+            let attr = value.child_by_field_name("attribute")?;
+            let obj_name = text(obj, source)?;
+            if obj_name != "self" && obj_name != "cls" {
+                return None;
+            }
+            let field_name = text(attr, source)?;
+            enclosing_class?
+                .fields
+                .iter()
+                .find(|f| f.name == field_name)?
+                .field_type
+                .clone()?
+        }
+        _ => return None,
     };
-    let ty = from_fn
-        .parameters
-        .iter()
-        .find(|p| p.name == recv_name)
-        .and_then(|p| p.param_type.as_deref())?;
     let simple = ty
         .split('[')
         .next()
-        .unwrap_or(ty)
+        .unwrap_or(ty.as_str())
         .rsplit('.')
         .next()
-        .unwrap_or(ty)
+        .unwrap_or(ty.as_str())
         .trim();
     let method = if is_store {
         "__setitem__"
@@ -287,17 +309,17 @@ pub fn maybe_subscript_call_relation(
     })
 }
 
-/// Whether `subscript` appears on the left of an assignment (store).
+/// Whether `subscript` appears on the left of an assignment / augmented assignment (store).
 pub fn subscript_is_store(node: Node) -> bool {
     let Some(parent) = node.parent() else {
         return false;
     };
-    if parent.kind() == "assignment" {
-        return parent
+    match parent.kind() {
+        "assignment" | "augmented_assignment" => parent
             .child_by_field_name("left")
-            .is_some_and(|left| left.id() == node.id());
+            .is_some_and(|left| left.id() == node.id()),
+        _ => false,
     }
-    false
 }
 
 /// Walrus `name := expr` → Variable symbol.
@@ -327,7 +349,15 @@ pub fn extract_named_expression(node: Node, source: &[u8], file_path: &str) -> O
 }
 
 /// Standalone / class-bound `lambda` → Function symbol.
-pub fn extract_lambda_symbol(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+///
+/// `class_qn` prefixes the qualified name (`ClassName.lambda_name`) when the
+/// lambda appears in a class body.
+pub fn extract_lambda_symbol(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    class_qn: Option<&str>,
+) -> Option<Symbol> {
     if node.kind() != "lambda" {
         return None;
     }
@@ -344,10 +374,14 @@ pub fn extract_lambda_symbol(node: Node, source: &[u8], file_path: &str) -> Opti
             }
         })
         .unwrap_or_else(|| format!("<lambda@{}>", node.start_position().row + 1));
+    let qualified_name = match class_qn {
+        Some(c) if !c.is_empty() => Some(format!("{c}.{name}")),
+        _ => Some(name.clone()),
+    };
     Some(Symbol {
-        name: name.clone(),
+        name,
         symbol_type: SymbolType::Function,
-        qualified_name: Some(name),
+        qualified_name,
         location: loc(node, file_path),
         signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
         return_type: None,

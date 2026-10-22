@@ -237,6 +237,7 @@ impl TypeScriptPlugin {
             return;
         };
         let exported = alias.clone().unwrap_or_else(|| name.clone());
+        let module_path = export_specifier_source_module(node, source);
         let mut meta = serde_json::json!({
             "language": "typescript",
             "kind": "export_specifier",
@@ -245,14 +246,20 @@ impl TypeScriptPlugin {
         if let Some(a) = alias {
             meta["alias"] = serde_json::Value::String(a);
         }
+        if let Some(ref m) = module_path {
+            meta["module"] = serde_json::Value::String(m.clone());
+        }
+        let to_qualified_hint = module_path
+            .as_ref()
+            .map(|m| format!("{m}::{exported}"));
         relations.push(Relation {
             from: file_path.to_string(),
             to: exported,
             relation_type: RelationType::Uses,
             location: source_location(node, file_path),
             metadata: meta,
-            to_qualified_hint: None,
-            to_type_hint: None,
+            to_qualified_hint,
+            to_type_hint: module_path,
         });
     }
 
@@ -1510,6 +1517,29 @@ impl TypeScriptPlugin {
             to_type_hint,
         });
     }
+}
+
+/// Walk to enclosing `export_statement` and read `from './mod'` source string.
+fn export_specifier_source_module(node: Node, source: &[u8]) -> Option<String> {
+    let mut cur = node;
+    for _ in 0..8 {
+        let Some(parent) = cur.parent() else {
+            return None;
+        };
+        if parent.kind() == "export_statement" {
+            let src = parent.child_by_field_name("source")?;
+            let raw = src.utf8_text(source).ok()?.trim();
+            let cleaned = raw
+                .trim_matches(|c| c == '"' || c == '\'' || c == '`')
+                .to_string();
+            if cleaned.is_empty() {
+                return None;
+            }
+            return Some(cleaned);
+        }
+        cur = parent;
+    }
+    None
 }
 
 fn collect_decorators(node: Node, source: &[u8]) -> Vec<(String, Option<String>)> {
