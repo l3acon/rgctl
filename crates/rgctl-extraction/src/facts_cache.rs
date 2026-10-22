@@ -307,6 +307,9 @@ fn manifest_fingerprint(plugin: &dyn LanguagePlugin) -> [u8; 32] {
             hasher.update(&[mask]);
         }
     }
+    if let Some(fp) = plugin.cache_fingerprint() {
+        hasher.update(fp);
+    }
     *hasher.finalize().as_bytes()
 }
 

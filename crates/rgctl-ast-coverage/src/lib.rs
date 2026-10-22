@@ -28,6 +28,114 @@ pub const ALLOWED_HANDLERS: &[&str] = &[
     "Literal",
 ];
 
+/// Allowed `@capture` names in Tier-2 `tags.scm` packs (`handler = "queries"`).
+///
+/// Matches the [tree-sitter code-navigation](https://tree-sitter.github.io/tree-sitter/code-navigation)
+/// vocabulary plus `@import.path`. Private `@_…` captures are always allowed.
+pub const ALLOWED_TAG_CAPTURES: &[&str] = &[
+    "name",
+    "doc",
+    "definition.function",
+    "definition.method",
+    "definition.class",
+    "definition.interface",
+    "definition.module",
+    "definition.type",
+    "definition.namespace",
+    "definition.macro",
+    "definition.field",
+    "definition.enum",
+    "definition.enummember",
+    "definition.constant",
+    "definition.import",
+    "reference.call",
+    "reference.class",
+    "reference.implementation",
+    "import.path",
+];
+
+/// Collect unique `@capture` names from a `tags.scm` source string.
+///
+/// Skips `;` line comments and `"…"` string literals so predicate args like
+/// `#eq? @_bi "@import"` and documentation comments are not treated as captures.
+pub fn extract_tag_capture_names(tags_scm: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let bytes = tags_scm.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b';' => {
+                // Line comment through newline.
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'"' => {
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        i += 2;
+                        continue;
+                    }
+                    if bytes[i] == b'"' {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'@' => {
+                let start = i + 1;
+                let mut end = start;
+                while end < bytes.len() {
+                    let c = bytes[end];
+                    if c.is_ascii_alphanumeric() || c == b'_' || c == b'.' || c == b'-' {
+                        end += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if end > start {
+                    let mut name = String::from_utf8_lossy(&bytes[start..end]).into_owned();
+                    // Trailing `.` is punctuation, not part of the capture id.
+                    while name.ends_with('.') {
+                        name.pop();
+                    }
+                    if !name.is_empty() && !names.iter().any(|n| n == &name) {
+                        names.push(name);
+                    }
+                }
+                i = end.max(start);
+            }
+            _ => i += 1,
+        }
+    }
+    names
+}
+
+/// Validate Tier-2 `tags.scm` capture vocabulary (build / unit-test gate).
+///
+/// Unknown captures become [`CoverageIssue`]s. `@local.*` and `@_…` private
+/// captures are accepted without being listed in [`ALLOWED_TAG_CAPTURES`].
+pub fn check_tags_scm(language_id: &str, tags_scm: &str) -> Vec<CoverageIssue> {
+    let mut issues = Vec::new();
+    for name in extract_tag_capture_names(tags_scm) {
+        if name.starts_with('_') || name.starts_with("local.") {
+            continue;
+        }
+        if !ALLOWED_TAG_CAPTURES.contains(&name.as_str()) {
+            issues.push(CoverageIssue {
+                language: language_id.into(),
+                message: format!(
+                    "unknown tags.scm capture '@{name}' (allowed: {})",
+                    ALLOWED_TAG_CAPTURES.join(", ")
+                ),
+            });
+        }
+    }
+    issues
+}
+
 /// One bundled language to validate.
 pub struct CoverageSpec {
     /// Language id (`java`, `kotlin`, …).
@@ -360,7 +468,7 @@ pub fn check_plugin_manifest_sync(
     issues
 }
 
-/// Validate every bundled spec under `crates_dir` (parent of `rgctl-lang-*`).
+/// Validate every bundled spec and Tier-2 `queries/tags.scm` under `crates_dir` (parent of `rgctl-lang-*`).
 pub fn check_crates_dir(crates_dir: &Path) -> Vec<CoverageIssue> {
     let mut all = Vec::new();
     for spec in bundled_specs() {
@@ -376,15 +484,49 @@ pub fn check_crates_dir(crates_dir: &Path) -> Vec<CoverageIssue> {
             }),
         }
     }
+    for (lang_id, scm_path) in discover_tags_scm_paths(crates_dir) {
+        match std::fs::read_to_string(&scm_path) {
+            Ok(scm) => all.extend(check_tags_scm(&lang_id, &scm)),
+            Err(e) => all.push(CoverageIssue {
+                language: lang_id,
+                message: format!("cannot read {}: {e}", scm_path.display()),
+            }),
+        }
+    }
     all
+}
+
+/// Discover `rgctl-lang-*/queries/tags.scm` files under `crates_dir`.
+pub fn discover_tags_scm_paths(crates_dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(crates_dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(lang_id) = dir_name.strip_prefix("rgctl-lang-") else {
+            continue;
+        };
+        let scm_path = path.join("queries").join("tags.scm");
+        if scm_path.is_file() {
+            out.push((lang_id.to_string(), scm_path));
+        }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
 }
 
 /// Paths that should trigger a rebuild of consumers (`cargo:rerun-if-changed=`).
 pub fn rerun_if_changed_paths(crates_dir: &Path) -> Vec<PathBuf> {
-    bundled_specs()
+    let mut paths: Vec<PathBuf> = bundled_specs()
         .iter()
         .map(|s| crates_dir.join(s.crate_dir).join(s.manifest_file))
-        .collect()
+        .collect();
+    paths.extend(discover_tags_scm_paths(crates_dir).into_iter().map(|(_, p)| p));
+    paths
 }
 
 /// Format issues as `cargo:warning=` lines (and optional hard failure).
@@ -470,5 +612,40 @@ mod tests {
         for need in ["java", "kotlin", "groovy", "markdown", "ruby"] {
             assert!(ids.contains(need), "missing {need}");
         }
+    }
+
+    #[test]
+    fn tags_scm_rejects_unknown_captures() {
+        let issues = check_tags_scm("zig", "(fn) @definition.widget\n(x) @name");
+        assert!(
+            issues.iter().any(|i| i.message.contains("definition.widget")),
+            "{issues:?}"
+        );
+    }
+
+    #[test]
+    fn tags_scm_accepts_standard_vocabulary() {
+        let scm = r#"
+(function_definition name: (identifier) @name) @definition.function
+(call function: (identifier) @name) @reference.call
+(import path: (string) @import.path)
+"#;
+        assert!(check_tags_scm("demo", scm).is_empty());
+    }
+
+    #[test]
+    fn tags_scm_ignores_comments_and_string_literals() {
+        let scm = r#"
+; docs mention @import.path. and @definition.widget in comments only
+(builtin_function
+  (builtin_identifier) @_bi
+  (#eq? @_bi "@import")
+  (arguments (string (string_content) @import.path)))
+"#;
+        let names = extract_tag_capture_names(scm);
+        assert!(names.contains(&"_bi".to_string()), "{names:?}");
+        assert!(names.contains(&"import.path".to_string()), "{names:?}");
+        assert!(!names.iter().any(|n| n == "import" || n == "definition.widget"));
+        assert!(check_tags_scm("demo", scm).is_empty(), "{:?}", check_tags_scm("demo", scm));
     }
 }

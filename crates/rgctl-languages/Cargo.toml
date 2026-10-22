@@ -26,6 +26,10 @@ rgctl-lang-puppet = { workspace = true }
 rgctl-lang-erb = { workspace = true }
 rgctl-lang-kotlin = { workspace = true }
 rgctl-lang-groovy = { workspace = true }
+rgctl-lang-zig = { workspace = true }
+rgctl-lang-nix = { workspace = true }
+rgctl-lang-proto = { workspace = true }
+rgctl-lang-solidity = { workspace = true }
 
 [build-dependencies]
 rgctl-ast-coverage = { workspace = true }

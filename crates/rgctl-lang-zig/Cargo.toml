@@ -1,0 +1,18 @@
+[package]
+name = "rgctl-lang-zig"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl Tier-2 language plugin: Zig (tags.scm queries)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rgctl-ast-coverage = { workspace = true }
+rgctl-lang-runtime = { workspace = true }
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-zig = "1.1.2"
+
+[lints]
+workspace = true

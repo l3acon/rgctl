@@ -398,6 +398,12 @@ pub trait LanguagePlugin: Send + Sync {
         None
     }
 
+    /// Optional extra fingerprint bytes (e.g. Tier-2 `tags.scm` source) mixed into
+    /// the [`FactsCache`] manifest hash so query edits invalidate cached extractions.
+    fn cache_fingerprint(&self) -> Option<&[u8]> {
+        None
+    }
+
     /// Extract symbols from source code
     ///
     /// # Arguments

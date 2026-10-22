@@ -28,6 +28,10 @@ pub struct LanguageConfig {
     pub enable_type_inference: bool,
     /// Optional supplemental regex patterns (regex handler, or hybrid tree-sitter)
     pub regex_patterns: Option<&'static [RegexPatternConfig]>,
+    /// Embedded `tags.scm` source for `handler = "queries"` ([`crate::QueryLanguagePlugin`]).
+    ///
+    /// When set, prefer [`crate::query_plugin`] over kind-walk extraction.
+    pub tags_scm: Option<&'static str>,
 }
 
 #[cfg(test)]
@@ -42,6 +46,28 @@ pub(crate) mod test_configs {
         enable_complexity: true,
         enable_type_inference: false,
         regex_patterns: None,
+        tags_scm: None,
+    };
+
+    /// Minimal C `tags.scm` for Tier-2 engine unit tests (subset of tree-sitter-c tags).
+    pub const C_TAGS_SCM: &str = r#"
+(function_declarator declarator: (identifier) @name) @definition.function
+
+(call_expression
+  function: (identifier) @name) @reference.call
+
+(struct_specifier name: (type_identifier) @name body:(_)) @definition.class
+"#;
+
+    pub static C_QUERIES: LanguageConfig = LanguageConfig {
+        id: "c",
+        extensions: &["c", "h"],
+        function_kinds: &["function_definition"],
+        class_kinds: &["struct_specifier"],
+        enable_complexity: true,
+        enable_type_inference: false,
+        regex_patterns: None,
+        tags_scm: Some(C_TAGS_SCM),
     };
 
     static KOTLIN_PATTERNS: &[RegexPatternConfig] = &[
@@ -67,6 +93,7 @@ pub(crate) mod test_configs {
         enable_complexity: false,
         enable_type_inference: false,
         regex_patterns: Some(KOTLIN_PATTERNS),
+        tags_scm: None,
     };
 
     static CSHARP_PATTERNS: &[RegexPatternConfig] = &[
@@ -88,5 +115,6 @@ pub(crate) mod test_configs {
         enable_complexity: false,
         enable_type_inference: false,
         regex_patterns: Some(CSHARP_PATTERNS),
+        tags_scm: None,
     };
 }

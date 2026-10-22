@@ -40,6 +40,10 @@ members = [
     "crates/rgctl-lang-erb",
     "crates/rgctl-lang-kotlin",
     "crates/rgctl-lang-groovy",
+    "crates/rgctl-lang-zig",
+    "crates/rgctl-lang-nix",
+    "crates/rgctl-lang-proto",
+    "crates/rgctl-lang-solidity",
     "crates/rgctl-ast-coverage",
     "crates/rgctl-languages",
     "crates/rgctl-agent-pack-codegen",
@@ -93,6 +97,10 @@ rgctl-lang-puppet = { path = "crates/rgctl-lang-puppet", version = "0.4.20" }
 rgctl-lang-erb = { path = "crates/rgctl-lang-erb", version = "0.4.20" }
 rgctl-lang-kotlin = { path = "crates/rgctl-lang-kotlin", version = "0.4.20" }
 rgctl-lang-groovy = { path = "crates/rgctl-lang-groovy", version = "0.4.20" }
+rgctl-lang-zig = { path = "crates/rgctl-lang-zig", version = "0.4.20" }
+rgctl-lang-nix = { path = "crates/rgctl-lang-nix", version = "0.4.20" }
+rgctl-lang-proto = { path = "crates/rgctl-lang-proto", version = "0.4.20" }
+rgctl-lang-solidity = { path = "crates/rgctl-lang-solidity", version = "0.4.20" }
 rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.20" }
 rgctl-languages = { path = "crates/rgctl-languages", version = "0.4.20" }
 tree-sitter = "0.25"

@@ -1,12 +1,12 @@
 # rgctl tree-sitter language configuration
-# Source of truth for Tier 1 language metadata.
+# Source of truth for Tier-1 (custom) and Tier-2 (queries) language metadata.
 
 [metadata]
-version = "2.0"
-description = "Tier 1 custom tree-sitter plugins for rgctl"
+version = "2.1"
+description = "Two-tier language plugins for rgctl (custom + tags.scm queries)"
 
 # ---------------------------------------------------------------------------
-# Tier 1 — custom LanguagePlugin implementations
+# Tier 1 — custom LanguagePlugin implementations (`handler = "custom"`)
 # ---------------------------------------------------------------------------
 
 [languages.rust]
@@ -201,3 +201,63 @@ class_kinds = []
 import_kinds = []
 enable_complexity = false
 enable_type_inference = false
+
+# ---------------------------------------------------------------------------
+# Tier 2 — declarative tags.scm (`handler = "queries"`, rgctl-lang-runtime)
+# ---------------------------------------------------------------------------
+
+[languages.zig]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_zig"
+crate = "tree-sitter-zig"
+extensions = ["zig", "zon"]
+aliases = ["zig"]
+function_kinds = ["function_declaration"]
+class_kinds = ["struct_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-zig/queries/tags.scm"
+
+[languages.nix]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_nix"
+crate = "tree-sitter-nix"
+extensions = ["nix"]
+aliases = ["nix"]
+function_kinds = ["function_expression"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-nix/queries/tags.scm"
+
+[languages.proto]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_proto"
+crate = "tree-sitter-proto"
+extensions = ["proto"]
+aliases = ["protobuf", "proto"]
+function_kinds = ["rpc"]
+class_kinds = ["message"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-proto/queries/tags.scm"
+
+[languages.solidity]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_solidity"
+crate = "tree-sitter-solidity"
+extensions = ["sol"]
+aliases = ["solidity", "sol"]
+function_kinds = ["function_definition"]
+class_kinds = ["contract_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-solidity/queries/tags.scm"

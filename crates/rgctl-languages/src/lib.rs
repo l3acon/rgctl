@@ -20,6 +20,11 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_erb::register(registry);
     rgctl_lang_kotlin::register(registry);
     rgctl_lang_groovy::register(registry);
+    // Tier-2 (`handler = "queries"`)
+    rgctl_lang_zig::register(registry);
+    rgctl_lang_nix::register(registry);
+    rgctl_lang_proto::register(registry);
+    rgctl_lang_solidity::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -120,6 +125,26 @@ mod tests {
         assert_eq!(plugin.language_id(), "groovy");
         assert!(registry.is_manifest_file(Path::new("build.gradle")));
         assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
+    }
+
+    #[test]
+    fn default_registry_can_process_tier2_query_languages() {
+        let registry = default_registry();
+        for (path, id) in [
+            ("src/main.zig", "zig"),
+            ("flake.nix", "nix"),
+            ("api/v1.proto", "proto"),
+            ("contracts/Token.sol", "solidity"),
+        ] {
+            assert!(
+                registry.can_process_file(Path::new(path)),
+                "expected can_process {path}"
+            );
+            let plugin = registry
+                .get_plugin_for_file(Path::new(path))
+                .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
+            assert_eq!(plugin.language_id(), id);
+        }
     }
 
     #[test]
