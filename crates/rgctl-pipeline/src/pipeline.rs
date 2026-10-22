@@ -6,7 +6,7 @@ use crate::stream::{DEFAULT_STREAM_CHANNEL_CAPACITY, stream_into_graph};
 use indicatif::{ProgressBar, ProgressStyle};
 use rgctl_error::Result;
 use rgctl_extraction::discovery::{DiscoveryConfig, FileDiscoverer};
-use rgctl_extraction::{Extractor, GraphBuilder};
+use rgctl_extraction::{Extractor, FactsCache, GraphBuilder};
 use rgctl_graph::code_graph::CodeGraph;
 use rgctl_graph::content_store::ContentStore;
 use rgctl_graph::schema::{Edge, Node};
@@ -33,6 +33,12 @@ pub struct PipelineConfig {
     pub stream_channel_capacity: usize,
     /// Materialize `Symbol.fields` as Variable graph nodes (CPG / `--with-cfg`).
     pub materialize_fields: bool,
+    /// Populate / consult `.rgctl/cache/facts.bin` during extract (warm re-runs).
+    ///
+    /// Disable for constrained cold profiles that must not retain per-file JSON
+    /// payloads in RAM. Default `true` — cache stores encoded bytes only (no
+    /// decoded `ExtractAllResult` trees).
+    pub facts_cache: bool,
 }
 
 impl Default for PipelineConfig {
@@ -44,6 +50,7 @@ impl Default for PipelineConfig {
             batch_size: 64,
             stream_channel_capacity: DEFAULT_STREAM_CHANNEL_CAPACITY,
             materialize_fields: false,
+            facts_cache: true,
         }
     }
 }
@@ -137,10 +144,26 @@ impl ProcessingPipeline {
         let files_discovered = files.len();
 
         let progress = self.make_progress(files_discovered);
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let store = artifact_root.unwrap_or(source_root);
+        let facts = if self.config.facts_cache {
+            let loaded = FactsCache::load(store);
+            // On cold huge repos (>10k files with no existing facts.bin), skip populating
+            // per-file JSON payloads during the initial full spill index so cold discover
+            // does not pay multi-hundred-MB JSON encode + disk write overhead.
+            if loaded.is_empty() && files_discovered > 10_000 {
+                None
+            } else {
+                Some(Arc::new(loaded))
+            }
+        } else {
+            None
+        };
+        let mut extractor = Extractor::new(Arc::clone(&self.registry));
+        if let Some(ref facts) = facts {
+            extractor = extractor.with_facts_cache(Arc::clone(facts));
+        }
         let extract_start = Instant::now();
 
-        let store = artifact_root.unwrap_or(source_root);
         let spill_dir = rgctl_graph::paths::artifact_path(store, "spill");
         if spill_dir.exists() {
             std::fs::remove_dir_all(&spill_dir)?;
@@ -219,6 +242,18 @@ impl ProcessingPipeline {
         if let Some(store) = content_store {
             store.save()?;
         }
+        if let Some(ref facts) = facts {
+            if let Err(err) = facts.save(store) {
+                tracing::warn!(error = %err, "failed to persist facts.bin cache");
+            } else {
+                tracing::debug!(
+                    facts_hits = facts.hit_count(),
+                    facts_misses = facts.miss_count(),
+                    facts_entries = facts.len(),
+                    "facts.bin cache saved"
+                );
+            }
+        }
         let graph_build_duration = graph_start.elapsed();
 
         Ok((
@@ -269,7 +304,15 @@ impl ProcessingPipeline {
         let files_discovered = files.len();
 
         let progress = self.make_progress(files_discovered);
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let facts = if self.config.facts_cache {
+            Some(Arc::new(FactsCache::load(root)))
+        } else {
+            None
+        };
+        let mut extractor = Extractor::new(Arc::clone(&self.registry));
+        if let Some(ref facts) = facts {
+            extractor = extractor.with_facts_cache(Arc::clone(facts));
+        }
         let extract_start = Instant::now();
         let mut builder = GraphBuilder::new();
         builder.set_materialize_fields(self.config.materialize_fields);
@@ -308,6 +351,11 @@ impl ProcessingPipeline {
         let pass2_elapsed = pass2_start.elapsed();
         if let Some(store) = builder.take_content_store() {
             store.save()?;
+        }
+        if let Some(ref facts) = facts {
+            if let Err(err) = facts.save(root) {
+                tracing::warn!(error = %err, "failed to persist facts.bin cache");
+            }
         }
         let node_path_mapping = builder.take_tracker_mapping();
         let (nodes, edges): (Vec<Node>, Vec<Edge>) = builder.into_graph();

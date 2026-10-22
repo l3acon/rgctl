@@ -2642,6 +2642,8 @@ dependencies = [
 name = "rgctl-extraction"
 version = "0.4.20"
 dependencies = [
+ "bincode",
+ "blake3",
  "ignore",
  "rayon",
  "regex",

@@ -14,10 +14,24 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 /// Minimum idle poll interval so queued CLI updates are noticed without FS events (D9).
-const MIN_QUEUE_POLL: Duration = Duration::from_millis(100);
+/// Aligned with default `[watch].debounce_ms` (25) for sub-100ms watch latency (§7.5.4).
+const MIN_QUEUE_POLL: Duration = Duration::from_millis(25);
 
 /// Directory name segments that must never trigger an update.
 const SKIP_DIR_NAMES: &[&str] = &[".git", "target", "node_modules", ".rgctl"];
+
+/// Run `rgctl watch` in the foreground until the process is interrupted.
+pub fn run_watch_foreground(repo: PathBuf) -> Result<()> {
+    info!(
+        "rgctl watch: monitoring {} (debounce from rgctl.toml [watch], default 25ms)",
+        repo.display()
+    );
+    let handle = spawn_repo_watcher(repo)?;
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("watch thread panicked"))?;
+    Ok(())
+}
 
 /// Start a background watcher thread. Returns a join handle (detached by caller).
 pub fn spawn_repo_watcher(repo: PathBuf) -> Result<thread::JoinHandle<()>> {

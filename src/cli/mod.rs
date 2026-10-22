@@ -480,15 +480,28 @@ pub enum Commands {
     #[command(display_order = 2)]
     Status,
 
+    /// Watch the repo and apply incremental graph updates on save (`notify`, default 25ms debounce).
+    ///
+    /// Re-extracts changed files via `IncrementalUpdater` and atomically rewrites
+    /// `graph.snapshot.bin`. Prefer an existing `discover` / `update` session under `.rgctl/`.
+    /// Same watcher used by `serve --watch`; this command runs it in the foreground without HTTP.
+    #[command(display_order = 3)]
+    Watch {
+        /// Repository path (defaults to `--repo` or cwd)
+        #[arg(value_name = "PATH")]
+        path: Option<String>,
+    },
+
     /// Incremental structural graph update for changed files (not a full discover / analysis rebuild).
     ///
-    /// Patches `graph.snapshot.bin` via `IncrementalUpdater`. Prefer this (or `serve --watch`)
-    /// over re-running `discover` when sources change. Analysis sidecars (CFG, semantic, …)
-    /// may be invalidated — re-run `discover` with the needed flags for those.
+    /// Patches `graph.snapshot.bin` via `IncrementalUpdater`. Prefer this (or `serve --watch` /
+    /// `rgctl watch`) over re-running `discover` when sources change. Analysis sidecars (CFG,
+    /// semantic, …) may be invalidated — re-run `discover` with the needed flags for those.
     ///
-    /// When `serve --watch` is already running, this command enqueues work for the watcher
-    /// (sole writer) and waits for the result by default (`--no-wait` to return after enqueue).
-    #[command(display_order = 3)]
+    /// When `serve --watch` or `rgctl watch` is already running, this command enqueues work for
+    /// the watcher (sole writer) and waits for the result by default (`--no-wait` to return
+    /// after enqueue).
+    #[command(display_order = 4)]
     Update {
         /// Repository path (defaults to `--repo` or cwd)
         #[arg(value_name = "PATH")]
@@ -1561,7 +1574,10 @@ impl Cli {
     pub fn run(self) -> anyhow::Result<()> {
         let wall_start = Instant::now();
         let command_label = command_label_for(&self.command);
-        let long_running = matches!(self.command, Commands::Serve { .. });
+        let long_running = matches!(
+            self.command,
+            Commands::Serve { .. } | Commands::Watch { .. }
+        );
 
         let verbose = matches!(self.command, Commands::Discover { verbose: true, .. });
         let format = self.format.clone().unwrap_or_default();
@@ -1580,7 +1596,8 @@ impl Cli {
         let session_repo = match &self.command {
             Commands::Discover { path: Some(p), .. }
             | Commands::Serve { path: Some(p), .. }
-            | Commands::Update { path: Some(p), .. } => {
+            | Commands::Update { path: Some(p), .. }
+            | Commands::Watch { path: Some(p) } => {
                 discover::session_repo_from_flags(self.repo.as_deref(), Some(p))
             }
             _ => self.repo.clone(),
@@ -1873,6 +1890,10 @@ impl Cli {
                 },
             ),
             Commands::Status => session_status::run_status(&ctx),
+            Commands::Watch { path: _ } => {
+                file_watch::run_watch_foreground(ctx.repo.clone())
+                    .map_err(|e| anyhow::anyhow!("{e:#}"))
+            }
             Commands::Update {
                 path,
                 files,
@@ -2575,6 +2596,7 @@ fn command_label_for(command: &Commands) -> &'static str {
         Commands::Relations { .. } => "relations",
         Commands::Inventory { .. } => "inventory",
         Commands::Status => "status",
+        Commands::Watch { .. } => "watch",
         Commands::Update { .. } => "update",
         Commands::Rules { .. } => "rules",
         Commands::Query { action } => match action {

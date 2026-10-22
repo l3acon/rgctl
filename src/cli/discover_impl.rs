@@ -196,6 +196,7 @@ pub(crate) fn run_full_analysis(
             discovery,
             show_progress: human_output,
             materialize_fields,
+            facts_cache: !force_reindex,
             thread_count: limits.as_ref().and_then(|l| l.threads),
             stream_channel_capacity: limits
                 .as_ref()

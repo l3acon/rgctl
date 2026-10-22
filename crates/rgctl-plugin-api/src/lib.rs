@@ -229,7 +229,7 @@ pub struct Relation {
 }
 
 /// Combined output from [`LanguagePlugin::extract_all`].
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExtractAllResult {
     /// Extracted symbols.
     pub symbols: Vec<Symbol>,

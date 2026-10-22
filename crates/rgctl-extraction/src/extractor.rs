@@ -1,11 +1,11 @@
 //! Symbol and relationship extraction
 
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
+use crate::facts_cache::{FactsCache, facts_key_for_hash};
 use crate::graph_builder::{GraphBuilder, is_inheritance_relation};
 use crate::usage_detector::{ConfigUsage, ConfigUsageDetector};
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::hash_code;
-use rgctl_graph::content_store::hash_bytes;
 use rgctl_graph::structural_sketch::{TokenBloom, build_token_bloom};
 use rgctl_plugin_api::{ConfigKey, Relation, Symbol, SymbolType};
 use rgctl_registry::LanguageRegistry;
@@ -15,8 +15,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Extracts symbols and relationships from a single file.
+#[derive(Clone)]
 pub struct Extractor {
     registry: Arc<LanguageRegistry>,
+    /// Optional content-addressed FileFacts cache (warm discover / update).
+    facts: Option<Arc<FactsCache>>,
 }
 
 /// Precomputed pass-1 work for one symbol (filled on extract workers).
@@ -77,7 +80,21 @@ struct Pass2Profile {
 impl Extractor {
     /// Create a new extractor backed by the given registry.
     pub fn new(registry: Arc<LanguageRegistry>) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            facts: None,
+        }
+    }
+
+    /// Attach a shared FileFacts cache used to skip Tree-Sitter on cache hits.
+    pub fn with_facts_cache(mut self, facts: Arc<FactsCache>) -> Self {
+        self.facts = Some(facts);
+        self
+    }
+
+    /// Shared facts cache, if configured.
+    pub fn facts_cache(&self) -> Option<&Arc<FactsCache>> {
+        self.facts.as_ref()
     }
 
     /// Discover and extract all processable files under `root`.
@@ -110,9 +127,23 @@ impl Extractor {
     /// recorded on the returned symbols and relations, but it does not have to
     /// exist on disk.
     pub fn extract_file_with_source(&self, path: &Path, source: Vec<u8>) -> Result<FileExtraction> {
-        let file_hash = Some(hash_bytes(&source));
+        // Single BLAKE3: hex for FileTracker, raw bytes for FactsKey.
+        let digest = blake3::hash(&source);
+        let file_hash = Some(digest.to_hex().to_string());
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
-            let extracted = plugin.extract_all(path, &source)?;
+            let extracted = if let Some(facts) = &self.facts {
+                let key = facts_key_for_hash(plugin.as_ref(), *digest.as_bytes());
+                if let Some(cached) = facts.get(&key) {
+                    cached
+                } else {
+                    let fresh = plugin.extract_all(path, &source)?;
+                    // Encode once into Arc<[u8]> — do not retain decoded trees in the cache.
+                    facts.put(key, &fresh);
+                    fresh
+                }
+            } else {
+                plugin.extract_all(path, &source)?
+            };
             let config_usages = ConfigUsageDetector::detect(plugin.language_id(), &source, path);
             let symbol_preps = prepare_symbol_pass1(&source, &extracted.symbols);
             return Ok(FileExtraction {
