@@ -1,7 +1,7 @@
 //! Symbol and relationship extraction
 
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
-use crate::graph_builder::GraphBuilder;
+use crate::graph_builder::{GraphBuilder, is_inheritance_relation};
 use crate::usage_detector::{ConfigUsage, ConfigUsageDetector};
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::hash_code;
@@ -262,11 +262,26 @@ impl Extractor {
         ordered.sort_by(|a, b| a.path.cmp(&b.path));
 
         let mut profile = Pass2Profile::default();
-        for tail in ordered {
+        // Inheritance first so MRO resolve can see Extends/Implements before Calls.
+        for tail in &ordered {
+            if tail.relations.is_empty() {
+                continue;
+            }
+            let relation_start = Instant::now();
+            for relation in &tail.relations {
+                if is_inheritance_relation(relation.relation_type) {
+                    builder.add_relation(relation)?;
+                }
+            }
+            profile.relation_resolution += relation_start.elapsed();
+        }
+        for tail in &ordered {
             if !tail.relations.is_empty() {
                 let relation_start = Instant::now();
                 for relation in &tail.relations {
-                    builder.add_relation(relation)?;
+                    if !is_inheritance_relation(relation.relation_type) {
+                        builder.add_relation(relation)?;
+                    }
                 }
                 profile.relation_resolution += relation_start.elapsed();
             }
@@ -284,6 +299,7 @@ impl Extractor {
                 profile.config_usage_resolution += config_usage_start.elapsed();
             }
         }
+        builder.emit_mro_overrides();
         Ok(profile)
     }
 

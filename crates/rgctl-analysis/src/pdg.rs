@@ -340,10 +340,7 @@ impl ProgramDependenceGraph {
                     .unwrap_or_default();
 
                 for var in &used_vars {
-                    for def in reaching
-                        .in_definitions(block.id)
-                        .filter(|d| d.variable == *var)
-                    {
+                    for def in reaching.in_definitions_for_var(block.id, var) {
                         self.push_data_dep(def.pdg_node, use_id, var, DataDepType::Flow);
                     }
 

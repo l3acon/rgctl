@@ -7,8 +7,8 @@ use super::slice_output::{
     cfg_topology_json, pdg_topology_json, taint_slice_json, text_slice_json,
 };
 use crate::analysis::{
-    BackwardSlicer, ForwardSlicer, FunctionLocation, ProgramDependenceGraph, SliceCriterion,
-    TaintAnalyzer, build_cfg_for_function, index_function_locations,
+    BackwardSlicer, EnsureCfgPdgOpts, ForwardSlicer, FunctionLocation, ProgramDependenceGraph,
+    SliceCriterion, TaintAnalyzer, ensure_cfg_pdg_for_source, index_function_locations,
 };
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
@@ -175,15 +175,32 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
             }),
     };
 
-    let mut cfg = build_cfg_for_function(&lang, &source, &fn_name)?;
-    let pdg = ProgramDependenceGraph::build(&cfg, source.as_bytes())?;
+    let loc = locations.get(&fn_name);
+    let file_rel = path
+        .strip_prefix(&ctx.repo)
+        .unwrap_or(path.as_path())
+        .to_string_lossy();
+    let record = ensure_cfg_pdg_for_source(EnsureCfgPdgOpts {
+        repo_root: &ctx.repo,
+        language: &lang,
+        source: &source,
+        function_name: &fn_name,
+        file_path: Some(file_rel.as_ref()),
+        start_byte: loc.map(|l| l.start_byte),
+        end_byte: loc.map(|l| l.end_byte),
+        function_id: None,
+        persist: true,
+    })
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut cfg = (*record.cfg).clone();
+    let pdg = record.pdg.as_ref();
     let criterion = SliceCriterion {
         variable: args.variable.clone(),
         line: args.line,
     };
 
     if args.taint {
-        let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
+        let mut analyzer = TaintAnalyzer::new(pdg, &cfg);
         analyzer.detect_patterns(&lang);
         let flows = analyzer
             .analyze_with_policy()
@@ -208,8 +225,8 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
     }
 
     let slice = match args.direction {
-        SliceDirection::Backward => BackwardSlicer::new(&pdg, &cfg).slice(criterion.clone()),
-        SliceDirection::Forward => ForwardSlicer::new(&pdg, &cfg).slice(criterion.clone()),
+        SliceDirection::Backward => BackwardSlicer::new(pdg, &cfg).slice(criterion.clone()),
+        SliceDirection::Forward => ForwardSlicer::new(pdg, &cfg).slice(criterion.clone()),
     }
     .map_err(|e| name_the_function_searched(e.into(), &fn_name, &locations, explicit_function))?;
 
@@ -230,7 +247,7 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
         SliceView::Pdg => {
             if ctx.format == OutputFormat::Json {
                 let response =
-                    pdg_topology_json(&path.display().to_string(), &fn_name, &pdg, false);
+                    pdg_topology_json(&path.display().to_string(), &fn_name, pdg, false);
                 ctx.emit_json_value(&serde_json::to_value(&response)?)?;
             } else {
                 println!(
@@ -247,7 +264,7 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
             &fn_name,
             &criterion,
             &slice,
-            &pdg,
+            pdg,
             args.direction,
         )?,
     }

@@ -41,6 +41,7 @@ pub mod language_profile;
 pub mod macro_call_index;
 pub mod macro_call_lookup;
 pub mod migration;
+pub mod mro;
 pub mod node_lookup;
 pub mod pdg;
 pub mod policy;
@@ -111,10 +112,13 @@ pub use cfg::{
     StatementKind,
 };
 pub use cfg_builder::{
-    FunctionLocation, ParsedSourceFile, build_cfg_for_function, build_cfg_for_function_in_tree,
-    index_function_locations,
+    FunctionLocation, ParsedSourceFile, build_cfg_for_byte_range, build_cfg_for_function,
+    build_cfg_for_function_in_tree, index_function_locations, seek_function_node,
 };
-pub use cfg_pdg_archive::{CFG_PDG_ARCHIVE_FILE, CfgPdgArchive, CfgPdgRecord};
+pub use cfg_pdg_archive::{
+    ARCHIVE_VERSION, CFG_PDG_ARCHIVE_FILE, CfgPdgArchive, CfgPdgArchiveMmap, CfgPdgRecord,
+    EnsureCfgPdgOpts, TocEntry, ensure_cfg_pdg_for_source, stable_record_uuid,
+};
 pub use clones::{
     BloomCloneOptions, CLONE_REPORT_SCHEMA_VERSION, CLONE_REPORT_SCHEMA_VERSION_V2,
     CLONES_FRAGMENT_SIDECAR_FILE, CLONES_SIDECAR_FILE, DEFAULT_BLOOM_MAX_BUCKET,
@@ -149,7 +153,7 @@ pub use cpg::{
     cpg_function, cpg_mutations, cpg_status, find_function_nodes,
 };
 pub use cpg_export::{CpgExportFormat, CpgExportScope, export_cpg};
-pub use dataflow::{Definition, ReachingDefs, compute_reaching_definitions};
+pub use dataflow::{Definition, ReachingDefs, VarId, compute_reaching_definitions};
 pub use def_use::{extract_def_use, extract_used_variables};
 pub use dependency::{CircularDependency, DependencyAnalyzer, ImpactResult};
 pub use dominance::{DominatorTree, verify_idom_acyclic};
@@ -191,6 +195,10 @@ pub use migration::{
     MIGRATION_GRAPH_SCHEMA_VERSION, MIGRATION_PLAN_SCHEMA_VERSION, MigrationCommunityEdge,
     MigrationCommunityNode, MigrationGraphPayload, MigrationOrderMode, MigrationPlanPayload,
     MigrationPlanStep, MigrationWeights, build_migration_graph, compute_migration_plan,
+};
+pub use mro::{
+    InheritanceGraph, MroIndex, MroPassStats, MroStrategy, annotate_call_edge, apply_mro_pass,
+    c3_linearize, c3_merge,
 };
 pub use node_lookup::NodeLookup;
 pub use pdg::{

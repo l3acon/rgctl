@@ -38,6 +38,7 @@ pub fn default_behavioral_edges() -> &'static [EdgeType] {
         EdgeType::Instantiates,
         EdgeType::Implements,
         EdgeType::Extends,
+        EdgeType::Overrides,
         EdgeType::DependsOn,
     ]
 }

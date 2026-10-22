@@ -44,6 +44,7 @@ pub fn edge_type_to_u8(t: EdgeType) -> u8 {
         EdgeType::AnnotatedWith => 28,
         EdgeType::Permits => 29,
         EdgeType::Violates => 30,
+        EdgeType::Overrides => 31,
         EdgeType::Unknown => 255,
     }
 }
@@ -82,6 +83,7 @@ pub fn edge_type_from_u8(v: u8) -> Result<EdgeType> {
         28 => EdgeType::AnnotatedWith,
         29 => EdgeType::Permits,
         30 => EdgeType::Violates,
+        31 => EdgeType::Overrides,
         255 => EdgeType::Unknown,
         _ => return Err(Error::SerdeError(format!("unknown edge type code {v}"))),
     })

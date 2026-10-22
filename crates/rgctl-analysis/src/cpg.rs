@@ -4,11 +4,9 @@
 //! Phase 1: `cpg_mutations` over the field-write index.
 //! Phase 2: `cpg_flows` (forward/backward data slice) — see `docs/design/hybrid-cpg-plan.md`.
 
-use crate::cfg_builder::build_cfg_for_function;
-use crate::cfg_pdg_archive::{CFG_PDG_ARCHIVE_FILE, CfgPdgArchive};
+use crate::cfg_pdg_archive::CFG_PDG_ARCHIVE_FILE;
 use crate::field_write::{FieldWriteIndex, MutationQuery};
 use crate::language_profile::cfg_language_id_from_path;
-use crate::pdg::ProgramDependenceGraph;
 use crate::slicing::{SliceCriterion, SliceDirection, SliceOptions, compute_slice_with_options};
 use rgctl_error::{Error, Result};
 use rgctl_graph::backend::{GraphBackend, MemoryBackend};
@@ -120,13 +118,13 @@ pub fn cpg_status(repo_root: &Path) -> Result<CpgStatus> {
             ast_skeleton_count: ast_count,
         });
     }
-    match CfgPdgArchive::load_from_path(&path) {
-        Ok(archive) => Ok(CpgStatus {
+    match crate::cfg_pdg_archive::CfgPdgArchiveMmap::open(&path) {
+        Ok(view) => Ok(CpgStatus {
             schema_version: 1,
             archive_path: path_str,
             archive_present: true,
-            function_count: archive.records.len(),
-            graph_digest: archive.graph_digest,
+            function_count: view.len(),
+            graph_digest: view.graph_digest().map(str::to_string),
             field_write_index_present: fw_present,
             field_write_count: fw_count,
             ast_skeleton_present: ast_present,
@@ -246,8 +244,8 @@ fn archive_has_function(repo_root: &Path, function_id: Uuid) -> bool {
     if !path.is_file() {
         return false;
     }
-    CfgPdgArchive::load_from_path(&path)
-        .map(|a| a.records.contains_key(&function_id))
+    crate::cfg_pdg_archive::CfgPdgArchiveMmap::open(&path)
+        .map(|v| v.contains(function_id))
         .unwrap_or(false)
 }
 
@@ -451,11 +449,29 @@ pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".into())
     });
-    let cfg = build_cfg_for_function(&lang, &source, &args.function)?;
-    let pdg = ProgramDependenceGraph::build(&cfg, source.as_bytes())?;
+    let (start_byte, end_byte) = crate::cfg_builder::index_function_locations(&lang, source.as_bytes())
+        .ok()
+        .and_then(|(_, locs)| locs.get(&args.function).copied())
+        .map(|loc| (Some(loc.start_byte), Some(loc.end_byte)))
+        .unwrap_or((None, None));
+    let record = crate::cfg_pdg_archive::ensure_cfg_pdg_for_source(
+        crate::cfg_pdg_archive::EnsureCfgPdgOpts {
+            repo_root: &args.repo_root,
+            language: &lang,
+            source: &source,
+            function_name: &args.function,
+            file_path: Some(&args.file),
+            start_byte,
+            end_byte,
+            function_id: None,
+            persist: true,
+        },
+    )?;
+    let cfg = record.cfg.as_ref();
+    let pdg = record.pdg.as_ref();
     let slice = compute_slice_with_options(
-        &pdg,
-        &cfg,
+        pdg,
+        cfg,
         SliceCriterion {
             variable: args.variable.clone(),
             line: args.line,
@@ -502,6 +518,7 @@ pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
 #[cfg(test)]
 mod flows_tests {
     use super::*;
+    use crate::cfg_builder::build_cfg_for_function;
 
     #[test]
     fn cpg_flows_forward_java_order() {

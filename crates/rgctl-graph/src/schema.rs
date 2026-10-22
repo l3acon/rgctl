@@ -309,6 +309,8 @@ pub enum EdgeType {
     Permits,
     /// Kantra rule violation on a code graph node
     Violates,
+    /// Subtype method overrides an ancestor method (`Child.m` → `Ancestor.m`)
+    Overrides,
     /// Unknown or forward-compatible edge type; excluded from call-graph traversals.
     #[serde(other)]
     Unknown,
@@ -776,9 +778,10 @@ mod tests {
             EdgeType::AnnotatedWith,
             EdgeType::Permits,
             EdgeType::Violates,
+            EdgeType::Overrides,
             EdgeType::Unknown,
         ];
-        assert_eq!(types.len(), 32);
+        assert_eq!(types.len(), 33);
     }
 
     #[test]

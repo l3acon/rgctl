@@ -39,6 +39,7 @@ const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
     ("for_statement", HandlerMask::CFG_STMT),
     ("function_definition", HandlerMask::SYMBOL),
     ("future_import_statement", HandlerMask::RELATION),
+    ("generator_expression", HandlerMask::CFG_STMT),
     ("if_statement", HandlerMask::CFG_STMT),
     ("import_from_statement", HandlerMask::RELATION),
     ("import_prefix", HandlerMask::RELATION),

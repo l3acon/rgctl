@@ -39,14 +39,15 @@ pub struct CodeSlice {
 fn variable_on_node(n: &crate::pdg::PdgNode, variable: &str) -> bool {
     n.defined_vars.contains(variable)
         || n.used_vars.contains(variable)
-        || n.defined_vars.iter().any(|d| {
-            d.strip_prefix(variable)
-                .is_some_and(|rest| rest.starts_with('.'))
-        })
-        || n.used_vars.iter().any(|u| {
-            u.strip_prefix(variable)
-                .is_some_and(|rest| rest.starts_with('.'))
-        })
+        || n.defined_vars.iter().any(|d| var_name_matches(d, variable))
+        || n.used_vars.iter().any(|u| var_name_matches(u, variable))
+}
+
+/// Match bare `x` to field `x.y` or shadowed local `x#1`.
+fn var_name_matches(stored: &str, query: &str) -> bool {
+    stored
+        .strip_prefix(query)
+        .is_some_and(|rest| rest.starts_with('.') || rest.starts_with('#'))
 }
 
 /// Options for [`compute_slice`].
@@ -323,6 +324,113 @@ public class OrderProcessor {
         assert!(
             !slice.lines.is_empty(),
             "forward slice should include criterion line"
+        );
+    }
+
+    #[test]
+    fn shadowed_local_slice_isolates_scopes() {
+        let code = r#"
+fn shadow_demo() {
+    let x = 1;
+    {
+        let x = 2;
+        let y = x;
+        let _ = y;
+    }
+    let z = x;
+    let _ = z;
+}
+"#;
+        let cfg = build_cfg_for_function("rust", code, "shadow_demo").unwrap();
+        let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
+
+        let outer_def_line = pdg
+            .nodes
+            .values()
+            .find(|n| n.defined_vars.iter().any(|d| d == "x"))
+            .map(|n| n.statement.line)
+            .expect("outer x");
+        let inner_use_line = pdg
+            .nodes
+            .values()
+            .find(|n| {
+                n.defined_vars.iter().any(|d| d == "y")
+                    && n.used_vars.iter().any(|u| u == "x" || u.starts_with("x#"))
+            })
+            .map(|n| n.statement.line)
+            .expect("inner y = x");
+        let outer_use_line = pdg
+            .nodes
+            .values()
+            .find(|n| n.defined_vars.iter().any(|d| d == "z"))
+            .map(|n| n.statement.line)
+            .expect("outer z = x");
+
+        let inner_slice = BackwardSlicer::new(&pdg, &cfg)
+            .slice(SliceCriterion {
+                variable: "x".into(),
+                line: inner_use_line,
+            })
+            .expect("slice shadowed x");
+        assert!(
+            !inner_slice.lines.contains(&outer_def_line),
+            "inner slice must not include outer let x=1; lines={:?}",
+            inner_slice.lines
+        );
+
+        let outer_slice = BackwardSlicer::new(&pdg, &cfg)
+            .slice(SliceCriterion {
+                variable: "x".into(),
+                line: outer_use_line,
+            })
+            .expect("slice outer x");
+        let inner_def_line = pdg
+            .nodes
+            .values()
+            .find(|n| n.defined_vars.iter().any(|d| d.starts_with("x#")))
+            .map(|n| n.statement.line);
+        if let Some(inner_def) = inner_def_line {
+            assert!(
+                !outer_slice.lines.contains(&inner_def),
+                "outer slice must not include inner let x=2; lines={:?}",
+                outer_slice.lines
+            );
+        }
+    }
+
+    #[test]
+    fn let_x_eq_x_plus_one_keeps_prior_use() {
+        let code = r#"
+fn rebind() {
+    let x = 1;
+    let x = x + 1;
+    let y = x;
+    let _ = y;
+}
+"#;
+        let cfg = build_cfg_for_function("rust", code, "rebind").unwrap();
+        let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
+        // Second let should use prior x (not self): flow edge from first def.
+        let first = pdg
+            .nodes
+            .values()
+            .find(|n| n.defined_vars.iter().any(|d| d == "x") && n.used_vars.is_empty())
+            .expect("first let x=1");
+        let second = pdg
+            .nodes
+            .values()
+            .find(|n| {
+                n.defined_vars.iter().any(|d| d.starts_with("x#") || d == "x")
+                    && n.used_vars.iter().any(|u| u == "x" || u.starts_with("x#"))
+                    && n.statement.text.contains("x + 1")
+            })
+            .expect("let x = x + 1");
+        assert!(
+            pdg.data_deps
+                .iter()
+                .any(|d| d.from == first.id && d.to == second.id),
+            "expected flow from first x to rebind RHS, deps={:?}",
+            pdg.data_deps
         );
     }
 }

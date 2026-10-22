@@ -1,6 +1,8 @@
 //! CFG construction from tree-sitter ASTs.
 
-use crate::cfg::{BasicBlock, BlockId, CfgEdgeType, ControlFlowGraph, Statement, StatementKind};
+use crate::cfg::{
+    BasicBlock, BlockId, CfgEdgeType, ControlFlowGraph, DefVar, Statement, StatementKind,
+};
 use crate::def_use::extract_def_use;
 use crate::language_profile::{function_kinds_for, parse_source};
 use rgctl_error::{Error, Result};
@@ -69,14 +71,11 @@ impl ParsedSourceFile {
         source: &[u8],
         function_name: &str,
     ) -> Result<ControlFlowGraph> {
-        if let Some(loc) = self.locations.get(function_name) {
-            if let Some(func_node) = self
-                .tree
-                .root_node()
-                .descendant_for_byte_range(loc.start_byte, loc.end_byte)
-            {
-                return build_cfg_from_function_node(language, func_node, source, function_name);
-            }
+        if let Some(loc) = self.locations.get(function_name)
+            && let Some(func_node) =
+                seek_function_node(&self.tree, language, loc.start_byte, loc.end_byte)?
+        {
+            return build_cfg_from_function_node(language, func_node, source, function_name);
         }
         build_cfg_for_function_in_tree(language, &self.tree, source, function_name)
     }
@@ -107,10 +106,12 @@ impl ParsedSourceFile {
     ) -> Option<Node<'_>> {
         let key = (start_line, end_line, function_name.to_string());
         if let Some(loc) = self.locations_by_span.get(&key) {
+            // Language is not threaded here; callers that need kind validation use
+            // [`seek_function_node`] / [`build_cfg_for_byte_range`] directly.
             if let Some(func_node) = self
                 .tree
                 .root_node()
-                .descendant_for_byte_range(loc.start_byte, loc.end_byte)
+                .named_descendant_for_byte_range(loc.start_byte, loc.end_byte)
             {
                 return Some(func_node);
             }
@@ -124,11 +125,76 @@ impl ParsedSourceFile {
                 return self
                     .tree
                     .root_node()
-                    .descendant_for_byte_range(loc.start_byte, loc.end_byte);
+                    .named_descendant_for_byte_range(loc.start_byte, loc.end_byte);
             }
         }
         None
     }
+
+    /// Build CFG by seeking the CST node covering `[start_byte, end_byte)`.
+    pub fn build_cfg_for_byte_range(
+        &self,
+        language: &str,
+        source: &[u8],
+        function_name: &str,
+        start_byte: usize,
+        end_byte: usize,
+    ) -> Result<ControlFlowGraph> {
+        let func_node = seek_function_node(&self.tree, language, start_byte, end_byte)?
+            .ok_or_else(|| {
+                Error::NotFound(format!(
+                    "function '{function_name}' not found at byte range {start_byte}..{end_byte}"
+                ))
+            })?;
+        build_cfg_from_function_node(language, func_node, source, function_name)
+    }
+}
+
+/// Seek a function/method CST node via `named_descendant_for_byte_range` (`O(log N)`),
+/// validating the hit against [`function_kinds_for`].
+pub fn seek_function_node<'a>(
+    tree: &'a Tree,
+    language: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> Result<Option<Node<'a>>> {
+    let function_kinds = function_kinds_for(language)?;
+    let Some(node) = tree
+        .root_node()
+        .named_descendant_for_byte_range(start_byte, end_byte)
+    else {
+        return Ok(None);
+    };
+    if function_kinds.contains(&node.kind()) {
+        return Ok(Some(node));
+    }
+    // Walk parents in case the named descendant is an inner name/body node.
+    let mut cur = node;
+    while let Some(parent) = cur.parent() {
+        if function_kinds.contains(&parent.kind()) {
+            return Ok(Some(parent));
+        }
+        cur = parent;
+    }
+    Ok(None)
+}
+
+/// Build a CFG for a function identified by source byte span (no name walk).
+pub fn build_cfg_for_byte_range(
+    language: &str,
+    source: &str,
+    function_name: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> Result<ControlFlowGraph> {
+    let bytes = source.as_bytes();
+    let tree = parse_language(language, bytes)?;
+    let func_node = seek_function_node(&tree, language, start_byte, end_byte)?.ok_or_else(|| {
+        Error::NotFound(format!(
+            "function '{function_name}' not found at byte range {start_byte}..{end_byte}"
+        ))
+    })?;
+    build_cfg_from_function_node(language, func_node, bytes, function_name)
 }
 
 /// Byte / line span of a function in a parsed source file.
@@ -432,6 +498,12 @@ struct CfgBuilder<'a> {
     pending_exception_edges: HashSet<(BlockId, BlockId)>,
     /// One-time warn when expression walk hits [`AST_WALK_MAX_DEPTH`].
     expr_walk_depth_warned: bool,
+    /// Lexical block frames: bare local name → scoped id (`x` or `x#N`).
+    scope_frames: Vec<HashMap<String, String>>,
+    /// Monotonic id for shadowed locals (`x#1`, `x#2`, …).
+    next_shadow_id: u32,
+    /// Set after the function-body block has been entered (nested blocks push frames).
+    block_scope_entered: bool,
 }
 
 struct BreakableContext {
@@ -471,7 +543,79 @@ impl<'a> CfgBuilder<'a> {
             next_block_serial: 1,
             pending_exception_edges: HashSet::new(),
             expr_walk_depth_warned: false,
+            scope_frames: vec![HashMap::new()],
+            next_shadow_id: 1,
+            block_scope_entered: false,
         }
+    }
+
+    fn push_scope_frame(&mut self) {
+        self.scope_frames.push(HashMap::new());
+    }
+
+    fn pop_scope_frame(&mut self) {
+        if self.scope_frames.len() > 1 {
+            self.scope_frames.pop();
+        }
+    }
+
+    fn resolve_local(&self, bare: &str) -> String {
+        for frame in self.scope_frames.iter().rev() {
+            if let Some(scoped) = frame.get(bare) {
+                return scoped.clone();
+            }
+        }
+        bare.to_string()
+    }
+
+    fn bind_local(&mut self, bare: &str) -> String {
+        let shadowed = self
+            .scope_frames
+            .iter()
+            .rev()
+            .any(|frame| frame.contains_key(bare));
+        let scoped = if shadowed {
+            let id = self.next_shadow_id;
+            self.next_shadow_id = id.saturating_add(1);
+            format!("{bare}#{id}")
+        } else {
+            bare.to_string()
+        };
+        if let Some(frame) = self.scope_frames.last_mut() {
+            frame.insert(bare.to_string(), scoped.clone());
+        }
+        scoped
+    }
+
+    fn rewrite_scoped_vars(
+        &mut self,
+        defined: SmallVec<[DefVar; 2]>,
+        used: SmallVec<[String; 3]>,
+        is_declaration: bool,
+    ) -> (SmallVec<[DefVar; 2]>, SmallVec<[String; 3]>) {
+        // RHS uses must resolve against the *prior* binding (`let x = x + 1`).
+        let used: SmallVec<[String; 3]> = used
+            .into_iter()
+            .map(|name| self.resolve_local(&name))
+            .collect();
+        let defined = defined
+            .into_iter()
+            .map(|dv| match dv {
+                DefVar::Local(name) => {
+                    let scoped = if is_declaration {
+                        self.bind_local(&name)
+                    } else {
+                        self.resolve_local(&name)
+                    };
+                    DefVar::Local(scoped)
+                }
+                DefVar::Field { receiver, member } => DefVar::Field {
+                    receiver: self.resolve_local(&receiver),
+                    member,
+                },
+            })
+            .collect();
+        (defined, used)
     }
 
     fn build_function(&mut self, func_node: Node, source: &[u8]) -> Result<()> {
@@ -527,6 +671,9 @@ impl<'a> CfgBuilder<'a> {
         let line = node.start_position().row + 1;
         let text = node.utf8_text(source)?.trim().to_string();
         let (defined_vars, used_vars) = extract_def_use(node, source);
+        let is_decl = matches!(kind, StatementKind::Declaration);
+        let (defined_vars, used_vars) =
+            self.rewrite_scoped_vars(defined_vars, used_vars, is_decl);
         let stmt = Statement {
             kind,
             line,
@@ -572,6 +719,14 @@ impl<'a> CfgBuilder<'a> {
     }
 
     fn visit_block(&mut self, node: Node, source: &[u8]) -> Result<BlockId> {
+        // First block-like is the function body (reuse root frame); nested blocks push.
+        let should_push = is_block_like(node.kind()) && self.block_scope_entered;
+        if should_push {
+            self.push_scope_frame();
+        }
+        if is_block_like(node.kind()) {
+            self.block_scope_entered = true;
+        }
         let mut using_decls = 0usize;
         if is_block_like(node.kind()) {
             let mut cursor = node.walk();
@@ -593,11 +748,26 @@ impl<'a> CfgBuilder<'a> {
             self.visit_statement(node, source)?;
         }
         self.close_using_declarations(using_decls)?;
+        if should_push {
+            self.pop_scope_frame();
+        }
         Ok(self.current_block)
     }
 
     fn visit_statement(&mut self, node: Node, source: &[u8]) -> Result<()> {
         if !self.flow_active {
+            return Ok(());
+        }
+        // C/C++: skip `#if 0` / `#if false` arm bodies, but still visit `#else` / `#elif`.
+        if matches!(node.kind(), "preproc_if" | "preproc_ifdef")
+            && is_dead_preproc_branch(node, source)
+        {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if matches!(child.kind(), "preproc_else" | "preproc_elif") {
+                    self.visit_statement(child, source)?;
+                }
+            }
             return Ok(());
         }
         match node.kind() {
@@ -632,8 +802,8 @@ impl<'a> CfgBuilder<'a> {
             "selector" if self.language == "puppet" => self.visit_expression_stmt(node, source),
             "while_statement" | "while_expression" => self.visit_while(node, source),
             "do_statement" | "do_while_statement" => self.visit_do(node, source),
-            "for_statement" | "for_expression" | "for_in_expression" | "foreach_statement"
-            | "for_range_loop" => self.visit_for(node, source),
+            "for_statement" | "for_expression" | "for_in_expression" | "for_in_statement"
+            | "foreach_statement" | "for_range_loop" => self.visit_for(node, source),
             "enhanced_for_statement" => self.visit_enhanced_for(node, source),
             "loop_expression" => self.visit_loop(node, source),
             // Kotlin `when` — treat like switch expression (arm fan-out)
@@ -740,8 +910,39 @@ impl<'a> CfgBuilder<'a> {
             // C ternary `cond ? a : b`
             "conditional_expression" => self.visit_conditional_expression(node, source),
 
-            // Rust match
-            "match_expression" => self.visit_match(node, source),
+            // Rust match / Python match-case
+            "match_expression" | "match_statement" => self.visit_match(node, source),
+            "case_clause" => {
+                if let Some(body) = node.child_by_field_name("consequence") {
+                    self.visit_block(body, source)?;
+                } else {
+                    self.visit_block(node, source)?;
+                }
+                Ok(())
+            }
+
+            // Python `with` / comprehensions / yield
+            "with_statement" => self.visit_with_statement(node, source),
+            "list_comprehension" | "dictionary_comprehension" | "set_comprehension"
+            | "generator_expression" => {
+                self.add_statement(node, source, StatementKind::Expression)?;
+                Ok(())
+            }
+            "yield" | "yield_expression" => self.visit_co_yield(node, source),
+
+            // Rust async/unsafe blocks and let-chains
+            "async_block" | "unsafe_block" => {
+                self.visit_block(node, source)?;
+                Ok(())
+            }
+            "let_chain" | "let_condition" => {
+                self.add_statement(node, source, StatementKind::Branch)?;
+                Ok(())
+            }
+            "closure_expression" => self.visit_nested_subcfg(node, source),
+
+            // JS/TS ternary (alias of conditional_expression)
+            "ternary_expression" => self.visit_conditional_expression(node, source),
 
             // Switch (Go + Java/C# `switch_expression`)
             "switch_statement" | "type_switch_statement" | "expression_switch_statement" => {
@@ -768,6 +969,17 @@ impl<'a> CfgBuilder<'a> {
             "try_expression" => self.visit_try_expression(node, source),
             "macro_invocation" => self.visit_macro_invocation(node, source),
 
+            // Live preprocessor regions (dead `#if 0` already filtered above).
+            "preproc_if" | "preproc_ifdef" | "preproc_elif" | "preproc_else" => {
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.is_named() {
+                        self.visit_statement(child, source)?;
+                    }
+                }
+                Ok(())
+            }
+
             // Block / body wrapper
             k if is_block_like(k) => {
                 self.visit_block(node, source)?;
@@ -781,8 +993,31 @@ impl<'a> CfgBuilder<'a> {
                 Ok(())
             }
 
-            // Default: treat as expression
+            // Default: treat as expression — but unwrap if the node is only a
+            // block wrapper (some grammars omit `expression_statement`).
             _ if node.is_named() => {
+                if is_block_like(node.kind()) {
+                    self.visit_block(node, source)?;
+                    return Ok(());
+                }
+                let mut only_block: Option<Node> = None;
+                let mut named = 0usize;
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if !child.is_named() {
+                        continue;
+                    }
+                    named += 1;
+                    if is_block_like(child.kind()) {
+                        only_block = Some(child);
+                    }
+                }
+                if named == 1 {
+                    if let Some(block) = only_block {
+                        self.visit_block(block, source)?;
+                        return Ok(());
+                    }
+                }
                 let kind = Self::classify_expression(node, source);
                 self.add_statement(node, source, kind)?;
                 Ok(())
@@ -827,6 +1062,10 @@ impl<'a> CfgBuilder<'a> {
             | "anonymous_method_expression" => self.visit_statement(inner, source),
             "binary_expression" if null_coalesce_operator(inner, source) => {
                 self.visit_null_coalesce(inner, source)
+            }
+            k if is_block_like(k) => {
+                self.visit_block(inner, source)?;
+                Ok(())
             }
             _ => {
                 self.visit_expr_for_control_flow(inner, source)?;
@@ -2254,6 +2493,18 @@ impl<'a> CfgBuilder<'a> {
                     used_vars: SmallVec::new(),
                 });
             }
+        }
+        Ok(())
+    }
+
+    /// Python `with` / `async with` — treat body as a nested scoped block with a setup stmt.
+    fn visit_with_statement(&mut self, node: Node, source: &[u8]) -> Result<()> {
+        self.add_statement(node, source, StatementKind::Declaration)?;
+        if let Some(body) = node
+            .child_by_field_name("body")
+            .or_else(|| find_child_kind(node, "block"))
+        {
+            self.visit_block(body, source)?;
         }
         Ok(())
     }
@@ -3760,6 +4011,22 @@ fn collect_switch_cases<'a>(node: Node<'a>, cases: &mut Vec<Node<'a>>) {
     }
 }
 
+/// True when a C/C++ `preproc_if` / `preproc_ifdef` condition is literally `0` or `false`.
+fn is_dead_preproc_branch(node: Node<'_>, source: &[u8]) -> bool {
+    let cond = node
+        .child_by_field_name("condition")
+        .or_else(|| node.named_child(0));
+    let Some(cond) = cond else {
+        return false;
+    };
+    let text = cond
+        .utf8_text(source)
+        .unwrap_or("")
+        .trim()
+        .trim_matches(|c: char| c == '(' || c == ')');
+    matches!(text, "0" | "false" | "FALSE")
+}
+
 fn is_block_like(kind: &str) -> bool {
     matches!(
         kind,
@@ -3774,6 +4041,8 @@ fn is_block_like(kind: &str) -> bool {
             | "begin_block"
             | "do_block"
             | "program"
+            | "async_block"
+            | "unsafe_block"
     )
 }
 
@@ -7518,5 +7787,97 @@ class OrderService {
             "groovy if should branch, got {}",
             cfg.blocks.len()
         );
+    }
+
+    #[test]
+    fn python_with_and_match_build_cfg() {
+        let code = r#"
+def demo(x):
+    with open("f") as f:
+        y = f.read()
+    match x:
+        case 1:
+            return y
+        case _:
+            return None
+"#;
+        let cfg = build_cfg_for_function("python", code, "demo").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "with/match should produce multiple blocks, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn lexical_shadow_gets_distinct_scoped_ids() {
+        let code = r#"
+fn shadow_demo() {
+    let x = 1;
+    {
+        let x = 2;
+        let _inner = x;
+    }
+    let _outer = x;
+}
+"#;
+        let cfg = build_cfg_for_function("rust", code, "shadow_demo").unwrap();
+        let mut names = std::collections::HashSet::new();
+        for block in cfg.blocks.values() {
+            for stmt in &block.statements {
+                for d in &stmt.defined_vars {
+                    if let crate::cfg::DefVar::Local(n) = d {
+                        if n == "x" || n.starts_with("x#") {
+                            names.insert(n.clone());
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            names.contains("x") && names.iter().any(|n| n.starts_with("x#")),
+            "expected outer x and shadowed x#N, got {names:?}"
+        );
+    }
+
+    #[test]
+    fn dead_preproc_if_zero_is_skipped() {
+        let code = r#"
+int live(int a) {
+#if 0
+    dead_call(a);
+#else
+    live_call(a);
+#endif
+    return a;
+}
+"#;
+        let cfg = build_cfg_for_function("c", code, "live").unwrap();
+        let texts: Vec<_> = cfg
+            .blocks
+            .values()
+            .flat_map(|b| b.statements.iter().map(|s| s.text.clone()))
+            .collect();
+        assert!(
+            texts.iter().all(|t| !t.contains("dead_call")),
+            "expected #if 0 body omitted, texts={texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t.contains("live_call")),
+            "expected #else arm kept, texts={texts:?}"
+        );
+    }
+
+
+    #[test]
+    fn seek_function_node_validates_kind() {
+        let code = "fn target() { let x = 1; }\nfn other() {}\n";
+        let tree = parse_language("rust", code.as_bytes()).unwrap();
+        let start = code.find("fn target").unwrap();
+        let end = code.find("}\nfn other").unwrap() + 1;
+        let node = seek_function_node(&tree, "rust", start, end)
+            .unwrap()
+            .expect("function node");
+        assert_eq!(node.kind(), "function_item");
     }
 }

@@ -37,6 +37,7 @@ const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
     ("generic_function", HandlerMask::RELATION),
     ("if_expression", HandlerMask::CFG_STMT),
     ("impl_item", HandlerMask::SYMBOL),
+    ("let_chain", HandlerMask::CFG_STMT),
     ("let_condition", HandlerMask::CFG_STMT),
     ("let_declaration", HandlerMask::CFG_STMT),
     ("loop_expression", HandlerMask::CFG_STMT),

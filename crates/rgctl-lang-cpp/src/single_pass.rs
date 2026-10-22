@@ -586,10 +586,19 @@ pub fn extract_all_single_pass(
                     stack.push(Visit::LeaveScope);
                 }
 
+                // `#if 0` / `#if false`: skip the dead arm but still walk `#else` / `#elif`.
+                let dead_preproc = matches!(kind, "preproc_if" | "preproc_ifdef")
+                    && is_dead_preproc_condition(node, source);
                 for i in (0..node.child_count()).rev() {
-                    if let Some(child) = node.child(i) {
-                        stack.push(Visit::Pre(child, depth + 1, child_scope.clone()));
+                    let Some(child) = node.child(i) else {
+                        continue;
+                    };
+                    if dead_preproc
+                        && !matches!(child.kind(), "preproc_else" | "preproc_elif")
+                    {
+                        continue;
                     }
+                    stack.push(Visit::Pre(child, depth + 1, child_scope.clone()));
                 }
             }
         }
@@ -630,4 +639,20 @@ pub fn extract_all_single_pass(
     }
 
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
+}
+
+/// Literal `0` / `false` preprocessor conditions (CFG / extract dead-branch prune).
+fn is_dead_preproc_condition(node: Node<'_>, source: &[u8]) -> bool {
+    let cond = node
+        .child_by_field_name("condition")
+        .or_else(|| node.named_child(0));
+    let Some(cond) = cond else {
+        return false;
+    };
+    let text = cond
+        .utf8_text(source)
+        .unwrap_or("")
+        .trim()
+        .trim_matches(|c: char| c == '(' || c == ')');
+    matches!(text, "0" | "false" | "FALSE")
 }

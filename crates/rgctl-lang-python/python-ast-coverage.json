@@ -55,7 +55,7 @@
     "format_specifier": "Skip",
     "function_definition": "Symbol",
     "future_import_statement": "Relation",
-    "generator_expression": "Skip",
+    "generator_expression": "CfgStatement",
     "generic_type": "Skip",
     "global_statement": "Skip",
     "identifier": "Skip",

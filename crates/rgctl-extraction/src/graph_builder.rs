@@ -70,6 +70,13 @@ pub struct GraphBuilder {
     active_tracker_ids: Vec<Uuid>,
     /// AnnotatedWith argument text keyed for sidecar (columnar edges drop properties).
     annotation_args: Vec<AnnotationArgEntry>,
+    /// Child type simple name → direct bases `(base_simple_name, is_interface)`.
+    /// Populated from Extends / Implements / IncludesClass / InheritsClass in pass 2.
+    inheritance_bases: HashMap<String, Vec<(String, bool)>>,
+    /// Owner simple name → `(method_simple_name, function_node_id)` declared on that type.
+    type_methods: HashMap<String, Vec<(String, Uuid)>>,
+    /// Cached MRO chains (simple type names, self first).
+    mro_cache: HashMap<String, Vec<String>>,
 }
 
 /// One annotation usage with argument text (written to `.rgctl/annotation_args.json`).
@@ -517,6 +524,7 @@ impl GraphBuilder {
         self.symbol_files
             .insert(id, symbol.location.file.clone());
         self.index_symbol_resolution(&key, &node);
+        self.index_type_method(symbol, id);
         self.commit_node(node);
         self.add_edge(id, file_id, EdgeType::DefinedIn);
         self.add_edge(file_id, id, EdgeType::Contains);
@@ -524,6 +532,33 @@ impl GraphBuilder {
             self.add_field_members(id, symbol, file_id);
         }
         id
+    }
+
+    /// Index `Owner.method` / `Owner::method` / `Owner#method` for MRO Overrides.
+    fn index_type_method(&mut self, symbol: &Symbol, id: Uuid) {
+        if !matches!(
+            symbol.symbol_type,
+            SymbolType::Function | SymbolType::Method
+        ) {
+            return;
+        }
+        let Some(qn) = symbol.qualified_name.as_deref() else {
+            return;
+        };
+        let Some((owner, method)) = split_owner_method(qn) else {
+            return;
+        };
+        let method = method.to_string();
+        let owners = [owner, type_simple_name(owner)];
+        for o in owners {
+            if o.is_empty() {
+                continue;
+            }
+            let entry = self.type_methods.entry(o.to_string()).or_default();
+            if !entry.iter().any(|(m, uid)| m == &method && *uid == id) {
+                entry.push((method.clone(), id));
+            }
+        }
     }
 
     /// Materialize `Symbol.fields` as Variable nodes contained by the owning type.
@@ -768,6 +803,45 @@ impl GraphBuilder {
                     "call_site_line".to_string(),
                     relation.location.start_line.to_string(),
                 );
+                // Persist receiver type / callee for post-ingest MRO retargeting.
+                let hint = to_type_hint
+                    .as_deref()
+                    .or(relation.to_type_hint.as_deref())
+                    .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("file"));
+                if let Some(h) = hint {
+                    edge = edge.with_property("to_type_hint".to_string(), h.to_string());
+                }
+                let callee = relation
+                    .to
+                    .rsplit(['.', ':', '#'])
+                    .next()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(relation.to.as_str());
+                if !callee.is_empty() {
+                    edge = edge.with_property("callee".to_string(), callee.to_string());
+                }
+            }
+            if is_inheritance_relation(relation.relation_type) {
+                let child = type_simple_name(&relation.from);
+                let parent = type_simple_name(
+                    relation
+                        .to_qualified_hint
+                        .as_deref()
+                        .unwrap_or(relation.to.as_str()),
+                );
+                let is_iface = matches!(
+                    relation.relation_type,
+                    RelationType::Implements | RelationType::IncludesClass
+                ) || relation
+                    .to_type_hint
+                    .as_deref()
+                    .is_some_and(|h| {
+                        matches!(
+                            h.to_ascii_lowercase().as_str(),
+                            "interface" | "trait" | "module" | "annotation"
+                        )
+                    });
+                self.record_inheritance(child, parent, is_iface);
             }
             if relation.relation_type == RelationType::AnnotatedWith
                 && let Some(args) = relation
@@ -792,6 +866,140 @@ impl GraphBuilder {
             self.commit_edge(edge);
         }
         Ok(())
+    }
+
+    fn record_inheritance(&mut self, child: &str, parent: &str, is_interface: bool) {
+        if child.is_empty() || parent.is_empty() || child == parent {
+            return;
+        }
+        let entry = self.inheritance_bases.entry(child.to_string()).or_default();
+        if !entry.iter().any(|(p, _)| p == parent) {
+            entry.push((parent.to_string(), is_interface));
+            self.mro_cache.clear();
+        }
+    }
+
+    /// Class-over-interface MRO: `self` → non-interface bases (DFS) → interfaces.
+    /// Good default for Java/TS/Kotlin/PHP and a sound ancestor walk for call resolve.
+    fn mro_chain_cached(&mut self, type_name: &str) -> Vec<String> {
+        let key = type_simple_name(type_name).to_string();
+        if let Some(cached) = self.mro_cache.get(key.as_str()) {
+            return cached.clone();
+        }
+        let out = compute_mro_chain(type_name, &self.inheritance_bases);
+        self.mro_cache.insert(key, out.clone());
+        out
+    }
+
+    /// Resolve `method` on `type_name` by walking the MRO (`sep` ∈ `.` / `::` / `#`).
+    fn resolve_via_mro(
+        &mut self,
+        type_name: &str,
+        method: &str,
+        skip_self: bool,
+    ) -> Option<Uuid> {
+        if method.is_empty() || type_name.is_empty() {
+            return None;
+        }
+        let chain = self.mro_chain_cached(type_name);
+        self.lookup_method_on_chain(&chain, method, skip_self)
+    }
+
+    fn resolve_via_mro_ref(
+        &self,
+        type_name: &str,
+        method: &str,
+        skip_self: bool,
+    ) -> Option<Uuid> {
+        if method.is_empty() || type_name.is_empty() {
+            return None;
+        }
+        let chain = self
+            .mro_cache
+            .get(type_simple_name(type_name))
+            .cloned()
+            .unwrap_or_else(|| compute_mro_chain(type_name, &self.inheritance_bases));
+        self.lookup_method_on_chain(&chain, method, skip_self)
+    }
+
+    fn lookup_method_on_chain(
+        &self,
+        chain: &[String],
+        method: &str,
+        skip_self: bool,
+    ) -> Option<Uuid> {
+        // Always skip chain[0] (self): Step 2/3 already probed the receiver type
+        // via qualified/suffix indexes. Re-walking self through `type_methods`
+        // would collapse ambiguous FQNs (QE duplicate-qualified-name invariant).
+        // `skip_self` is retained for API clarity (super.* callers pass true).
+        let _ = skip_self;
+        for ancestor in chain.iter().skip(1) {
+            for sep in [".", "::", "#"] {
+                let key = format!("{ancestor}{sep}{method}");
+                if let Some(id) = self
+                    .symbols_by_qualified
+                    .get(&key)
+                    .and_then(|ids| unique_resolved(ids))
+                {
+                    return Some(id);
+                }
+                if let Some(id) = self
+                    .symbols_by_suffix
+                    .get(&key)
+                    .and_then(|ids| unique_resolved(ids))
+                {
+                    return Some(id);
+                }
+            }
+            if let Some(id) = self
+                .type_methods
+                .get(ancestor)
+                .and_then(|ms| unique_method_id(ms, method))
+            {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    /// Emit `EdgeType::Overrides` for every subtype method that shadows an ancestor.
+    ///
+    /// Call after inheritance relations are committed (end of pass 2).
+    pub fn emit_mro_overrides(&mut self) {
+        if self.inheritance_bases.is_empty() || self.type_methods.is_empty() {
+            return;
+        }
+        let owners: Vec<String> = self.type_methods.keys().cloned().collect();
+        let mut edges = Vec::new();
+        for owner in owners {
+            let methods = match self.type_methods.get(&owner) {
+                Some(m) => m.clone(),
+                None => continue,
+            };
+            let chain = self.mro_chain_cached(&owner);
+            if chain.len() < 2 {
+                continue;
+            }
+            for (method, child_id) in methods {
+                for ancestor in chain.iter().skip(1) {
+                    let ancestor_id = self
+                        .type_methods
+                        .get(ancestor)
+                        .and_then(|ms| unique_method_id(ms, &method));
+                    let Some(ancestor_id) = ancestor_id else {
+                        continue;
+                    };
+                    if ancestor_id == child_id {
+                        continue;
+                    }
+                    edges.push(Edge::new(child_id, ancestor_id, EdgeType::Overrides));
+                    break; // nearest ancestor only
+                }
+            }
+        }
+        for edge in edges {
+            self.commit_edge(edge);
+        }
     }
 
     /// Resolve a file path string to a registered File node (absolute/relative tolerant).
@@ -1111,17 +1319,44 @@ impl GraphBuilder {
             }
         }
 
-        // 3. Try type hint + simple name (O(1)); only if uniquely resolved
+        // 3. Try type hint + simple name (O(1)); walk MRO when the subtype
+        //    did not declare the method (inherited Calls would otherwise drop).
         if let Some(type_name) = type_hint {
             self.resolution_stats.type_hint_scans += 1;
-            let simple_name = name.split('.').next_back().unwrap_or(name);
-            let type_qualified = format!("{type_name}.{simple_name}");
+            let simple_name = method_simple_name(name, qualified_hint);
+            let type_name = type_simple_name(type_name);
+            let skip_self = is_super_call(name, qualified_hint, type_name);
 
-            if let Some(id) = self
-                .symbols_by_suffix
-                .get(&type_qualified)
-                .and_then(|ids| unique_resolved(ids))
-            {
+            for sep in [".", "::", "#"] {
+                let type_qualified = format!("{type_name}{sep}{simple_name}");
+                if let Some(id) = self
+                    .symbols_by_suffix
+                    .get(&type_qualified)
+                    .and_then(|ids| unique_resolved(ids))
+                    .or_else(|| {
+                        self.symbols_by_qualified
+                            .get(&type_qualified)
+                            .and_then(|ids| unique_resolved(ids))
+                    })
+                {
+                    self.resolution_stats.type_hint_hits += 1;
+                    self.resolution_stats.total_time += start.elapsed();
+                    return Some(id);
+                }
+            }
+
+            if let Some(id) = self.resolve_via_mro(type_name, simple_name, skip_self) {
+                self.resolution_stats.type_hint_hits += 1;
+                self.resolution_stats.total_time += start.elapsed();
+                return Some(id);
+            }
+        } else if let Some(hint) = qualified_hint
+            && let Some((owner, method)) = split_owner_method(hint)
+        {
+            // Qualified hint alone (e.g. `Child.run`) — walk MRO when Child has no `run`.
+            self.resolution_stats.type_hint_scans += 1;
+            let skip_self = is_super_call(name, Some(hint), owner);
+            if let Some(id) = self.resolve_via_mro(owner, method, skip_self) {
                 self.resolution_stats.type_hint_hits += 1;
                 self.resolution_stats.total_time += start.elapsed();
                 return Some(id);
@@ -1198,15 +1433,35 @@ impl GraphBuilder {
             return Some(id);
         }
 
-        if let Some(type_name) = type_hint
-            && let simple_name = name.split('.').next_back().unwrap_or(name)
-            && let type_qualified = format!("{type_name}.{simple_name}")
-            && let Some(id) = self
-                .symbols_by_suffix
-                .get(&type_qualified)
-                .and_then(|ids| unique_resolved(ids))
+        if let Some(type_name) = type_hint {
+            let simple_name = method_simple_name(name, qualified_hint);
+            let type_name = type_simple_name(type_name);
+            let skip_self = is_super_call(name, qualified_hint, type_name);
+            for sep in [".", "::", "#"] {
+                let type_qualified = format!("{type_name}{sep}{simple_name}");
+                if let Some(id) = self
+                    .symbols_by_suffix
+                    .get(&type_qualified)
+                    .and_then(|ids| unique_resolved(ids))
+                    .or_else(|| {
+                        self.symbols_by_qualified
+                            .get(&type_qualified)
+                            .and_then(|ids| unique_resolved(ids))
+                    })
+                {
+                    return Some(id);
+                }
+            }
+            if let Some(id) = self.resolve_via_mro_ref(type_name, simple_name, skip_self) {
+                return Some(id);
+            }
+        } else if let Some(hint) = qualified_hint
+            && let Some((owner, method)) = split_owner_method(hint)
         {
-            return Some(id);
+            let skip_self = is_super_call(name, Some(hint), owner);
+            if let Some(id) = self.resolve_via_mro_ref(owner, method, skip_self) {
+                return Some(id);
+            }
         }
 
         self.symbols_by_suffix
@@ -1320,6 +1575,22 @@ fn unique_resolved(ids: &[Uuid]) -> Option<Uuid> {
         [first, rest @ ..] if rest.iter().all(|id| id == first) => Some(*first),
         _ => None,
     }
+}
+
+/// Return the sole method UUID for `method` on an owner, or `None` if ambiguous.
+fn unique_method_id(ms: &[(String, Uuid)], method: &str) -> Option<Uuid> {
+    let mut found: Option<Uuid> = None;
+    for (m, id) in ms {
+        if m != method {
+            continue;
+        }
+        match found {
+            None => found = Some(*id),
+            Some(prev) if prev == *id => {}
+            Some(_) => return None,
+        }
+    }
+    found
 }
 
 /// When a C symbol appears in both `.h` and `.c`, prefer the sole `.c` definition.
@@ -1556,6 +1827,102 @@ fn go_simple_type_from_str(ty: &str) -> String {
         .next()
         .unwrap_or(ty)
         .to_string()
+}
+
+pub(crate) fn is_inheritance_relation(rt: RelationType) -> bool {
+    matches!(
+        rt,
+        RelationType::Extends
+            | RelationType::Implements
+            | RelationType::IncludesClass
+            | RelationType::InheritsClass
+    )
+}
+
+fn compute_mro_chain(
+    type_name: &str,
+    bases: &HashMap<String, Vec<(String, bool)>>,
+) -> Vec<String> {
+    let key = type_simple_name(type_name);
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    fn walk(
+        name: &str,
+        bases: &HashMap<String, Vec<(String, bool)>>,
+        out: &mut Vec<String>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        if !seen.insert(name.to_string()) {
+            return;
+        }
+        out.push(name.to_string());
+        let Some(direct) = bases.get(name) else {
+            return;
+        };
+        let (classes, ifaces): (Vec<_>, Vec<_>) =
+            direct.iter().cloned().partition(|(_, iface)| !*iface);
+        for (base, _) in classes.into_iter().chain(ifaces) {
+            walk(&base, bases, out, seen);
+        }
+    }
+    walk(key, bases, &mut out, &mut seen);
+    out
+}
+
+/// Rightmost type segment: `com.foo.Child` → `Child`, `pkg::Child` → `Child`.
+fn type_simple_name(name: &str) -> &str {
+    name.split('<')
+        .next()
+        .unwrap_or(name)
+        .rsplit(['.', '/', ':'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(name)
+}
+
+/// Split `Owner.method` / `Owner::method` / Ruby `Owner#method`.
+fn split_owner_method(qn: &str) -> Option<(&str, &str)> {
+    if let Some((owner, method)) = qn.rsplit_once("::") {
+        if !owner.is_empty() && !method.is_empty() {
+            let method = method.split('<').next().unwrap_or(method);
+            let owner = owner.split('<').next().unwrap_or(owner);
+            return Some((owner, method));
+        }
+    }
+    if let Some((owner, method)) = qn.rsplit_once('#') {
+        if !owner.is_empty() && !method.is_empty() {
+            return Some((owner, method));
+        }
+    }
+    if let Some((owner, method)) = qn.rsplit_once('.') {
+        if !owner.is_empty() && !method.is_empty() {
+            return Some((owner, method));
+        }
+    }
+    None
+}
+
+fn method_simple_name<'a>(name: &'a str, qualified_hint: Option<&'a str>) -> &'a str {
+    if let Some(hint) = qualified_hint
+        && let Some((_, method)) = split_owner_method(hint)
+    {
+        return method;
+    }
+    name.rsplit(['.', ':', '#'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(name)
+}
+
+fn is_super_call(name: &str, qualified_hint: Option<&str>, type_name: &str) -> bool {
+    if type_name.eq_ignore_ascii_case("super") {
+        return true;
+    }
+    let probe = qualified_hint.unwrap_or(name);
+    probe.starts_with("super.")
+        || probe.starts_with("super::")
+        || probe.starts_with("super#")
+        || name == "super"
 }
 
 #[cfg(test)]
@@ -3141,6 +3508,215 @@ mod tests {
         assert!(
             !index.contains_key("b/c/d/e/f/g/h/i/j/k/l/m.rs"),
             "far-prefix suffix should be skipped when depth exceeds bound"
+        );
+    }
+
+    fn type_symbol(file: &str, name: &str, st: SymbolType) -> Symbol {
+        Symbol {
+            name: name.to_string(),
+            symbol_type: st,
+            location: SourceLocation {
+                file: file.to_string(),
+                start_line: 1,
+                end_line: 1,
+                start_column: 0,
+                end_column: 1,
+            },
+            qualified_name: Some(name.to_string()),
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn mro_resolves_inherited_call_and_emits_overrides() {
+        let mut builder = GraphBuilder::new();
+        let base_file = builder.ensure_file_node(Path::new("base.py"));
+        let child_file = builder.ensure_file_node(Path::new("child.py"));
+        builder.add_symbol(&type_symbol("base.py", "Base", SymbolType::Class), base_file);
+        builder.add_symbol(
+            &function_symbol("base.py", "run", "Base.run"),
+            base_file,
+        );
+        builder.add_symbol(&type_symbol("child.py", "Child", SymbolType::Class), child_file);
+        // Child overrides run — should emit Overrides → Base.run
+        let child_run = builder.add_symbol(
+            &function_symbol("child.py", "run", "Child.run"),
+            child_file,
+        );
+        let caller = builder.add_symbol(
+            &function_symbol("child.py", "main", "main"),
+            child_file,
+        );
+        builder.build_resolution_indexes();
+        builder
+            .add_relation(&Relation {
+                from: "Child".to_string(),
+                to: "Base".to_string(),
+                relation_type: RelationType::Extends,
+                location: SourceLocation {
+                    file: "child.py".to_string(),
+                    start_line: 1,
+                    end_line: 1,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({ "language": "python" }),
+                to_qualified_hint: Some("Base".to_string()),
+                to_type_hint: Some("class".to_string()),
+            })
+            .unwrap();
+        builder.emit_mro_overrides();
+        let (_, edges) = builder.into_graph();
+        assert!(
+            edges.iter().any(|e| {
+                e.edge_type == EdgeType::Overrides && e.from == child_run
+            }),
+            "expected Overrides from Child.run, edges={edges:?}"
+        );
+        let _ = caller;
+    }
+
+    #[test]
+    fn mro_inherited_call_targets_ancestor_when_child_has_no_method() {
+        let mut builder = GraphBuilder::new();
+        let base_file = builder.ensure_file_node(Path::new("base.py"));
+        let child_file = builder.ensure_file_node(Path::new("child.py"));
+        builder.add_symbol(&type_symbol("base.py", "Base", SymbolType::Class), base_file);
+        let base_run = builder.add_symbol(
+            &function_symbol("base.py", "run", "Base.run"),
+            base_file,
+        );
+        builder.add_symbol(&type_symbol("child.py", "Child", SymbolType::Class), child_file);
+        builder.add_symbol(
+            &function_symbol("child.py", "entry", "Child.entry"),
+            child_file,
+        );
+        builder.build_resolution_indexes();
+        // Inheritance before Calls (mirrors populate_pass2 ordering).
+        builder
+            .add_relation(&Relation {
+                from: "Child".to_string(),
+                to: "Base".to_string(),
+                relation_type: RelationType::Extends,
+                location: SourceLocation {
+                    file: "child.py".to_string(),
+                    start_line: 1,
+                    end_line: 1,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({ "language": "python" }),
+                to_qualified_hint: Some("Base".to_string()),
+                to_type_hint: Some("class".to_string()),
+            })
+            .unwrap();
+        builder
+            .add_relation(&Relation {
+                from: "Child.entry".to_string(),
+                to: "Child.run".to_string(),
+                relation_type: RelationType::Calls,
+                location: SourceLocation {
+                    file: "child.py".to_string(),
+                    start_line: 5,
+                    end_line: 5,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({ "language": "python" }),
+                to_qualified_hint: Some("Child.run".to_string()),
+                to_type_hint: Some("Child".to_string()),
+            })
+            .unwrap();
+        let (_, edges) = builder.into_graph();
+        assert!(
+            edges.iter().any(|e| {
+                e.edge_type == EdgeType::Calls && e.to == base_run
+            }),
+            "inherited Child.run call must resolve to Base.run, edges={edges:?}"
+        );
+    }
+
+    #[test]
+    fn mro_ruby_hash_qn_resolves_via_include() {
+        let mut builder = GraphBuilder::new();
+        let mod_file = builder.ensure_file_node(Path::new("walkable.rb"));
+        let dog_file = builder.ensure_file_node(Path::new("dog.rb"));
+        builder.add_symbol(
+            &type_symbol("walkable.rb", "Walkable", SymbolType::Module),
+            mod_file,
+        );
+        let bark = builder.add_symbol(
+            &Symbol {
+                name: "bark".to_string(),
+                symbol_type: SymbolType::Method,
+                location: SourceLocation {
+                    file: "walkable.rb".to_string(),
+                    start_line: 2,
+                    end_line: 2,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                qualified_name: Some("Walkable#bark".to_string()),
+                signature: None,
+                return_type: None,
+                parameters: vec![],
+                fields: vec![],
+                modifiers: vec![],
+                documentation: None,
+                metadata: serde_json::json!({}),
+            },
+            mod_file,
+        );
+        builder.add_symbol(&type_symbol("dog.rb", "Dog", SymbolType::Class), dog_file);
+        builder.add_symbol(
+            &function_symbol("dog.rb", "speak", "Dog#speak"),
+            dog_file,
+        );
+        builder.build_resolution_indexes();
+        builder
+            .add_relation(&Relation {
+                from: "Dog".to_string(),
+                to: "Walkable".to_string(),
+                relation_type: RelationType::IncludesClass,
+                location: SourceLocation {
+                    file: "dog.rb".to_string(),
+                    start_line: 1,
+                    end_line: 1,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({ "language": "ruby" }),
+                to_qualified_hint: Some("Walkable".to_string()),
+                to_type_hint: Some("module".to_string()),
+            })
+            .unwrap();
+        builder
+            .add_relation(&Relation {
+                from: "Dog#speak".to_string(),
+                to: "Dog#bark".to_string(),
+                relation_type: RelationType::Calls,
+                location: SourceLocation {
+                    file: "dog.rb".to_string(),
+                    start_line: 4,
+                    end_line: 4,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({ "language": "ruby" }),
+                to_qualified_hint: Some("Dog#bark".to_string()),
+                to_type_hint: Some("Dog".to_string()),
+            })
+            .unwrap();
+        let (_, edges) = builder.into_graph();
+        assert!(
+            edges.iter().any(|e| e.edge_type == EdgeType::Calls && e.to == bark),
+            "Dog#bark via include must resolve to Walkable#bark, edges={edges:?}"
         );
     }
 }
