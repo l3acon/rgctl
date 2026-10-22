@@ -371,12 +371,20 @@ impl LanguagePlugin for CPlugin {
 }
 
 fn function_name_from_node(node: Node, source: &[u8]) -> Option<String> {
-    if node.kind() == "function_definition" || node.kind() == "declaration" {
-        if let Some(decl) = node.child_by_field_name("declarator") {
-            return name_from_declarator(decl, source);
+    match node.kind() {
+        "function_definition" => {
+            let decl = node.child_by_field_name("declarator")?;
+            name_from_declarator(decl, source)
         }
+        "declaration" => {
+            // Only function prototypes have a `function_declarator` parameter list;
+            // plain variable declarations (`int x = 0;`) must not become Function symbols.
+            find_parameter_list(node)?;
+            let decl = node.child_by_field_name("declarator")?;
+            name_from_declarator(decl, source)
+        }
+        _ => None,
     }
-    None
 }
 
 /// Walk a function/declaration node's declarator chain to its `parameter_list`.

@@ -14,7 +14,8 @@ use crate::analysis::{
     AnalysisResults, AnalysisStorage, AstSkeletonArchive, BlastEngineSnapshot, BlastRadiusEngine,
     CentralityAnalyzer, CfgPdgArchive, CommunityDetector, ComplexityAnalyzer, DependencyAnalyzer,
     FIELD_WRITE_INDEX_VERSION, FieldWriteIndex, MacroCallIndex, MacroCallLookupDb, NodeLookup,
-    build_and_save_field_write_index, cfg_language_list, AST_SKELETON_VERSION,
+    NodeRole, build_and_save_field_write_index, cfg_language_list, classify_node_role,
+    AST_SKELETON_VERSION,
 };
 use crate::config::secret_detector::{DetectedSecret, SecretDetector};
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
@@ -371,7 +372,7 @@ pub(crate) fn run_full_analysis(
         node_ids.sort_unstable();
         analysis_results = AnalysisResults::new(node_ids);
 
-        // Complexity from cold mmap payloads.
+        // Complexity from cold mmap payloads (single Function collect — reused below).
         let complexity_start = Instant::now();
         let complexity_report = ComplexityAnalyzer::analyze_lookup(&cold)?;
         analysis_results.fill_complexity(&complexity_report);
@@ -421,7 +422,12 @@ pub(crate) fn run_full_analysis(
         };
         profile.topology.secs = secs(topo_start.elapsed());
 
-        functions = cold.collect_nodes_by_type(NodeType::Function)?;
+        // Reuse Function nodes already materialized for complexity (avoid 2nd full scan).
+        functions = complexity_report
+            .functions
+            .into_iter()
+            .map(|fc| fc.node)
+            .collect();
         profile.functions = functions.len();
         // Seal ingest phase: absolute peak stays; analysis phase peak resets to current RSS.
         profile.ingest_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
@@ -441,7 +447,11 @@ pub(crate) fn run_full_analysis(
         analysis_results.fill_community(&community_result);
         profile.community.secs = secs(community_start.elapsed());
         if human_output {
-            let n_communities = community_result.communities.len();
+            let n_communities = analysis_results
+                .community
+                .as_ref()
+                .map(|c| c.num_communities)
+                .unwrap_or_else(|| community_result.communities.len());
             let n_nodes = view.node_count().max(1);
             let mut call_use_edges = 0usize;
             let _ = view.for_each_edge(|_, _, ty| {
@@ -497,31 +507,52 @@ pub(crate) fn run_full_analysis(
         let has_betweenness = centrality_summary.has_betweenness;
 
         if human_output {
-            if let Some((top_id, top_score)) = centrality_summary.top_pagerank.first() {
-                if let Ok(Some(node)) = cold.get_node(*top_id) {
-                    let short_name = node.name.split('/').next_back().unwrap_or(&node.name);
-                    let (in_degree, out_degree) = analysis_results
-                        .get_centrality(*top_id)
-                        .map(|m| (m.in_degree, m.out_degree))
-                        .unwrap_or((0, 0));
-
-                    if verbose {
-                        info!(
-                            hotspot = short_name,
-                            pagerank = %format!("{:.4}", top_score),
-                            betweenness_enabled = has_betweenness,
-                            in_degree,
-                            out_degree,
-                            "[*] Top hotspot: {} (PageRank: {:.4})",
-                            short_name,
-                            top_score
-                        );
+            let hotspot = centrality_summary
+                .top_pagerank
+                .iter()
+                .find_map(|(id, score)| {
+                    let node = cold.get_node(*id).ok().flatten()?;
+                    let stub = node.get_property("is_external_stub") == Some("true");
+                    let name = node
+                        .qualified_name
+                        .as_deref()
+                        .unwrap_or(node.name.as_str());
+                    if classify_node_role(name, node.file_path.as_deref(), stub)
+                        == NodeRole::Production
+                    {
+                        Some((*id, *score, node))
                     } else {
-                        info!(
-                            "[*] Top hotspot: {} (PageRank: {:.4})",
-                            short_name, top_score
-                        );
+                        None
                     }
+                })
+                .or_else(|| {
+                    let (id, score) = *centrality_summary.top_pagerank.first()?;
+                    let node = cold.get_node(id).ok().flatten()?;
+                    Some((id, score, node))
+                });
+            if let Some((top_id, top_score, node)) = hotspot {
+                let short_name = node.name.split('/').next_back().unwrap_or(&node.name);
+                let (in_degree, out_degree) = analysis_results
+                    .get_centrality(top_id)
+                    .map(|m| (m.in_degree, m.out_degree))
+                    .unwrap_or((0, 0));
+
+                if verbose {
+                    info!(
+                        hotspot = short_name,
+                        pagerank = %format!("{:.4}", top_score),
+                        betweenness_enabled = has_betweenness,
+                        in_degree,
+                        out_degree,
+                        "[*] Top hotspot: {} (PageRank: {:.4})",
+                        short_name,
+                        top_score
+                    );
+                } else {
+                    info!(
+                        "[*] Top hotspot: {} (PageRank: {:.4})",
+                        short_name, top_score
+                    );
                 }
             }
         }
@@ -535,18 +566,22 @@ pub(crate) fn run_full_analysis(
                 .as_ref()
                 .and_then(|c| c.infrastructure_community_id);
             let _ = rgctl_analysis::fill_community_labels(&mut analysis_results, infra, |uuid| {
-                cold.get_node(uuid).ok().flatten().map(|n| {
-                    (
-                        n.name.to_string(),
-                        n.file_path.as_ref().map(|s| s.to_string()),
-                    )
-                })
+                cold.node_name_and_path(uuid).ok().flatten()
             });
         }
 
-        // Dependency analysis
+        // Dependency analysis — full-graph Kosaraju is O(N+E) and duplicates work the
+        // blast-radius SCC engine does next; skip on huge corpora (linux ~2.7M nodes).
         let dependency_start = Instant::now();
-        let cycles = DependencyAnalyzer::find_circular_dependencies_with_lookup(&view, &cold)?;
+        let cycles = if view.node_count() >= 500_000 {
+            debug!(
+                nodes = view.node_count(),
+                "Skipping circular-dependency Kosaraju on large graph (blast SCC covers cycles)"
+            );
+            Vec::new()
+        } else {
+            DependencyAnalyzer::find_circular_dependencies_with_lookup(&view, &cold)?
+        };
         profile.dependency.secs = secs(dependency_start.elapsed());
         if !cycles.is_empty() && human_output {
             if verbose {
@@ -1201,7 +1236,7 @@ pub(crate) fn run_full_analysis(
         info!("[✓] Analysis complete");
     }
 
-    analysis_results.fill_structural_sketch_from_lookup(&cold)?;
+    analysis_results.fill_structural_sketch_from_nodes(&functions)?;
 
     // Save analysis results (columnar format - separate from graph!)
     let save_analysis_start = Instant::now();

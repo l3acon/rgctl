@@ -71,15 +71,12 @@ class Derived : public Base {
         }),
         "union U missing"
     );
+    // `#define` macros are not indexed as graph Macro nodes (linux cold node cap).
     assert!(
         out.symbols
             .iter()
-            .any(|s| s.name == "MAX" && s.symbol_type == SymbolType::Macro)
-    );
-    assert!(
-        out.symbols
-            .iter()
-            .any(|s| s.name == "SQR" && s.symbol_type == SymbolType::Macro)
+            .all(|s| s.symbol_type != SymbolType::Macro),
+        "unexpected Macro symbols"
     );
     assert!(
         out.relations.iter().any(|r| {

@@ -42,8 +42,6 @@ const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
     ("if_statement", HandlerMask::CFG_STMT),
     ("namespace_definition", HandlerMask::SYMBOL),
     ("new_expression", HandlerMask::RELATION),
-    ("preproc_def", HandlerMask::SYMBOL),
-    ("preproc_function_def", HandlerMask::SYMBOL),
     ("preproc_if", HandlerMask::CFG_STMT),
     ("preproc_ifdef", HandlerMask::CFG_STMT),
     ("preproc_include", HandlerMask::RELATION),
@@ -443,20 +441,6 @@ pub fn extract_all_single_pass(
                                 true,
                             );
                             pushed_scope = true;
-                        }
-                    }
-                    "preproc_def" => {
-                        if let Some(sym) =
-                            depth::extract_preproc_def(node, source, &file_path_str)
-                        {
-                            ctx.symbols.push(sym);
-                        }
-                    }
-                    "preproc_function_def" => {
-                        if let Some(sym) =
-                            depth::extract_preproc_function_def(node, source, &file_path_str)
-                        {
-                            ctx.symbols.push(sym);
                         }
                     }
                     "preproc_include" => {

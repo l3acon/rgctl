@@ -30,8 +30,6 @@ const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
     ("function_definition", HandlerMask::SYMBOL),
     ("goto_statement", HandlerMask::CFG_STMT),
     ("if_statement", HandlerMask::CFG_STMT),
-    ("preproc_def", HandlerMask::SYMBOL),
-    ("preproc_function_def", HandlerMask::SYMBOL),
     ("preproc_if", HandlerMask::CFG_STMT),
     ("preproc_ifdef", HandlerMask::CFG_STMT),
     ("preproc_include", HandlerMask::RELATION),
@@ -47,6 +45,7 @@ const AST_MAX_DEPTH: usize = 2048;
 
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
 static DISPATCH: OnceLock<KindDispatchTable> = OnceLock::new();
+static ACTIVE_KINDS: OnceLock<Box<[bool]>> = OnceLock::new();
 
 fn c_grammar() -> tree_sitter::Language {
     tree_sitter_c::LANGUAGE.into()
@@ -63,6 +62,43 @@ pub fn c_ast_handlers() -> &'static AstHandlerTable {
 fn c_dispatch() -> &'static KindDispatchTable {
     DISPATCH.get_or_init(|| {
         dispatch_table_from_manifest(&c_grammar(), MANIFEST_JSON)
+    })
+}
+
+/// Fast `kind_id -> bool` table for kinds that have an action in [`extract_all_single_pass`].
+fn c_active_kinds() -> &'static [bool] {
+    ACTIVE_KINDS.get_or_init(|| {
+        let g = c_grammar();
+        let n = g.node_kind_count();
+        let mut table = vec![false; n + 1];
+        const ACTIVE_NAMES: &[&str] = &[
+            "function_definition",
+            "declaration",
+            "struct_specifier",
+            "enum_specifier",
+            "type_definition",
+            "union_specifier",
+            "preproc_include",
+            "preprocessor_include",
+            "call_expression",
+            "if_statement",
+            "switch_statement",
+            "while_statement",
+            "for_statement",
+            "do_statement",
+            "conditional_expression",
+            "case_statement",
+            "return_statement",
+            "preproc_if",
+            "preproc_ifdef",
+        ];
+        for &name in ACTIVE_NAMES {
+            let id = g.id_for_node_kind(name, true) as usize;
+            if id > 0 && id < table.len() {
+                table[id] = true;
+            }
+        }
+        table.into_boxed_slice()
     })
 }
 
@@ -92,11 +128,13 @@ pub fn extract_all_single_pass(
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = c_dispatch();
+    let active_kinds = c_active_kinds();
 
     let mut ctx = SinglePassCtx::new(dispatch);
     let mut relations = Vec::new();
     let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
     let mut depth_warned = false;
+    let mut cursor = root.walk();
 
     let mut stack = vec![Visit::Pre(root, 0)];
 
@@ -124,8 +162,23 @@ pub fn extract_all_single_pass(
                     continue;
                 }
 
-                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
-                let _ = mask; // keep for future passive skip
+                let kind_id = node.kind_id();
+                let _mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, kind_id);
+                if !active_kinds.get(kind_id as usize).copied().unwrap_or(false) {
+                    let base = stack.len();
+                    for child in node.named_children(&mut cursor) {
+                        let cid = child.kind_id();
+                        if !active_kinds.get(cid as usize).copied().unwrap_or(false)
+                            && child.child_count() == 0
+                        {
+                            let _ = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, cid);
+                            continue;
+                        }
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
+                    stack[base..].reverse();
+                    continue;
+                }
                 let kind = node.kind();
 
                 let mut pushed_scope = false;
@@ -268,20 +321,6 @@ pub fn extract_all_single_pass(
                             }
                         }
                     }
-                    "preproc_def" => {
-                        if let Some(sym) =
-                            depth::extract_preproc_def(node, source, &file_path_str)
-                        {
-                            ctx.symbols.push(sym);
-                        }
-                    }
-                    "preproc_function_def" => {
-                        if let Some(sym) =
-                            depth::extract_preproc_function_def(node, source, &file_path_str)
-                        {
-                            ctx.symbols.push(sym);
-                        }
-                    }
                     "preproc_include" | "preprocessor_include" => {
                         let path = include_path_from_node(node, source)?;
                         ctx.symbols.push(Symbol {
@@ -362,17 +401,23 @@ pub fn extract_all_single_pass(
                 // `#if 0` / `#if false`: skip the dead arm but still walk `#else` / `#elif`.
                 let dead_preproc = matches!(kind, "preproc_if" | "preproc_ifdef")
                     && is_dead_preproc_condition(node, source);
-                for i in (0..node.child_count()).rev() {
-                    let Some(child) = node.child(i) else {
-                        continue;
-                    };
+                let base = stack.len();
+                for child in node.named_children(&mut cursor) {
                     if dead_preproc
                         && !matches!(child.kind(), "preproc_else" | "preproc_elif")
                     {
                         continue;
                     }
+                    let cid = child.kind_id();
+                    if !active_kinds.get(cid as usize).copied().unwrap_or(false)
+                        && child.child_count() == 0
+                    {
+                        let _ = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, cid);
+                        continue;
+                    }
                     stack.push(Visit::Pre(child, depth + 1));
                 }
+                stack[base..].reverse();
             }
         }
     }

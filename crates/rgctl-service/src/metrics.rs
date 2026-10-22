@@ -6,8 +6,9 @@ use crate::metrics_json::{
     MetricsCommunitiesSection, MetricsPagerankSection, build_metrics_response, metrics_response_to_json,
 };
 use rgctl_analysis::{
-    BetweennessCentrality, CommunityDetector, FastPageRank, PetGraphView,
-    community_edge_types_for_backend, default_behavioral_edges,
+    BetweennessCentrality, CommunityDetector, FastPageRank, NodeRole, PetGraphView,
+    classify_node_role, community_edge_types_for_backend, default_behavioral_edges,
+    filter_scores_by_role,
 };
 use rgctl_graph::CodeGraph;
 use rgctl_graph::backend::GraphBackend;
@@ -49,15 +50,26 @@ pub fn run_metrics(graph: &CodeGraph, args: &MetricsArgs) -> Result<Value> {
     if args.pagerank {
         let engine = FastPageRank::new(iterations, 0.85);
         let (scores, stats) = engine.compute(&view, allowed);
-        let mut top: Vec<_> = scores
-            .iter()
-            .filter(|(_, score)| **score > 0.0)
-            .map(|(id, score)| (*id, *score))
-            .collect();
+        let backend = graph.backend();
+        let mut top = filter_scores_by_role(&scores, args.include_tests, |id| {
+            backend
+                .get_node(id)
+                .ok()
+                .flatten()
+                .map(|n| {
+                    let stub = n.get_property("is_external_stub") == Some("true");
+                    let name = n
+                        .qualified_name
+                        .as_deref()
+                        .unwrap_or(n.name.as_str());
+                    classify_node_role(name, n.file_path.as_deref(), stub)
+                })
+                .unwrap_or(NodeRole::Production)
+        });
         if top.is_empty() {
             top = scores.iter().map(|(id, score)| (*id, *score)).collect();
+            top.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
         }
-        top.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
         top.truncate(20);
         let top = top
             .iter()

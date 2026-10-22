@@ -373,6 +373,26 @@ impl ColumnarGraphMmap {
         self.materialize_node(idx)
     }
 
+    /// Direct `(name, file_path)` read at column index without allocating `Node` / `SharedStr`.
+    pub fn node_name_and_path_at(&self, idx: usize) -> Result<(String, Option<String>)> {
+        let row = read_node_row(self.mmap.as_ref(), self.offset_nodes as usize, idx)?;
+        let name = read_string(
+            self.mmap.as_ref(),
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+            row.name_off,
+            row.name_len,
+        )?;
+        let file_path = optional_string(
+            self.mmap.as_ref(),
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+            row.file_path_off,
+            row.file_path_len,
+        )?;
+        Ok((name, file_path))
+    }
+
     /// Hot-column node view (name / type / file / lines) without decoding the cold extension.
     ///
     /// Does **not** increment [`cold_ext_deserialization_count`]. Qualified name, parameters,
@@ -1004,7 +1024,7 @@ fn encode_edge_row(row: &EdgeRow) -> [u8; EDGE_ROW_SIZE] {
     buf
 }
 
-fn node_type_to_u16(t: NodeType) -> u16 {
+pub(crate) fn node_type_to_u16(t: NodeType) -> u16 {
     match t {
         NodeType::Function => 0,
         NodeType::Class => 1,

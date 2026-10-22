@@ -98,8 +98,9 @@ pub use centrality::{
     BetweennessCentrality, CentralityAnalyzer, CentralityReport, CentralityRunSummary,
     CentralityScore, CentralityScores, CsrOutAdj, DegreeCentrality, FastPageRank, FlatGraphIndex,
     HarmonicCentrality, LARGE_GRAPH_PAGERANK_ITERATIONS, LARGE_GRAPH_PAGERANK_NODE_LIMIT,
-    LARGE_GRAPH_PAGERANK_TOLERANCE, PAGERANK_TOLERANCE, PageRankStats, STRUCTURAL_EDGE_TYPES,
-    adaptive_pagerank_config, default_behavioral_edges, degree_centrality,
+    LARGE_GRAPH_PAGERANK_TOLERANCE, NodeRole, PAGERANK_TOLERANCE, PageRankStats,
+    STRUCTURAL_EDGE_TYPES, adaptive_pagerank_config, classify_node_role, default_behavioral_edges,
+    degree_centrality, filter_scores_by_role,
 };
 pub use centrality_approx::{
     BetweennessMode, CentralityApproxStats, DEFAULT_EXACT_CENTRALITY_LIMIT,

@@ -14,6 +14,8 @@ pub struct MetricsArgs {
     pub betweenness: bool,
     pub communities: bool,
     pub iterations: Option<usize>,
+    /// Include test / intrinsic nodes in PageRank hotspots (default: production only).
+    pub include_tests: bool,
 }
 
 fn enrich_top_entry(
@@ -87,6 +89,7 @@ pub fn run(ctx: &CliContext, args: MetricsArgs) -> Result<()> {
                 pagerank: args.pagerank || run_all,
                 betweenness: args.betweenness || run_all,
                 communities: args.communities || run_all,
+                include_tests: args.include_tests,
             }),
         )?;
         let _ = args.iterations;
@@ -98,7 +101,8 @@ pub fn run(ctx: &CliContext, args: MetricsArgs) -> Result<()> {
     };
     use crate::analysis::{
         BetweennessCentrality, CommunityDetector, FastPageRank, PetGraphView,
-        community_edge_types_for_backend, default_behavioral_edges,
+        classify_node_role, community_edge_types_for_backend, default_behavioral_edges,
+        filter_scores_by_role,
     };
 
     let graph = ctx.load_graph()?;
@@ -114,15 +118,25 @@ pub fn run(ctx: &CliContext, args: MetricsArgs) -> Result<()> {
     if args.pagerank || run_all {
         let engine = FastPageRank::new(iterations, 0.85);
         let (scores, stats) = engine.compute(&view, allowed);
-        let mut top: Vec<_> = scores
-            .iter()
-            .filter(|(_, score)| **score > 0.0)
-            .map(|(id, score)| (*id, *score))
-            .collect();
+        let mut top = filter_scores_by_role(&scores, args.include_tests, |id| {
+            backend
+                .get_node(id)
+                .ok()
+                .flatten()
+                .map(|n| {
+                    let stub = n.get_property("is_external_stub") == Some("true");
+                    let name = n
+                        .qualified_name
+                        .as_deref()
+                        .unwrap_or(n.name.as_str());
+                    classify_node_role(name, n.file_path.as_deref(), stub)
+                })
+                .unwrap_or(crate::analysis::NodeRole::Production)
+        });
         if top.is_empty() {
             top = scores.iter().map(|(id, score)| (*id, *score)).collect();
+            top.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
         }
-        top.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
         top.truncate(20);
         let top: Vec<_> = top
             .iter()

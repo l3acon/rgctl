@@ -656,6 +656,10 @@ pub enum Commands {
 
         #[arg(long)]
         iterations: Option<usize>,
+
+        /// Include test / stdlib-intrinsic symbols in PageRank hotspots
+        #[arg(long, default_value_t = false)]
+        include_tests: bool,
     },
 
     /// Opt-in semantic search over function symbols (separate index artifact)
@@ -2075,6 +2079,7 @@ impl Cli {
                 betweenness,
                 communities,
                 iterations,
+                include_tests,
             } => metrics::run(
                 &ctx,
                 metrics::MetricsArgs {
@@ -2082,6 +2087,7 @@ impl Cli {
                     betweenness,
                     communities,
                     iterations,
+                    include_tests,
                 },
             ),
             Commands::Semantic { action } => match action {

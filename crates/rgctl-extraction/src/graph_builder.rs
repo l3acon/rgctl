@@ -901,6 +901,14 @@ impl GraphBuilder {
         if method.is_empty() || type_name.is_empty() {
             return None;
         }
+        // C / non-OOP corpora: skip String + Vec allocs when no inheritance graph.
+        if self.inheritance_bases.is_empty()
+            || !self
+                .inheritance_bases
+                .contains_key(type_simple_name(type_name))
+        {
+            return None;
+        }
         let chain = self.mro_chain_cached(type_name);
         self.lookup_method_on_chain(&chain, method, skip_self)
     }
@@ -912,6 +920,13 @@ impl GraphBuilder {
         skip_self: bool,
     ) -> Option<Uuid> {
         if method.is_empty() || type_name.is_empty() {
+            return None;
+        }
+        if self.inheritance_bases.is_empty()
+            || !self
+                .inheritance_bases
+                .contains_key(type_simple_name(type_name))
+        {
             return None;
         }
         let chain = self

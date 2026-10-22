@@ -89,11 +89,31 @@ where
         return Ok(());
     };
 
-    let mut members: HashMap<usize, Vec<(Uuid, u32)>> = HashMap::new();
+    let max_cid = table.assignments.iter().copied().max().unwrap_or(0);
+    let mut counts = vec![0u32; max_cid + 1];
+    for &cid in &table.assignments {
+        counts[cid] += 1;
+    }
+    let multi_count = counts
+        .iter()
+        .enumerate()
+        .filter(|&(cid, &c)| c > 1 || infrastructure_id == Some(cid))
+        .count();
+
+    let mut members: HashMap<usize, Vec<(Uuid, u32)>> = HashMap::with_capacity(multi_count);
     for (compact, &cid) in table.assignments.iter().enumerate() {
+        // Skip singleton isolate communities before allocating Vecs — on linux-scale
+        // corpora (>1.5M isolates), inserting singletons into `members` allocates
+        // millions of 1-element heap Vecs that are immediately discarded.
+        if counts[cid] <= 1 && infrastructure_id != Some(cid) {
+            continue;
+        }
         let compact = compact as u32;
         if let Some(uuid) = analysis.get_uuid(compact) {
-            members.entry(cid).or_default().push((uuid, compact));
+            members
+                .entry(cid)
+                .or_insert_with(|| Vec::with_capacity(counts[cid] as usize))
+                .push((uuid, compact));
         }
     }
     let pagerank = analysis.centrality.as_ref().map(|c| c.pagerank.clone());

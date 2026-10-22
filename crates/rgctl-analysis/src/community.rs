@@ -1,11 +1,10 @@
 //! Community detection
 //!
-//! Label-propagation community detection with modularity scoring.
-//!
-//! Uses dense `Vec` layouts, directional edge-type filters, hub stripping on
-//! high-degree utility nodes, and deterministic importance-weighted tie-breaking.
+//! CSR queue-based Fast-Leiden (local moving + refinement + aggregation) with
+//! modularity scoring, statistical hub stripping, and deterministic
+//! importance-weighted tie-breaking.
 
-use crate::centrality::FastPageRank;
+use crate::centrality::{FastPageRank, FlatGraphIndex};
 use crate::graph_utils::PetGraphView;
 use petgraph::graph::NodeIndex;
 use rgctl_error::Result;
@@ -13,7 +12,7 @@ use rgctl_graph::backend::MemoryBackend;
 use rgctl_graph::schema::{EdgeType, NodeType};
 use rgctl_graph::snapshot::SnapshotNodeStore;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 /// Default behavioral edge types for community detection.
@@ -146,7 +145,7 @@ impl CommunityDetector {
         self
     }
 
-    /// Override label-propagation iteration cap.
+    /// Override local-moving iteration budget (scaled by node count in the queue pass).
     pub fn with_max_iterations(mut self, max_iterations: usize) -> Self {
         self.max_iterations = max_iterations;
         self
@@ -195,6 +194,9 @@ impl CommunityDetector {
     }
 
     /// Detect communities with pre-built undirected neighbor lists.
+    ///
+    /// Runs CSR queue-based Fast-Leiden (local moving → refinement → aggregation),
+    /// with hub stripping and deterministic importance / label-id tie-breaks.
     pub fn detect_with_neighbor_lists(
         &self,
         view: &PetGraphView,
@@ -214,104 +216,69 @@ impl CommunityDetector {
             self.max_frozen_fraction,
             self.min_nodes_for_hub_strip,
         );
-        let importance_flat =
-            resolve_importance_flat(view, allowed_types, self.tie_break, importance);
+        // Prefer caller scores; otherwise use projection degree as importance
+        // (avoids a second full-graph PageRank during discover — centrality runs next).
+        let importance_flat = resolve_importance_flat(
+            view,
+            allowed_types,
+            self.tie_break,
+            importance,
+            Some(&degrees),
+        );
 
-        let mut labels: Vec<usize> = (0..node_count).collect();
-        let mut label_weights = vec![0_usize; node_count];
-        let mut seen_labels = Vec::with_capacity(64);
+        let mut labels = fast_leiden(
+            &neighbors,
+            &is_hub,
+            &importance_flat,
+            self.tie_break,
+            self.max_iterations,
+        );
 
-        for _ in 0..self.max_iterations {
-            let mut changed = false;
-
-            for u in 0..node_count {
-                if is_hub[u] {
-                    continue;
-                }
-
-                seen_labels.clear();
-
-                for &v in &neighbors[u] {
-                    if is_hub[v] {
-                        continue;
-                    }
-                    let label = labels[v];
-                    if label_weights[label] == 0 {
-                        seen_labels.push(label);
-                    }
-                    label_weights[label] += 1;
-                }
-
-                let mut best_label = labels[u];
-                let mut max_count = 0usize;
-                let mut best_importance = 0.0_f64;
-
-                for &label in &seen_labels {
-                    let count = label_weights[label];
-                    let label_importance = neighbor_importance_for_label(
-                        label,
-                        u,
-                        &neighbors,
-                        &labels,
-                        &importance_flat,
-                        &is_hub,
-                    );
-                    let wins = count > max_count
-                        || (count == max_count
-                            && self.tie_break == TieBreakStrategy::Importance
-                            && label_importance > best_importance)
-                        || (count == max_count
-                            && (self.tie_break != TieBreakStrategy::Importance
-                                || (label_importance - best_importance).abs() < f64::EPSILON)
-                            && label < best_label);
-                    if wins {
-                        max_count = count;
-                        best_importance = label_importance;
-                        best_label = label;
-                    }
-                }
-
-                for &label in &seen_labels {
-                    label_weights[label] = 0;
-                }
-
-                if labels[u] != best_label {
-                    labels[u] = best_label;
-                    changed = true;
-                }
-            }
-
-            if !changed {
-                break;
-            }
-        }
-
-        let label_map: HashMap<NodeIndex, usize> = (0..node_count)
-            .map(|i| (NodeIndex::new(i), labels[i]))
-            .collect();
-
-        let modularity = self.calculate_modularity(view, &label_map, allowed_types);
+        let modularity = self.calculate_modularity_flat(view, &labels, allowed_types);
 
         let infrastructure_community_id =
             assign_infrastructure_hubs(&mut labels, &is_hub, node_count);
 
-        let mut community_members: HashMap<usize, Vec<Uuid>> = HashMap::new();
+        let mut assignments: HashMap<Uuid, usize> = HashMap::with_capacity(node_count);
         for (idx, uuid) in view.index_uuid_iter() {
-            community_members
-                .entry(labels[idx.index()])
-                .or_default()
-                .push(uuid);
+            assignments.insert(uuid, labels[idx.index()]);
         }
 
-        let communities = community_members
-            .into_iter()
-            .map(|(id, members)| Community { id, members })
-            .collect();
-
-        let assignments = view
-            .index_uuid_iter()
-            .map(|(idx, uuid)| (uuid, labels[idx.index()]))
-            .collect();
+        // Build member lists with flat indexing (no HashMap<usize, Vec<Uuid>>).
+        // On kernel-scale graphs (>200k nodes), skip singleton isolate Vecs.
+        let max_label = labels.iter().copied().max().unwrap_or(0);
+        let comm_slots = max_label + 1;
+        let communities = if node_count <= 200_000 {
+            let mut buckets: Vec<Vec<Uuid>> = vec![Vec::new(); comm_slots];
+            for (idx, uuid) in view.index_uuid_iter() {
+                buckets[labels[idx.index()]].push(uuid);
+            }
+            buckets
+                .into_iter()
+                .enumerate()
+                .filter(|(_, members)| !members.is_empty())
+                .map(|(id, members)| Community { id, members })
+                .collect()
+        } else {
+            let mut counts = vec![0u32; comm_slots];
+            for &l in &labels {
+                counts[l] += 1;
+            }
+            let mut buckets: HashMap<usize, Vec<Uuid>> = HashMap::new();
+            for (idx, uuid) in view.index_uuid_iter() {
+                let cid = labels[idx.index()];
+                if counts[cid] > 1 || infrastructure_community_id == Some(cid) {
+                    buckets
+                        .entry(cid)
+                        .or_insert_with(|| Vec::with_capacity(counts[cid] as usize))
+                        .push(uuid);
+                }
+            }
+            buckets
+                .into_iter()
+                .map(|(id, members)| Community { id, members })
+                .collect()
+        };
 
         Ok(CommunityResult {
             communities,
@@ -321,7 +288,7 @@ impl CommunityDetector {
         })
     }
 
-    /// Detect communities using label propagation (Leiden-like heuristic).
+    /// Detect communities (Fast-Leiden over the default edge projection).
     ///
     /// Builds a PetGraphView internally. For better performance when running
     /// multiple analyses, build the view once and use `detect_with_view()`.
@@ -337,16 +304,27 @@ impl CommunityDetector {
         labels: &HashMap<NodeIndex, usize>,
         allowed_types: &[EdgeType],
     ) -> f64 {
+        let mut flat = vec![0usize; view.node_count()];
+        for (&idx, &label) in labels {
+            flat[idx.index()] = label;
+        }
+        self.calculate_modularity_flat(view, &flat, allowed_types)
+    }
+
+    /// Modularity from a dense label slice (view index → community id).
+    pub fn calculate_modularity_flat(
+        &self,
+        view: &PetGraphView,
+        node_community: &[usize],
+        allowed_types: &[EdgeType],
+    ) -> f64 {
         let node_count = view.node_count();
+        if node_community.len() != node_count {
+            return 0.0;
+        }
         let mut m = 0.0;
         let mut degrees = vec![0.0; node_count];
-        let mut node_community = vec![0usize; node_count];
-
-        for (&idx, &label) in labels {
-            node_community[idx.index()] = label;
-        }
-
-        let max_label = labels.values().copied().max().unwrap_or(0);
+        let max_label = node_community.iter().copied().max().unwrap_or(0);
         let comm_count = max_label + 1;
         let mut internal_by_community = vec![0.0f64; comm_count];
         let mut degree_sum_by_community = vec![0.0f64; comm_count];
@@ -372,8 +350,7 @@ impl CommunityDetector {
             return 0.0;
         }
 
-        for (&idx, &label) in labels {
-            let i = idx.index();
+        for (i, &label) in node_community.iter().enumerate() {
             if label < degree_sum_by_community.len() {
                 degree_sum_by_community[label] += degrees[i];
             }
@@ -478,27 +455,36 @@ fn resolve_importance_flat(
     allowed_types: &[EdgeType],
     tie_break: TieBreakStrategy,
     importance: Option<&HashMap<Uuid, f64>>,
+    degrees: Option<&[usize]>,
 ) -> Vec<f64> {
     let node_count = view.node_count();
     if tie_break == TieBreakStrategy::LabelId {
         return vec![0.0; node_count];
     }
 
-    let score_map: HashMap<Uuid, f64> = if let Some(map) = importance {
-        map.clone()
-    } else {
-        FastPageRank::new(20, 0.85).compute(view, allowed_types).0
-    };
+    if let Some(map) = importance {
+        let mut flat = vec![0.0; node_count];
+        for (idx, uuid) in view.index_uuid_iter() {
+            if let Some(score) = map.get(&uuid) {
+                flat[idx.index()] = *score;
+            }
+        }
+        return flat;
+    }
 
-    let mut flat = vec![0.0; node_count];
-    for (idx, uuid) in view.index_uuid_iter() {
-        if let Some(score) = score_map.get(&uuid) {
-            flat[idx.index()] = *score;
+    if let Some(deg) = degrees {
+        if deg.len() == node_count {
+            return deg.iter().map(|&d| d as f64).collect();
         }
     }
-    flat
+
+    // Fallback when degrees unavailable: flat PageRank (no Uuid HashMap).
+    let _ = allowed_types;
+    let index = FlatGraphIndex::from_view(view, allowed_types);
+    FastPageRank::new(20, 0.85).compute_flat_only(&index)
 }
 
+#[cfg(test)]
 fn neighbor_importance_for_label(
     label: usize,
     u: usize,
@@ -523,13 +509,563 @@ fn assign_infrastructure_hubs(
     if hub_count == 0 {
         return None;
     }
-    let infrastructure_id = node_count;
+    let raw_infra_id = node_count.saturating_mul(2).saturating_add(1);
+    let mut first_hub = None;
     for (u, frozen) in is_hub.iter().enumerate() {
         if *frozen {
-            labels[u] = infrastructure_id;
+            labels[u] = raw_infra_id;
+            if first_hub.is_none() {
+                first_hub = Some(u);
+            }
         }
     }
-    Some(infrastructure_id)
+    renumber_labels(labels);
+    first_hub.map(|u| labels[u])
+}
+
+/// Weighted undirected CSR for multi-level Leiden (preserves Σₜₒₜ / 2m).
+struct WeightedCsr {
+    offsets: Vec<u32>,
+    targets: Vec<u32>,
+    weights: Vec<f64>,
+    /// Node strength (sum of incident edge weights); equals degree on level 0.
+    node_weight: Vec<f64>,
+}
+
+impl WeightedCsr {
+    fn len(&self) -> usize {
+        self.node_weight.len()
+    }
+
+    fn two_m(&self) -> f64 {
+        self.node_weight.iter().sum()
+    }
+
+    fn degree(&self, u: usize) -> usize {
+        (self.offsets[u + 1] - self.offsets[u]) as usize
+    }
+
+    fn neighbors(&self, u: usize) -> impl Iterator<Item = (u32, f64)> + '_ {
+        let start = self.offsets[u] as usize;
+        let end = self.offsets[u + 1] as usize;
+        self.targets[start..end]
+            .iter()
+            .copied()
+            .zip(self.weights[start..end].iter().copied())
+    }
+
+    fn from_unweighted(neighbors: &[Vec<usize>]) -> Self {
+        let n = neighbors.len();
+        let mut offsets = Vec::with_capacity(n + 1);
+        let mut targets = Vec::new();
+        let mut weights = Vec::new();
+        let mut node_weight = vec![0.0f64; n];
+        offsets.push(0);
+        for (u, adj) in neighbors.iter().enumerate() {
+            for &v in adj {
+                targets.push(v as u32);
+                weights.push(1.0);
+                node_weight[u] += 1.0;
+            }
+            offsets.push(targets.len() as u32);
+        }
+        Self {
+            offsets,
+            targets,
+            weights,
+            node_weight,
+        }
+    }
+}
+
+/// CSR queue-based Fast-Leiden over an undirected neighbor projection.
+///
+/// Hubs are frozen (singleton communities, never moved). Tie-breaks use
+/// [`TieBreakStrategy`] when modularity gains are equal within `f64::EPSILON`.
+fn fast_leiden(
+    neighbors: &[Vec<usize>],
+    is_hub: &[bool],
+    importance: &[f64],
+    tie_break: TieBreakStrategy,
+    max_iterations: usize,
+) -> Vec<usize> {
+    let n = neighbors.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // Compact to degree > 0 nodes — isolates stay fixed singletons (linux: >60%).
+    let mut active: Vec<usize> = Vec::with_capacity(n);
+    let mut old_to_active = vec![usize::MAX; n];
+    for u in 0..n {
+        if !neighbors[u].is_empty() {
+            old_to_active[u] = active.len();
+            active.push(u);
+        }
+    }
+    if active.is_empty() {
+        let mut labels: Vec<usize> = (0..n).collect();
+        renumber_labels(&mut labels);
+        return labels;
+    }
+
+    let compact_neighbors: Vec<Vec<usize>> = active
+        .iter()
+        .map(|&u| {
+            neighbors[u]
+                .iter()
+                .filter_map(|&v| {
+                    let a = old_to_active[v];
+                    (a != usize::MAX).then_some(a)
+                })
+                .collect()
+        })
+        .collect();
+    let compact_hubs: Vec<bool> = active.iter().map(|&u| is_hub[u]).collect();
+    let compact_imp: Vec<f64> = active.iter().map(|&u| importance[u]).collect();
+
+    let compact_labels = fast_leiden_active(
+        &compact_neighbors,
+        &compact_hubs,
+        &compact_imp,
+        tie_break,
+        max_iterations,
+    );
+
+    let max_c = compact_labels.iter().copied().max().unwrap_or(0);
+    let isolate_base = max_c.saturating_add(1);
+    let mut labels = vec![0usize; n];
+    for u in 0..n {
+        let a = old_to_active[u];
+        if a == usize::MAX {
+            labels[u] = isolate_base + u;
+        } else {
+            labels[u] = compact_labels[a];
+        }
+    }
+    for (u, &hub) in is_hub.iter().enumerate() {
+        if hub {
+            labels[u] = isolate_base + n + u;
+        }
+    }
+    renumber_labels(&mut labels);
+    labels
+}
+
+fn fast_leiden_active(
+    neighbors: &[Vec<usize>],
+    is_hub: &[bool],
+    importance: &[f64],
+    tie_break: TieBreakStrategy,
+    max_iterations: usize,
+) -> Vec<usize> {
+    let n = neighbors.len();
+    let mut csr = WeightedCsr::from_unweighted(neighbors);
+    let mut membership: Vec<usize> = (0..csr.len()).collect();
+    let mut working_hubs = is_hub.to_vec();
+    let mut working_importance = importance.to_vec();
+    let mut orig_comm: Vec<usize> = (0..n).collect();
+
+    const MAX_LEVELS: usize = 4;
+    for level in 0..MAX_LEVELS {
+        let two_m = csr.two_m();
+        if two_m <= 0.0 {
+            break;
+        }
+
+        leiden_local_moving(
+            &csr,
+            &mut membership,
+            &working_hubs,
+            &working_importance,
+            tie_break,
+            two_m,
+            max_iterations,
+        );
+        leiden_refine(&csr, &mut membership, &working_hubs);
+
+        let prev_n = csr.len();
+        let aggregated = aggregate_communities_weighted(
+            &csr,
+            &mut membership,
+            &working_hubs,
+            &working_importance,
+        );
+
+        if level == 0 {
+            orig_comm.clone_from(&membership);
+        } else {
+            for c in &mut orig_comm {
+                *c = membership[*c];
+            }
+        }
+
+        let Some((next_csr, next_hubs, next_imp)) = aggregated else {
+            break;
+        };
+        if next_csr.len() >= prev_n {
+            break;
+        }
+
+        csr = next_csr;
+        working_hubs = next_hubs;
+        working_importance = next_imp;
+        membership = (0..csr.len()).collect();
+    }
+
+    orig_comm
+}
+
+fn leiden_local_moving(
+    csr: &WeightedCsr,
+    membership: &mut [usize],
+    is_hub: &[bool],
+    importance: &[f64],
+    tie_break: TieBreakStrategy,
+    two_m: f64,
+    max_iterations: usize,
+) {
+    let n = csr.len();
+    let m = two_m / 2.0;
+    if m <= 0.0 || n == 0 {
+        return;
+    }
+
+    // Community ids stay in 0..n after renumber; grow buffer if refine expands ids.
+    let mut capacity = n.saturating_mul(2).max(n + 1);
+    let mut community_total = vec![0.0f64; capacity];
+    for (u, &c) in membership.iter().enumerate() {
+        if c >= capacity {
+            capacity = c + 1;
+            community_total.resize(capacity, 0.0);
+        }
+        community_total[c] += csr.node_weight[u];
+    }
+
+    let mut stamp = vec![0u32; capacity];
+    let mut comm_weight = vec![0.0f64; capacity];
+    let mut comm_imp = vec![0.0f64; capacity];
+    let mut touched: Vec<usize> = Vec::with_capacity(64);
+    let mut epoch = 1u32;
+
+    let mut queue: VecDeque<usize> = VecDeque::with_capacity(n);
+    let mut in_queue = vec![false; n];
+    for u in 0..n {
+        // Degree-0 isolates cannot move; skip enqueue (and multi-level coarsening).
+        if !is_hub[u] && csr.degree(u) > 0 {
+            queue.push_back(u);
+            in_queue[u] = true;
+        }
+    }
+
+    let mut passes = 0usize;
+    let pass_limit = max_iterations.saturating_mul(n.max(1));
+    while let Some(u) = queue.pop_front() {
+        in_queue[u] = false;
+        passes += 1;
+        if passes > pass_limit {
+            break;
+        }
+        if is_hub[u] {
+            continue;
+        }
+
+        let from = membership[u];
+        let ki = csr.node_weight[u];
+
+        // Single O(deg(u)) accumulation into scratch.
+        epoch = epoch.wrapping_add(1);
+        if epoch == 0 {
+            stamp.fill(0);
+            epoch = 1;
+        }
+        touched.clear();
+        for (v, w) in csr.neighbors(u) {
+            let v = v as usize;
+            if is_hub[v] {
+                continue;
+            }
+            let c = membership[v];
+            if c >= capacity {
+                capacity = c + 1;
+                stamp.resize(capacity, 0);
+                comm_weight.resize(capacity, 0.0);
+                comm_imp.resize(capacity, 0.0);
+                community_total.resize(capacity, 0.0);
+            }
+            if stamp[c] != epoch {
+                stamp[c] = epoch;
+                comm_weight[c] = 0.0;
+                comm_imp[c] = 0.0;
+                touched.push(c);
+            }
+            comm_weight[c] += w;
+            let imp = importance.get(v).copied().unwrap_or(0.0);
+            if imp > comm_imp[c] {
+                comm_imp[c] = imp;
+            }
+        }
+        // Ensure current community is evaluated even with no neighbor there.
+        if stamp[from] != epoch {
+            stamp[from] = epoch;
+            comm_weight[from] = 0.0;
+            comm_imp[from] = 0.0;
+            touched.push(from);
+        }
+
+        let mut best = from;
+        let mut best_gain = 0.0f64;
+        let mut best_imp = comm_imp[from];
+        let sigma_from = community_total[from] - ki;
+        let ki_from = comm_weight[from];
+
+        for &to in &touched {
+            if to == from {
+                continue;
+            }
+            let ki_to = comm_weight[to];
+            let sigma_to = community_total[to];
+            let leave = (ki_from / m) - (sigma_from * ki) / (2.0 * m * m);
+            let join = (ki_to / m) - (sigma_to * ki) / (2.0 * m * m);
+            let gain = join - leave;
+            let imp = comm_imp[to];
+            let better = gain > best_gain + f64::EPSILON
+                || ((gain - best_gain).abs() <= f64::EPSILON
+                    && tie_break == TieBreakStrategy::Importance
+                    && imp > best_imp + f64::EPSILON)
+                || ((gain - best_gain).abs() <= f64::EPSILON
+                    && (tie_break != TieBreakStrategy::Importance
+                        || (imp - best_imp).abs() <= f64::EPSILON)
+                    && to < best);
+            if better {
+                best_gain = gain;
+                best_imp = imp;
+                best = to;
+            }
+        }
+
+        // Clear scratch for touched communities (O(|touched|)).
+        for &c in &touched {
+            comm_weight[c] = 0.0;
+            comm_imp[c] = 0.0;
+        }
+
+        if best != from && best_gain > f64::EPSILON {
+            community_total[from] -= ki;
+            community_total[best] += ki;
+            membership[u] = best;
+            for (v, _) in csr.neighbors(u) {
+                let v = v as usize;
+                if !is_hub[v] && !in_queue[v] {
+                    queue.push_back(v);
+                    in_queue[v] = true;
+                }
+            }
+        }
+    }
+}
+
+/// Split communities that are not connected on the projection (Leiden refine).
+/// Deterministic: communities processed in ascending id order; flat stamp/visited.
+fn leiden_refine(csr: &WeightedCsr, membership: &mut [usize], is_hub: &[bool]) {
+    let n = csr.len();
+    if n == 0 {
+        return;
+    }
+    let max_c = membership.iter().copied().max().unwrap_or(0);
+    let comm_count = max_c + 1;
+
+    // Counting sort: group nodes by community id (deterministic).
+    let mut counts = vec![0usize; comm_count];
+    for (u, &c) in membership.iter().enumerate() {
+        if !is_hub[u] {
+            counts[c] += 1;
+        }
+    }
+    let mut offsets = vec![0usize; comm_count + 1];
+    for i in 0..comm_count {
+        offsets[i + 1] = offsets[i] + counts[i];
+    }
+    let mut cursor = offsets.clone();
+    let mut members_flat = vec![0usize; offsets[comm_count]];
+    for (u, &c) in membership.iter().enumerate() {
+        if is_hub[u] {
+            continue;
+        }
+        let slot = cursor[c];
+        members_flat[slot] = u;
+        cursor[c] += 1;
+    }
+
+    let mut visited = vec![false; n];
+    let mut next_id = comm_count;
+    let mut stack = Vec::with_capacity(64);
+
+    for c in 0..comm_count {
+        let start = offsets[c];
+        let end = offsets[c + 1];
+        if end - start <= 1 {
+            continue;
+        }
+        // Reset visited only for this community's members.
+        for &u in &members_flat[start..end] {
+            visited[u] = false;
+        }
+        let mut first = true;
+        for &seed in &members_flat[start..end] {
+            if visited[seed] {
+                continue;
+            }
+            stack.clear();
+            stack.push(seed);
+            visited[seed] = true;
+            let mut component = vec![seed];
+            while let Some(u) = stack.pop() {
+                for (v, _) in csr.neighbors(u) {
+                    let v = v as usize;
+                    if membership[v] == c && !visited[v] {
+                        visited[v] = true;
+                        stack.push(v);
+                        component.push(v);
+                    }
+                }
+            }
+            if first {
+                first = false;
+                continue;
+            }
+            let id = next_id;
+            next_id += 1;
+            for u in component {
+                membership[u] = id;
+            }
+        }
+    }
+}
+
+/// Aggregate into a weighted coarse CSR. Rewrites `membership` to dense `0..C`.
+fn aggregate_communities_weighted(
+    csr: &WeightedCsr,
+    membership: &mut [usize],
+    is_hub: &[bool],
+    importance: &[f64],
+) -> Option<(WeightedCsr, Vec<bool>, Vec<f64>)> {
+    let n = csr.len();
+    if n == 0 {
+        return None;
+    }
+    let max_m = membership.iter().copied().max().unwrap_or(0);
+    let mut present = vec![false; max_m + 1];
+    for &c in membership.iter() {
+        present[c] = true;
+    }
+    let mut remap = vec![usize::MAX; max_m + 1];
+    let mut c_count = 0usize;
+    for (c, &is_used) in present.iter().enumerate() {
+        if is_used {
+            remap[c] = c_count;
+            c_count += 1;
+        }
+    }
+    if c_count >= n || c_count == 0 {
+        return None;
+    }
+    for c in membership.iter_mut() {
+        *c = remap[*c];
+    }
+
+    let mut coarse_hubs = vec![false; c_count];
+    let mut coarse_imp = vec![0.0f64; c_count];
+    let mut node_weight = vec![0.0f64; c_count];
+    for (u, &cu) in membership.iter().enumerate() {
+        node_weight[cu] += csr.node_weight[u];
+        if is_hub[u] {
+            coarse_hubs[cu] = true;
+        }
+        let imp = importance.get(u).copied().unwrap_or(0.0);
+        if imp > coarse_imp[cu] {
+            coarse_imp[cu] = imp;
+        }
+    }
+
+    // Build undirected weighted edges between distinct communities.
+    // Intra-community edges (cu == cv) are already accounted for in `node_weight[cu]`
+    // (preserving Σₜₒₜ and 2m) and must NOT be emitted as self-loops in `neighbors(cu)`,
+    // otherwise `leiden_local_moving` would count `cu`'s internal edges in `ki_from`.
+    let mut edge_map: HashMap<(u32, u32), f64> = HashMap::new();
+    for u in 0..n {
+        let cu = membership[u] as u32;
+        for (v, w) in csr.neighbors(u) {
+            let cv = membership[v as usize] as u32;
+            if cu != cv && (u as u32) < v {
+                let a = cu.min(cv);
+                let b = cu.max(cv);
+                *edge_map.entry((a, b)).or_insert(0.0) += w;
+            }
+        }
+    }
+
+    // Expand to adjacency lists (both directions).
+    let mut adj: Vec<Vec<(u32, f64)>> = vec![Vec::new(); c_count];
+    for ((a, b), w) in edge_map {
+        adj[a as usize].push((b, w));
+        adj[b as usize].push((a, w));
+    }
+    for list in &mut adj {
+        list.sort_unstable_by_key(|&(t, _)| t);
+    }
+
+    let mut offsets = Vec::with_capacity(c_count + 1);
+    let mut targets = Vec::new();
+    let mut weights = Vec::new();
+    offsets.push(0);
+    for list in &adj {
+        for &(t, w) in list {
+            targets.push(t);
+            weights.push(w);
+        }
+        offsets.push(targets.len() as u32);
+    }
+
+    Some((
+        WeightedCsr {
+            offsets,
+            targets,
+            weights,
+            node_weight,
+        },
+        coarse_hubs,
+        coarse_imp,
+    ))
+}
+
+fn renumber_labels(labels: &mut [usize]) {
+    let Some(max_l) = labels.iter().copied().max() else {
+        return;
+    };
+    if max_l <= labels.len().saturating_mul(4) {
+        let mut remap = vec![usize::MAX; max_l + 1];
+        let mut next = 0usize;
+        for label in labels.iter_mut() {
+            let slot = &mut remap[*label];
+            if *slot == usize::MAX {
+                *slot = next;
+                next += 1;
+            }
+            *label = *slot;
+        }
+        return;
+    }
+    let mut map = HashMap::with_capacity(labels.len());
+    let mut next = 0usize;
+    for label in labels.iter_mut() {
+        let e = map.entry(*label).or_insert_with(|| {
+            let id = next;
+            next += 1;
+            id
+        });
+        *label = *e;
+    }
 }
 
 /// Pre-build undirected neighbor lists for a filtered behavioral projection.
@@ -547,25 +1083,23 @@ pub fn build_community_neighbor_lists(
 ) -> Result<Vec<Vec<usize>>> {
     let base = default_community_edge_types();
     let mut neighbors = build_filtered_neighbor_lists(view, base);
-    let mut function_count = 0usize;
     let mut is_heading = vec![false; neighbors.len()];
     let mut heading_count = 0usize;
-    for id in store.all_node_ids() {
-        if let Some(node) = store.get_node(id)? {
-            if node.node_type == NodeType::Function {
-                function_count += 1;
-            }
-            if node.node_type == NodeType::Module && node.get_property("kind") == Some("heading") {
-                if let Some(idx) = view.uuid_to_index.get(&id) {
-                    let pos = idx.index();
-                    if !is_heading[pos] {
-                        is_heading[pos] = true;
-                        heading_count += 1;
-                    }
+
+    // Hot-column function count (no cold_ext). Only materialize Module rows for
+    // markdown `kind=heading` — never `get_node` every UUID on linux-scale graphs.
+    let function_count = store.count_nodes_by_type(NodeType::Function)?;
+    store.for_each_node_of_type(NodeType::Module, |node| {
+        if node.get_property("kind") == Some("heading") {
+            if let Some(view_idx) = view.uuid_to_index.get(&node.id) {
+                let pos = view_idx.index();
+                if !is_heading[pos] {
+                    is_heading[pos] = true;
+                    heading_count += 1;
                 }
             }
         }
-    }
+    })?;
 
     // Fast path for code-heavy graphs without markdown headings: behavioral edges
     // are sufficient and avoid scanning massive `Contains` edge sets on repos like linux.
@@ -630,9 +1164,9 @@ pub struct DashboardCommunity {
 
 /// Detect communities for the analytics dashboard.
 ///
-/// Uses label propagation (via [`CommunityDetector`]) and enriches each cluster
-/// with labels and complexity metadata. Falls back to connected components when
-/// propagation yields a single cluster on disconnected subgraphs.
+/// Uses Fast-Leiden (via [`CommunityDetector`]) and enriches each cluster with
+/// labels and complexity metadata. Falls back to connected components when
+/// detection yields a single cluster on disconnected subgraphs.
 pub fn detect_communities(backend: &MemoryBackend) -> Result<Vec<DashboardCommunity>> {
     let view = PetGraphView::from_backend(backend)?;
     let detection = CommunityDetector::new()
@@ -924,14 +1458,20 @@ mod tests {
             2,
             "hub strip should preserve two domain communities, got {domain_labels:?}"
         );
-        let without_domains: HashSet<_> = clique_a
+        // Fast-Leiden often keeps the two cliques separate even without strip; the
+        // hub-strip contract is isolating the hub into an infrastructure community.
+        assert!(
+            without.infrastructure_community_id.is_none(),
+            "HubStripPolicy::Off must not invent an infrastructure community"
+        );
+        let hub_label = *without.assignments.get(&id_hub).unwrap();
+        let hub_shares_domain = clique_a
             .iter()
             .chain(clique_b.iter())
-            .map(|id| without.assignments[id])
-            .collect();
+            .any(|id| without.assignments[id] == hub_label);
         assert!(
-            without_domains.len() < domain_labels.len(),
-            "without hub strip, shared hub should collapse domains"
+            hub_shares_domain,
+            "without hub strip, the star hub should share a community with domain nodes"
         );
     }
 
@@ -1074,5 +1614,44 @@ mod tests {
         let hubs = select_hubs(&degrees, HubStripPolicy::Statistical { k: 2.0 }, 0.05, 5);
         assert!(hubs[9]);
         assert_eq!(hubs.iter().filter(|&&h| h).count(), 1);
+    }
+
+    #[test]
+    fn leiden_communities_are_connected_on_projection() {
+        let backend = build_modular_graph();
+        let view = PetGraphView::from_backend(&backend).unwrap();
+        let allowed = default_community_edge_types();
+        let neighbors = build_filtered_neighbor_lists(&view, allowed);
+        let result = CommunityDetector::new()
+            .with_hub_policy(HubStripPolicy::Off)
+            .detect_with_view_filtered(&view, allowed)
+            .unwrap();
+
+        for community in &result.communities {
+            if community.members.len() <= 1 {
+                continue;
+            }
+            let idxs: HashSet<usize> = community
+                .members
+                .iter()
+                .filter_map(|id| view.uuid_to_index.get(id).map(|n| n.index()))
+                .collect();
+            let start = *idxs.iter().next().unwrap();
+            let mut seen = HashSet::from([start]);
+            let mut stack = vec![start];
+            while let Some(u) = stack.pop() {
+                for &v in &neighbors[u] {
+                    if idxs.contains(&v) && seen.insert(v) {
+                        stack.push(v);
+                    }
+                }
+            }
+            assert_eq!(
+                seen.len(),
+                idxs.len(),
+                "community {} must induce a connected subgraph",
+                community.id
+            );
+        }
     }
 }

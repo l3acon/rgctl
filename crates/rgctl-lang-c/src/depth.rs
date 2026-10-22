@@ -85,6 +85,8 @@ pub fn extract_union_specifier_named(
 }
 
 /// `#define MAX 10`
+/// Opt-in `#define` extractor (not wired into default discover — see linux cold node cap).
+#[allow(dead_code)]
 pub fn extract_preproc_def(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
     if node.kind() != "preproc_def" {
         return None;
@@ -112,6 +114,8 @@ pub fn extract_preproc_def(node: Node, source: &[u8], file_path: &str) -> Option
 }
 
 /// `#define SQR(x) ((x)*(x))`
+/// Opt-in function-like `#define` extractor (not wired into default discover).
+#[allow(dead_code)]
 pub fn extract_preproc_function_def(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
     if node.kind() != "preproc_function_def" {
         return None;

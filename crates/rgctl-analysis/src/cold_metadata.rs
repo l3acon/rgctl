@@ -40,6 +40,11 @@ impl ColdMetadataDb {
         self.store.get_node(id)
     }
 
+    /// Hot-column `(name, file_path)` without cold_ext deserialization.
+    pub fn node_name_and_path(&self, id: Uuid) -> Result<Option<(String, Option<String>)>> {
+        self.store.node_name_and_path(id)
+    }
+
     /// Node count from snapshot header.
     pub fn node_count(&self) -> usize {
         self.store.node_count()
@@ -50,16 +55,13 @@ impl ColdMetadataDb {
         self.store.edge_count()
     }
 
-    /// Collect nodes of a given type (linear scan — prefer for small result sets).
+    /// Collect nodes of a given type (columnar: hot-type filter before cold_ext).
     pub fn collect_nodes_by_type(&self, node_type: NodeType) -> Result<Vec<Node>> {
-        let mut out = Vec::new();
-        for id in self.store.all_node_ids() {
-            if let Some(node) = self.store.get_node(id)? {
-                if node.node_type == node_type {
-                    out.push(node);
-                }
-            }
-        }
-        Ok(out)
+        self.store.collect_nodes_by_type(node_type)
+    }
+
+    /// Visit every node via sequential column index (no per-id binary search).
+    pub fn for_each_node_seq(&self, f: impl FnMut(&Node)) -> Result<()> {
+        self.store.for_each_node_seq(f)
     }
 }

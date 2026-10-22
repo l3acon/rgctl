@@ -409,20 +409,23 @@ fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Pre
     let offsets = line_start_offsets(source);
     let mut preps = Vec::with_capacity(symbols.len());
     for symbol in symbols {
-        let body = symbol_body_from_source(source, &offsets, symbol);
-        let code_hash = body.map(hash_code);
-        let token_bloom = if matches!(
+        // Hash + bloom only for callables — Struct/Enum/Macro/Import bodies are
+        // not used for clone detection and dominate prep cost on C corpora.
+        let (code_hash, token_bloom) = if matches!(
             symbol.symbol_type,
             SymbolType::Function | SymbolType::Method
         ) {
-            Some(build_token_bloom(
+            let body = symbol_body_from_source(source, &offsets, symbol);
+            let code_hash = body.map(hash_code);
+            let token_bloom = Some(build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),
                 symbol.signature.as_deref(),
                 body,
-            ))
+            ));
+            (code_hash, token_bloom)
         } else {
-            None
+            (None, None)
         };
         preps.push(SymbolPass1Prep {
             code_hash,

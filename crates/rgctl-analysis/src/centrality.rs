@@ -16,6 +16,127 @@ use uuid::Uuid;
 /// Convergence tolerance for PageRank power iteration.
 pub const PAGERANK_TOLERANCE: f64 = 1e-6;
 
+/// Architectural role of a graph node for production-aware PageRank hotspots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NodeRole {
+    /// Default production application code.
+    Production,
+    /// Test fixtures / `#[cfg(test)]` / `*.test.*` paths.
+    Test,
+    /// Unresolved external / stdlib-like intrinsics (`assert`, `println!`, …).
+    ExternalIntrinsic,
+}
+
+/// Classify a node for production-aware hotspot ranking.
+pub fn classify_node_role(name: &str, file_path: Option<&str>, is_external_stub: bool) -> NodeRole {
+    if is_test_path(file_path) || is_cfg_test_name(name) {
+        return NodeRole::Test;
+    }
+    if is_external_stub || is_external_intrinsic_name(name) {
+        return NodeRole::ExternalIntrinsic;
+    }
+    NodeRole::Production
+}
+
+fn is_test_path(file_path: Option<&str>) -> bool {
+    let Some(path) = file_path else {
+        return false;
+    };
+    let norm = path.replace('\\', "/");
+    let lower = norm.to_ascii_lowercase();
+    if lower.contains("/tests/")
+        || lower.contains("/test/")
+        || lower.starts_with("tests/")
+        || lower.starts_with("test/")
+    {
+        return true;
+    }
+    let file = lower.rsplit('/').next().unwrap_or(&lower);
+    file.contains(".test.")
+        || file.contains(".spec.")
+        || file.ends_with("_test.rs")
+        || file.ends_with("_test.py")
+        || file.ends_with("_test.go")
+        || file.ends_with("_test.java")
+        || file.ends_with("_tests.rs")
+        || file.starts_with("test_")
+}
+
+fn is_cfg_test_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.contains("cfg(test)")
+        || lower.starts_with("tests::")
+        || lower.contains("::tests::")
+        || lower.ends_with("::tests")
+}
+
+fn is_external_intrinsic_name(name: &str) -> bool {
+    let bare = name
+        .rsplit(['.', ':', '#'])
+        .next()
+        .unwrap_or(name)
+        .trim_end_matches('!');
+    matches!(
+        bare,
+        "assert"
+            | "assert_eq"
+            | "assert_ne"
+            | "debug_assert"
+            | "panic"
+            | "todo"
+            | "unimplemented"
+            | "unreachable"
+            | "println"
+            | "eprintln"
+            | "print"
+            | "eprint"
+            | "dbg"
+            | "free"
+            | "malloc"
+            | "calloc"
+            | "realloc"
+            | "len"
+            | "length"
+            | "size"
+            | "writefilesync"
+            | "readfilesync"
+            | "console"
+            | "log"
+            | "require"
+            | "include"
+    ) || bare.eq_ignore_ascii_case("writeFileSync")
+        || bare.eq_ignore_ascii_case("readFileSync")
+}
+
+/// Keep production hotspots by default; pass `include_tests = true` to keep Test /
+/// ExternalIntrinsic nodes in the ranking.
+pub fn filter_scores_by_role<F>(
+    scores: &HashMap<Uuid, f64>,
+    include_tests: bool,
+    mut role_of: F,
+) -> Vec<(Uuid, f64)>
+where
+    F: FnMut(Uuid) -> NodeRole,
+{
+    let mut out: Vec<(Uuid, f64)> = scores
+        .iter()
+        .filter_map(|(&id, &score)| {
+            if score <= 0.0 {
+                return None;
+            }
+            if !include_tests {
+                match role_of(id) {
+                    NodeRole::Production => {}
+                    NodeRole::Test | NodeRole::ExternalIntrinsic => return None,
+                }
+            }
+            Some((id, score))
+        })
+        .collect();
+    out.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+    out
+}
+
 /// Node count above which discover uses capped PageRank iterations and relaxed tolerance.
 pub const LARGE_GRAPH_PAGERANK_NODE_LIMIT: usize = 500_000;
 
@@ -239,7 +360,12 @@ impl FastPageRank {
     }
 
     /// Run power iteration on a pre-built flat index (hot path).
+    ///
+    /// Each iteration precomputes `node_contrib[src] = damping * rank[src] / out_degree`
+    /// (Rayon) and reduces dangling mass / max Δ with parallel folds (`f64` throughout).
     pub fn compute_flat(&self, index: &FlatGraphIndex) -> (Vec<f64>, PageRankStats) {
+        use rayon::prelude::*;
+
         let node_count = index.node_count;
         if node_count == 0 {
             return (
@@ -254,6 +380,7 @@ impl FastPageRank {
 
         let mut current_ranks = vec![1.0 / node_count as f64; node_count];
         let mut next_ranks = vec![0.0; node_count];
+        let mut node_contrib = vec![0.0f64; node_count];
 
         let mut out_degrees = vec![0u32; node_count];
         for &(src, _) in &index.flat_edges {
@@ -263,36 +390,74 @@ impl FastPageRank {
         let sink_nodes: Vec<usize> = (0..node_count).filter(|&i| out_degrees[i] == 0).collect();
 
         let base_score = (1.0 - self.damping) / node_count as f64;
+        let damping = self.damping;
         let mut stats = PageRankStats {
             iterations_run: self.max_iterations,
             converged: false,
             max_delta: f64::MAX,
         };
 
+        // Avoid Rayon pool barriers on small graphs (e.g. Leiden importance on fixtures).
+        const PARALLEL_THRESHOLD: usize = 4_096;
+        let parallel = node_count >= PARALLEL_THRESHOLD;
+
         for iter in 0..self.max_iterations {
             next_ranks.fill(base_score);
 
-            let mut dangling_mass = 0.0;
-            for &sink_idx in &sink_nodes {
-                dangling_mass += current_ranks[sink_idx];
-            }
-            let dangling_allocation = (self.damping * dangling_mass) / node_count as f64;
+            let dangling_mass: f64 = if parallel {
+                sink_nodes
+                    .par_iter()
+                    .map(|&sink_idx| current_ranks[sink_idx])
+                    .sum()
+            } else {
+                sink_nodes.iter().map(|&sink_idx| current_ranks[sink_idx]).sum()
+            };
+            let dangling_allocation = (damping * dangling_mass) / node_count as f64;
             for score in next_ranks.iter_mut() {
                 *score += dangling_allocation;
             }
 
-            for &(src, dst) in &index.flat_edges {
-                let out = out_degrees[src] as f64;
-                if out > 0.0 {
-                    next_ranks[dst] += self.damping * (current_ranks[src] / out);
+            // Hoist per-source contribution outside the edge loop.
+            if parallel {
+                node_contrib
+                    .par_iter_mut()
+                    .zip(current_ranks.par_iter())
+                    .zip(out_degrees.par_iter())
+                    .for_each(|((contrib, &rank), &out)| {
+                        *contrib = if out > 0 {
+                            damping * rank / f64::from(out)
+                        } else {
+                            0.0
+                        };
+                    });
+            } else {
+                for i in 0..node_count {
+                    let out = out_degrees[i];
+                    node_contrib[i] = if out > 0 {
+                        damping * current_ranks[i] / f64::from(out)
+                    } else {
+                        0.0
+                    };
                 }
             }
 
-            let max_delta = current_ranks
-                .iter()
-                .zip(next_ranks.iter())
-                .map(|(a, b)| (a - b).abs())
-                .fold(0.0, f64::max);
+            for &(src, dst) in &index.flat_edges {
+                next_ranks[dst] += node_contrib[src];
+            }
+
+            let max_delta = if parallel {
+                current_ranks
+                    .par_iter()
+                    .zip(next_ranks.par_iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .reduce(|| 0.0, f64::max)
+            } else {
+                current_ranks
+                    .iter()
+                    .zip(next_ranks.iter())
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0, f64::max)
+            };
 
             stats.max_delta = max_delta;
             stats.iterations_run = iter + 1;
@@ -778,7 +943,14 @@ impl CentralityAnalyzer {
             approx_stats.betweenness_ms = start.elapsed().as_millis() as u64;
             align_map_to_flat(view, &exact_map)
         } else {
-            let pivots = self.sample_pivots.min(n);
+            // Scale pivots down on huge graphs (512 Brandes pivots ≈ 2.8s on linux).
+            let pivots = if n >= 500_000 {
+                self.sample_pivots.min(32).min(n)
+            } else if n >= 50_000 {
+                self.sample_pivots.min(128).min(n)
+            } else {
+                self.sample_pivots.min(n)
+            };
             approx_stats.betweenness_mode = Some(BetweennessMode::Sampled { pivots });
             let start = Instant::now();
             let flat = SampledBetweenness::compute_flat(&index, pivots, self.sample_seed);
@@ -1246,5 +1418,54 @@ mod tests {
         let (_, stats) = FastPageRank::new(100, 0.85).compute_flat(&index);
         assert!(stats.converged);
         assert!(stats.max_delta < PAGERANK_TOLERANCE);
+    }
+
+    #[test]
+    fn node_role_classifies_tests_and_intrinsics() {
+        assert_eq!(
+            classify_node_role("login", Some("src/auth.rs"), false),
+            NodeRole::Production
+        );
+        assert_eq!(
+            classify_node_role("helper", Some("tests/auth_test.rs"), false),
+            NodeRole::Test
+        );
+        assert_eq!(
+            classify_node_role("foo", Some("pkg/foo.test.ts"), false),
+            NodeRole::Test
+        );
+        assert_eq!(
+            classify_node_role("assert", Some("src/lib.rs"), true),
+            NodeRole::ExternalIntrinsic
+        );
+        assert_eq!(
+            classify_node_role("println!", None, false),
+            NodeRole::ExternalIntrinsic
+        );
+        assert_eq!(
+            classify_node_role("foo::tests::case_a", Some("src/lib.rs"), false),
+            NodeRole::Test
+        );
+    }
+
+    #[test]
+    fn filter_scores_excludes_tests_by_default() {
+        let prod = Uuid::from_u128(1);
+        let test = Uuid::from_u128(2);
+        let intrinsic = Uuid::from_u128(3);
+        let mut scores = HashMap::new();
+        scores.insert(prod, 0.5);
+        scores.insert(test, 0.9);
+        scores.insert(intrinsic, 0.8);
+        let role = |id: Uuid| match id.as_u128() {
+            1 => NodeRole::Production,
+            2 => NodeRole::Test,
+            _ => NodeRole::ExternalIntrinsic,
+        };
+        let filtered = filter_scores_by_role(&scores, false, role);
+        assert_eq!(filtered, vec![(prod, 0.5)]);
+        let all = filter_scores_by_role(&scores, true, role);
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].0, test);
     }
 }
