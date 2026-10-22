@@ -20,6 +20,14 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_erb::register(registry);
     rgctl_lang_kotlin::register(registry);
     rgctl_lang_groovy::register(registry);
+    rgctl_lang_swift::register(registry);
+    rgctl_lang_scala::register(registry);
+    rgctl_lang_dart::register(registry);
+    rgctl_lang_elixir::register(registry);
+    rgctl_lang_lua::register(registry);
+    rgctl_lang_bash::register(registry);
+    rgctl_lang_sql::register(registry);
+    rgctl_lang_hcl::register(registry);
     // Tier-2 (`handler = "queries"`)
     rgctl_lang_zig::register(registry);
     rgctl_lang_nix::register(registry);
@@ -144,6 +152,35 @@ mod tests {
                 .get_plugin_for_file(Path::new(path))
                 .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
             assert_eq!(plugin.language_id(), id);
+        }
+    }
+
+    #[test]
+    fn default_registry_can_process_new_tier1_languages() {
+        let registry = default_registry();
+        for (path, id) in [
+            ("Sources/App/Main.swift", "swift"),
+            ("src/main/scala/App.scala", "scala"),
+            ("scripts/Job.sc", "scala"),
+            ("lib/main.dart", "dart"),
+            ("lib/app.ex", "elixir"),
+            ("test/app_test.exs", "elixir"),
+            ("src/util.lua", "lua"),
+            ("scripts/setup.sh", "bash"),
+            ("scripts/run.bash", "bash"),
+            ("db/schema.sql", "sql"),
+            ("infra/main.tf", "hcl"),
+            ("infra/vars.tfvars", "hcl"),
+            ("config/app.hcl", "hcl"),
+        ] {
+            assert!(
+                registry.can_process_file(Path::new(path)),
+                "expected can_process {path}"
+            );
+            let plugin = registry
+                .get_plugin_for_file(Path::new(path))
+                .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
+            assert_eq!(plugin.language_id(), id, "path {path}");
         }
     }
 

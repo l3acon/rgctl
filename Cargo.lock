@@ -2439,13 +2439,21 @@ dependencies = [
  "rgctl-graph",
  "rgctl-incremental",
  "rgctl-kantra",
+ "rgctl-lang-bash",
  "rgctl-lang-c",
  "rgctl-lang-cpp",
  "rgctl-lang-csharp",
+ "rgctl-lang-dart",
+ "rgctl-lang-elixir",
  "rgctl-lang-go",
+ "rgctl-lang-hcl",
  "rgctl-lang-javascript",
+ "rgctl-lang-lua",
  "rgctl-lang-runtime",
  "rgctl-lang-rust",
+ "rgctl-lang-scala",
+ "rgctl-lang-sql",
+ "rgctl-lang-swift",
  "rgctl-lang-typescript",
  "rgctl-languages",
  "rgctl-macros",
@@ -2518,19 +2526,27 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree-sitter",
+ "tree-sitter-bash",
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
+ "tree-sitter-dart",
+ "tree-sitter-elixir",
  "tree-sitter-go",
  "tree-sitter-groovy",
+ "tree-sitter-hcl",
  "tree-sitter-java",
  "tree-sitter-javascript",
  "tree-sitter-kotlin-ng",
+ "tree-sitter-lua",
  "tree-sitter-php",
  "tree-sitter-puppet",
  "tree-sitter-python",
  "tree-sitter-ruby",
  "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-sequel",
+ "tree-sitter-swift",
  "tree-sitter-typescript",
  "uuid",
  "zstd",
@@ -2543,21 +2559,29 @@ dependencies = [
  "rgctl-plugin-api",
  "serde_json",
  "tree-sitter",
+ "tree-sitter-bash",
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
+ "tree-sitter-dart",
+ "tree-sitter-elixir",
  "tree-sitter-embedded-template",
  "tree-sitter-go",
  "tree-sitter-groovy",
+ "tree-sitter-hcl",
  "tree-sitter-java",
  "tree-sitter-javascript",
  "tree-sitter-kotlin-ng",
+ "tree-sitter-lua",
  "tree-sitter-md",
  "tree-sitter-php",
  "tree-sitter-puppet",
  "tree-sitter-python",
  "tree-sitter-ruby",
  "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-sequel",
+ "tree-sitter-swift",
  "tree-sitter-typescript",
 ]
 
@@ -2738,6 +2762,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rgctl-lang-bash"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-bash",
+]
+
+[[package]]
 name = "rgctl-lang-c"
 version = "0.4.20"
 dependencies = [
@@ -2774,6 +2811,32 @@ dependencies = [
  "serde_json",
  "tree-sitter",
  "tree-sitter-c-sharp",
+]
+
+[[package]]
+name = "rgctl-lang-dart"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-dart",
+]
+
+[[package]]
+name = "rgctl-lang-elixir"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-elixir",
 ]
 
 [[package]]
@@ -2818,6 +2881,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rgctl-lang-hcl"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-hcl",
+]
+
+[[package]]
 name = "rgctl-lang-java"
 version = "0.4.20"
 dependencies = [
@@ -2854,6 +2930,19 @@ dependencies = [
  "serde_json",
  "tree-sitter",
  "tree-sitter-kotlin-ng",
+]
+
+[[package]]
+name = "rgctl-lang-lua"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-lua",
 ]
 
 [[package]]
@@ -2978,6 +3067,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rgctl-lang-scala"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-scala",
+]
+
+[[package]]
 name = "rgctl-lang-solidity"
 version = "0.4.20"
 dependencies = [
@@ -2987,6 +3089,32 @@ dependencies = [
  "rgctl-registry",
  "tree-sitter",
  "tree-sitter-solidity",
+]
+
+[[package]]
+name = "rgctl-lang-sql"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-sequel",
+]
+
+[[package]]
+name = "rgctl-lang-swift"
+version = "0.4.20"
+dependencies = [
+ "rgctl-plugin-api",
+ "rgctl-plugin-helpers",
+ "rgctl-registry",
+ "serde_json",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-swift",
 ]
 
 [[package]]
@@ -3021,15 +3149,20 @@ dependencies = [
  "criterion",
  "rgctl-ast-coverage",
  "rgctl-config-formats",
+ "rgctl-lang-bash",
  "rgctl-lang-c",
  "rgctl-lang-cpp",
  "rgctl-lang-csharp",
+ "rgctl-lang-dart",
+ "rgctl-lang-elixir",
  "rgctl-lang-erb",
  "rgctl-lang-go",
  "rgctl-lang-groovy",
+ "rgctl-lang-hcl",
  "rgctl-lang-java",
  "rgctl-lang-javascript",
  "rgctl-lang-kotlin",
+ "rgctl-lang-lua",
  "rgctl-lang-markdown",
  "rgctl-lang-nix",
  "rgctl-lang-php",
@@ -3038,7 +3171,10 @@ dependencies = [
  "rgctl-lang-python",
  "rgctl-lang-ruby",
  "rgctl-lang-rust",
+ "rgctl-lang-scala",
  "rgctl-lang-solidity",
+ "rgctl-lang-sql",
+ "rgctl-lang-swift",
  "rgctl-lang-typescript",
  "rgctl-lang-zig",
  "rgctl-plugin-api",
@@ -3997,6 +4133,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-bash"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e5ec769279cc91b561d3df0d8a5deb26b0ad40d183127f409494d6d8fc53062"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-c"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4027,6 +4173,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-dart"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "325dd1e24ee9ee21111e9c43680ae7d6010aaa9f282b048a99b9c7163c1cf553"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-elixir"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66dd064a762ed95bfc29857fa3cb7403bb1e5cb88112de0f6341b7e47284ba40"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-embedded-template"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4051,6 +4217,16 @@ name = "tree-sitter-groovy"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a20016017f0865ba902ca50354f92429de5de8df994e64ab7fae087a13c40ed"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-hcl"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a7b2cc3d7121553b84309fab9d11b3ff3d420403eef9ae50f9fd1cd9d9cf012"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -4091,6 +4267,16 @@ name = "tree-sitter-language"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
+
+[[package]]
+name = "tree-sitter-lua"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8daaf5f4235188a58603c39760d5fa5d4b920d36a299c934adddae757f32a10c"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
 
 [[package]]
 name = "tree-sitter-md"
@@ -4173,10 +4359,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-scala"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c554730d29306d9c7cdd26912638d2401378c26961e12d161a071df43f49b81b"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-sequel"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d198ad3c319c02e43c21efa1ec796b837afcb96ffaef1a40c1978fbdcec7d17"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-solidity"
 version = "1.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4eacf8875b70879f0cb670c60b233ad0b68752d9e1474e6c3ef168eea8a90b25"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-swift"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2688c06564afa397313e0db17d140a73e2c6a47f3884794614246167c9dd5dfd"
 dependencies = [
  "cc",
  "tree-sitter-language",

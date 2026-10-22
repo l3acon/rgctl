@@ -173,6 +173,80 @@ const PROFILES: &[LanguageAnalysisProfile] = &[
         cfg_enabled: true,
         taint_enabled: true,
     },
+    LanguageAnalysisProfile {
+        id: "swift",
+        aliases: &[],
+        extensions: &["swift"],
+        function_kinds: &[
+            "function_declaration",
+            "init_declaration",
+            "deinit_declaration",
+            "subscript_declaration",
+        ],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "scala",
+        aliases: &[],
+        extensions: &["scala", "sc"],
+        function_kinds: &["function_definition", "function_declaration"],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "dart",
+        aliases: &[],
+        extensions: &["dart"],
+        function_kinds: &[
+            "function_declaration",
+            "method_declaration",
+            "function_expression",
+        ],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "elixir",
+        aliases: &["ex"],
+        extensions: &["ex", "exs"],
+        // Elixir defs are `call` nodes; CFG looks up by callable name from the call.
+        function_kinds: &["call"],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "lua",
+        aliases: &[],
+        extensions: &["lua"],
+        function_kinds: &["function_declaration", "function_definition"],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "bash",
+        aliases: &["sh", "shell"],
+        extensions: &["sh", "bash"],
+        function_kinds: &["function_definition"],
+        cfg_enabled: true,
+        taint_enabled: true,
+    },
+    LanguageAnalysisProfile {
+        id: "sql",
+        aliases: &[],
+        extensions: &["sql"],
+        function_kinds: &["create_function"],
+        cfg_enabled: true,
+        taint_enabled: false,
+    },
+    LanguageAnalysisProfile {
+        id: "hcl",
+        aliases: &["terraform", "tf"],
+        extensions: &["hcl", "tf", "tfvars"],
+        function_kinds: &["block"],
+        cfg_enabled: true,
+        taint_enabled: false,
+    },
 ];
 
 /// Return the profile for a canonical id or alias.
@@ -246,6 +320,14 @@ fn grammar_for(profile: &LanguageAnalysisProfile) -> Result<Language> {
         "puppet" => Ok(tree_sitter_puppet::LANGUAGE.into()),
         "kotlin" => Ok(tree_sitter_kotlin_ng::LANGUAGE.into()),
         "groovy" => Ok(tree_sitter_groovy::LANGUAGE.into()),
+        "swift" => Ok(tree_sitter_swift::LANGUAGE.into()),
+        "scala" => Ok(tree_sitter_scala::LANGUAGE.into()),
+        "dart" => Ok(tree_sitter_dart::LANGUAGE.into()),
+        "elixir" => Ok(tree_sitter_elixir::LANGUAGE.into()),
+        "lua" => Ok(tree_sitter_lua::LANGUAGE.into()),
+        "bash" => Ok(tree_sitter_bash::LANGUAGE.into()),
+        "sql" => Ok(tree_sitter_sequel::LANGUAGE.into()),
+        "hcl" => Ok(tree_sitter_hcl::LANGUAGE.into()),
         other => Err(Error::UnsupportedLanguage(other.to_string())),
     }
 }
@@ -340,6 +422,33 @@ mod tests {
         assert_eq!(canonical_language_id("py"), Some("python"));
         assert_eq!(canonical_language_id("rs"), Some("rust"));
         assert_eq!(canonical_language_id("golang"), Some("go"));
+    }
+
+    #[test]
+    fn new_tier1_extensions_map_to_cfg_profiles() {
+        for (path, id) in [
+            ("App.swift", "swift"),
+            ("App.scala", "scala"),
+            ("job.sc", "scala"),
+            ("main.dart", "dart"),
+            ("lib.ex", "elixir"),
+            ("test.exs", "elixir"),
+            ("util.lua", "lua"),
+            ("setup.sh", "bash"),
+            ("run.bash", "bash"),
+            ("schema.sql", "sql"),
+            ("main.tf", "hcl"),
+            ("vars.tfvars", "hcl"),
+        ] {
+            assert_eq!(
+                cfg_language_id_from_path(Path::new(path)),
+                Some(id),
+                "{path}"
+            );
+        }
+        assert!(grammar_for(profile_for_language("swift").unwrap()).is_ok());
+        assert!(grammar_for(profile_for_language("lua").unwrap()).is_ok());
+        assert!(grammar_for(profile_for_language("hcl").unwrap()).is_ok());
     }
 
     #[test]

@@ -265,6 +265,62 @@ pub fn bundled_specs() -> &'static [CoverageSpec] {
             grammar_prefix: "tree-sitter-typescript@",
             language: || tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         },
+        CoverageSpec {
+            id: "swift",
+            crate_dir: "rgctl-lang-swift",
+            manifest_file: "swift-ast-coverage.json",
+            grammar_prefix: "tree-sitter-swift@",
+            language: || tree_sitter_swift::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "scala",
+            crate_dir: "rgctl-lang-scala",
+            manifest_file: "scala-ast-coverage.json",
+            grammar_prefix: "tree-sitter-scala@",
+            language: || tree_sitter_scala::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "dart",
+            crate_dir: "rgctl-lang-dart",
+            manifest_file: "dart-ast-coverage.json",
+            grammar_prefix: "tree-sitter-dart@",
+            language: || tree_sitter_dart::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "elixir",
+            crate_dir: "rgctl-lang-elixir",
+            manifest_file: "elixir-ast-coverage.json",
+            grammar_prefix: "tree-sitter-elixir@",
+            language: || tree_sitter_elixir::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "lua",
+            crate_dir: "rgctl-lang-lua",
+            manifest_file: "lua-ast-coverage.json",
+            grammar_prefix: "tree-sitter-lua@",
+            language: || tree_sitter_lua::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "bash",
+            crate_dir: "rgctl-lang-bash",
+            manifest_file: "bash-ast-coverage.json",
+            grammar_prefix: "tree-sitter-bash@",
+            language: || tree_sitter_bash::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "sql",
+            crate_dir: "rgctl-lang-sql",
+            manifest_file: "sql-ast-coverage.json",
+            grammar_prefix: "tree-sitter-sql@",
+            language: || tree_sitter_sql::LANGUAGE.into(),
+        },
+        CoverageSpec {
+            id: "hcl",
+            crate_dir: "rgctl-lang-hcl",
+            manifest_file: "hcl-ast-coverage.json",
+            grammar_prefix: "tree-sitter-hcl@",
+            language: || tree_sitter_hcl::LANGUAGE.into(),
+        },
     ]
 }
 

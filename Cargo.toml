@@ -25,6 +25,14 @@ members = [
     "crates/rgctl-core",
     "crates/rgctl-service",
     "crates/rgctl-lang-go",
+    "crates/rgctl-lang-swift",
+    "crates/rgctl-lang-scala",
+    "crates/rgctl-lang-dart",
+    "crates/rgctl-lang-elixir",
+    "crates/rgctl-lang-lua",
+    "crates/rgctl-lang-bash",
+    "crates/rgctl-lang-sql",
+    "crates/rgctl-lang-hcl",
     "crates/rgctl-lang-java",
     "crates/rgctl-lang-javascript",
     "crates/rgctl-lang-python",
@@ -82,6 +90,14 @@ tempfile = "3"
 zstd = "0.13"
 rayon = "1.7"
 rgctl-lang-go = { path = "crates/rgctl-lang-go", version = "0.4.20" }
+rgctl-lang-swift = { path = "crates/rgctl-lang-swift", version = "0.4.20" }
+rgctl-lang-scala = { path = "crates/rgctl-lang-scala", version = "0.4.20" }
+rgctl-lang-dart = { path = "crates/rgctl-lang-dart", version = "0.4.20" }
+rgctl-lang-elixir = { path = "crates/rgctl-lang-elixir", version = "0.4.20" }
+rgctl-lang-lua = { path = "crates/rgctl-lang-lua", version = "0.4.20" }
+rgctl-lang-bash = { path = "crates/rgctl-lang-bash", version = "0.4.20" }
+rgctl-lang-sql = { path = "crates/rgctl-lang-sql", version = "0.4.20" }
+rgctl-lang-hcl = { path = "crates/rgctl-lang-hcl", version = "0.4.20" }
 rgctl-lang-java = { path = "crates/rgctl-lang-java", version = "0.4.20" }
 rgctl-lang-javascript = { path = "crates/rgctl-lang-javascript", version = "0.4.20" }
 rgctl-lang-python = { path = "crates/rgctl-lang-python", version = "0.4.20" }
@@ -232,6 +248,14 @@ reqwest = { version = "0.12", features = ["blocking", "json"] }
 rgctl-graph = { workspace = true }
 rgctl-dashboard = { workspace = true }
 rgctl-lang-go = { workspace = true }
+rgctl-lang-swift = { workspace = true }
+rgctl-lang-scala = { workspace = true }
+rgctl-lang-dart = { workspace = true }
+rgctl-lang-elixir = { workspace = true }
+rgctl-lang-lua = { workspace = true }
+rgctl-lang-bash = { workspace = true }
+rgctl-lang-sql = { workspace = true }
+rgctl-lang-hcl = { workspace = true }
 rgctl-lang-csharp = { workspace = true }
 rgctl-lang-c = { workspace = true }
 rgctl-lang-cpp = { workspace = true }

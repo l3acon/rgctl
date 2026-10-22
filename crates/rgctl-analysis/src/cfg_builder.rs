@@ -326,7 +326,75 @@ fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Optio
             enclosing_type_simple_name(node, source)
                 .or_else(|| extract_name_from_node(node, source).ok().flatten())
         }
+        "elixir" | "ex" if node.kind() == "call" => elixir_def_callable_name(node, source),
+        "hcl" | "terraform" | "tf" if node.kind() == "block" => hcl_block_callable_name(node, source),
         _ => extract_name_from_node(node, source).ok().flatten(),
+    }
+}
+
+/// Elixir `def`/`defp`/… calls: name is the first argument call/identifier, not `def`.
+fn elixir_def_callable_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    const DEF_FORMS: &[&str] = &["def", "defp", "defmacro", "defmacrop"];
+    let mut cursor = node.walk();
+    let head = node.children(&mut cursor).find_map(|ch| {
+        if ch.kind() == "identifier" {
+            ch.utf8_text(source).ok()
+        } else {
+            None
+        }
+    })?;
+    if !DEF_FORMS.contains(&head) {
+        return None;
+    }
+    let args = node.child_by_field_name("arguments").or_else(|| {
+        let mut c = node.walk();
+        node.children(&mut c).find(|ch| ch.kind() == "arguments")
+    })?;
+    let mut c = args.walk();
+    for ch in args.children(&mut c) {
+        match ch.kind() {
+            "call" => {
+                let mut ic = ch.walk();
+                for id in ch.children(&mut ic) {
+                    if id.kind() == "identifier" {
+                        return id.utf8_text(source).ok().map(str::to_string);
+                    }
+                    if id.is_named() {
+                        break;
+                    }
+                }
+            }
+            "identifier" => return ch.utf8_text(source).ok().map(str::to_string),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// HCL/Terraform block labels → `resource.type.name` style (matches lang plugin).
+fn hcl_block_callable_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut parts = Vec::new();
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "identifier" => {
+                if let Ok(t) = child.utf8_text(source) {
+                    parts.push(t.to_string());
+                }
+            }
+            "string_lit" | "string_literal" | "quoted_template" => {
+                if let Ok(t) = child.utf8_text(source) {
+                    parts.push(t.trim_matches('"').to_string());
+                }
+            }
+            "body" | "block" => break,
+            _ => {}
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("."))
     }
 }
 
@@ -784,6 +852,36 @@ impl<'a> CfgBuilder<'a> {
             | "rescue_modifier" => self.visit_ruby_modifier_statement(node, source),
 
             "call" => {
+                // Elixir: almost all control flow is a `call` (`if`, `case`, `def`, …).
+                if matches!(self.language, "elixir" | "ex") {
+                    if let Some(head) = elixir_call_head(node, source) {
+                        match head {
+                            "if" => return self.visit_elixir_if(node, source, false),
+                            "unless" => return self.visit_elixir_if(node, source, true),
+                            "case" | "cond" => return self.visit_elixir_case_like(node, source),
+                            "for" | "with" => return self.visit_elixir_if(node, source, false),
+                            "try" => {
+                                if let Some(body) = node
+                                    .child_by_field_name("do_block")
+                                    .or_else(|| find_direct_child_kind(node, "do_block"))
+                                {
+                                    return self.visit_block(body, source).map(|_| ());
+                                }
+                            }
+                            "def" | "defp" | "defmacro" | "defmacrop" | "defmodule" => {
+                                // Nested defs: do not treat as expression; walk do_block only.
+                                if let Some(body) = node
+                                    .child_by_field_name("do_block")
+                                    .or_else(|| find_direct_child_kind(node, "do_block"))
+                                {
+                                    return self.visit_block(body, source).map(|_| ());
+                                }
+                                return Ok(());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 if let Some(block) = node.child_by_field_name("block") {
                     self.visit_nested_subcfg(block, source)?;
                 }
@@ -795,12 +893,19 @@ impl<'a> CfgBuilder<'a> {
 
             // Rust + Python + Puppet conditionals
             "if_statement" | "if_expression" => self.visit_if(node, source),
+            // Swift `guard` — early-exit branch (else body is the uncommon path)
+            "guard_statement" => self.visit_if(node, source),
             "unless_statement" => self.visit_puppet_unless(node, source),
             "case_statement" if self.language == "puppet" => {
                 self.visit_puppet_case(node, source)
             }
+            "case_statement" if self.language == "bash" || self.language == "sh" => {
+                self.visit_switch(node, source)
+            }
             "selector" if self.language == "puppet" => self.visit_expression_stmt(node, source),
-            "while_statement" | "while_expression" => self.visit_while(node, source),
+            "while_statement" | "while_expression" | "repeat_while_statement" | "repeat_statement" => {
+                self.visit_while(node, source)
+            }
             "do_statement" | "do_while_statement" => self.visit_do(node, source),
             "for_statement" | "for_expression" | "for_in_expression" | "for_in_statement"
             | "foreach_statement" | "for_range_loop" => self.visit_for(node, source),
@@ -808,6 +913,30 @@ impl<'a> CfgBuilder<'a> {
             "loop_expression" => self.visit_loop(node, source),
             // Kotlin `when` — treat like switch expression (arm fan-out)
             "when_expression" => self.visit_kotlin_when(node, source),
+            // HCL ternary (`cond ? a : b`) — same shape as C ternary.
+            "conditional" => self.visit_hcl_conditional(node, source),
+            "attribute" => {
+                // `ami = cond ? a : b` — walk the RHS expression (not the whole attr as opaque).
+                if let Some(expr) = node
+                    .child_by_field_name("value")
+                    .or_else(|| find_direct_child_kind(node, "expression"))
+                    .or_else(|| find_direct_child_kind(node, "conditional"))
+                {
+                    self.visit_statement(expr, source)?;
+                } else {
+                    self.add_statement(node, source, StatementKind::Assignment)?;
+                }
+                Ok(())
+            }
+            "expression" if matches!(self.language, "hcl" | "terraform" | "tf") => {
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.is_named() {
+                        self.visit_statement(child, source)?;
+                    }
+                }
+                Ok(())
+            }
             "property_declaration" => {
                 self.visit_declaration_initializers(node, source)?;
                 if !self.flow_active {
@@ -820,6 +949,18 @@ impl<'a> CfgBuilder<'a> {
             // Returns / coroutine / iterator yields
             "return_statement" | "return_expression" | "co_return_statement" => {
                 self.visit_return(node, source)
+            }
+            // Swift control transfers (`return` / `throw` / `break` / `continue`)
+            "control_transfer_statement" => {
+                let text = node.utf8_text(source).unwrap_or("");
+                if text.trim_start().starts_with("return") || text.trim_start().starts_with("throw")
+                {
+                    self.visit_return(node, source)
+                } else if text.trim_start().starts_with("continue") {
+                    self.visit_continue(node, source)
+                } else {
+                    self.visit_break(node, source)
+                }
             }
             "co_yield_statement" | "co_yield_expression" => self.visit_co_yield(node, source),
             "yield_statement" => self.visit_yield_statement(node, source),
@@ -985,10 +1126,20 @@ impl<'a> CfgBuilder<'a> {
                 self.visit_block(node, source)?;
                 Ok(())
             }
-            // Unwrap Rust `else { ... }` wrapper.
+            // Unwrap Rust `else { ... }` / Bash `else_clause` (commands, not blocks).
             "else_clause" => {
-                if let Some(block) = find_child_kind(node, "block") {
+                if let Some(block) = find_child_kind(node, "block")
+                    .or_else(|| find_child_kind(node, "statements"))
+                    .or_else(|| find_child_kind(node, "compound_statement"))
+                {
                     self.visit_block(block, source)?;
+                } else {
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        if child.is_named() && child.kind() != "else" {
+                            self.visit_statement(child, source)?;
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -1204,6 +1355,61 @@ impl<'a> CfgBuilder<'a> {
             self.visit_expr_for_control_flow(alt, source)?;
             if self.flow_active {
                 self.add_statement(alt, source, StatementKind::Expression)?;
+            }
+        }
+        let false_reaches = self.flow_active;
+        let false_end = self.current_block;
+
+        if true_reaches {
+            self.cfg.add_edge(true_end, merge, CfgEdgeType::Next);
+        }
+        if false_reaches {
+            self.cfg.add_edge(false_end, merge, CfgEdgeType::Next);
+        }
+        self.flow_active = true_reaches || false_reaches;
+        self.current_block = merge;
+        Ok(())
+    }
+
+    /// HCL `conditional`: three `expression` children (cond, then, else) — no field names.
+    fn visit_hcl_conditional(&mut self, node: Node, source: &[u8]) -> Result<()> {
+        let mut exprs = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.is_named() && child.kind() == "expression" {
+                exprs.push(child);
+            }
+        }
+        let true_block = self.new_block();
+        let false_block = self.new_block();
+        let merge = self.new_block();
+        if let Some(cond) = exprs.first() {
+            self.wire_condition(*cond, source, true_block, false_block)?;
+        } else {
+            self.add_statement(node, source, StatementKind::Branch)?;
+            self.cfg
+                .add_edge(self.current_block, true_block, CfgEdgeType::IfTrue);
+            self.cfg
+                .add_edge(self.current_block, false_block, CfgEdgeType::IfFalse);
+        }
+
+        self.flow_active = true;
+        self.current_block = true_block;
+        if let Some(cons) = exprs.get(1) {
+            self.visit_expr_for_control_flow(*cons, source)?;
+            if self.flow_active {
+                self.add_statement(*cons, source, StatementKind::Expression)?;
+            }
+        }
+        let true_reaches = self.flow_active;
+        let true_end = self.current_block;
+
+        self.flow_active = true;
+        self.current_block = false_block;
+        if let Some(alt) = exprs.get(2) {
+            self.visit_expr_for_control_flow(*alt, source)?;
+            if self.flow_active {
+                self.add_statement(*alt, source, StatementKind::Expression)?;
             }
         }
         let false_reaches = self.flow_active;
@@ -1642,6 +1848,141 @@ impl<'a> CfgBuilder<'a> {
         Ok(())
     }
 
+    /// Elixir `if`/`unless`/`for`/`with` — condition in `arguments`, arms in `do_block`/`else_block`.
+    fn visit_elixir_if(&mut self, node: Node, source: &[u8], inverted: bool) -> Result<()> {
+        let cond = node
+            .child_by_field_name("arguments")
+            .or_else(|| find_direct_child_kind(node, "arguments"));
+        let do_block = node
+            .child_by_field_name("do_block")
+            .or_else(|| find_direct_child_kind(node, "do_block"));
+        let else_block = do_block
+            .and_then(|d| find_direct_child_kind(d, "else_block"))
+            .or_else(|| find_direct_child_kind(node, "else_block"));
+
+        let cond_block = if self.can_reuse_current_as_cond() {
+            self.current_block
+        } else {
+            let b = self.new_block();
+            self.cfg
+                .add_edge(self.current_block, b, CfgEdgeType::Next);
+            b
+        };
+        self.current_block = cond_block;
+
+        let true_block = self.new_block();
+        let merge = self.new_block();
+        let false_block = if else_block.is_some() {
+            Some(self.new_block())
+        } else {
+            None
+        };
+        let false_target = false_block.unwrap_or(merge);
+
+        if let Some(cond) = cond {
+            if inverted {
+                self.wire_condition(cond, source, false_target, true_block)?;
+            } else {
+                self.wire_condition(cond, source, true_block, false_target)?;
+            }
+        } else {
+            self.add_statement_to_current(Statement {
+                kind: StatementKind::Branch,
+                line: node.start_position().row + 1,
+                text: if inverted { "unless" } else { "if" }.to_string(),
+                defined_vars: SmallVec::new(),
+                used_vars: SmallVec::new(),
+            });
+            let (t, f) = if inverted {
+                (false_target, true_block)
+            } else {
+                (true_block, false_target)
+            };
+            self.cfg.add_edge(cond_block, t, CfgEdgeType::IfTrue);
+            self.cfg.add_edge(cond_block, f, CfgEdgeType::IfFalse);
+        }
+
+        self.flow_active = true;
+        self.current_block = true_block;
+        if let Some(body) = do_block {
+            // Visit then-arm children, skipping the nested `else_block`.
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                if !child.is_named() || child.kind() == "else_block" {
+                    continue;
+                }
+                self.visit_statement(child, source)?;
+            }
+        }
+        let true_end = self.current_block;
+        let true_reaches = self.flow_active;
+
+        let mut false_end = false_target;
+        let false_reaches;
+        if let Some(false_block) = false_block {
+            self.flow_active = true;
+            self.current_block = false_block;
+            if let Some(els) = else_block {
+                self.visit_block(els, source)?;
+            }
+            false_end = self.current_block;
+            false_reaches = self.flow_active;
+        } else {
+            false_reaches = false;
+        }
+
+        if true_reaches {
+            self.cfg.add_edge(true_end, merge, CfgEdgeType::Next);
+        }
+        if false_reaches {
+            self.cfg.add_edge(false_end, merge, CfgEdgeType::Next);
+        }
+        self.flow_active = true_reaches || false_reaches || else_block.is_none();
+        self.current_block = merge;
+        Ok(())
+    }
+
+    /// Elixir `case` / `cond` — fan out over `do_block` clauses.
+    fn visit_elixir_case_like(&mut self, node: Node, source: &[u8]) -> Result<()> {
+        let do_block = node
+            .child_by_field_name("do_block")
+            .or_else(|| find_direct_child_kind(node, "do_block"));
+        let Some(body) = do_block else {
+            return self.visit_expression_stmt(node, source);
+        };
+        if let Some(args) = node
+            .child_by_field_name("arguments")
+            .or_else(|| find_direct_child_kind(node, "arguments"))
+        {
+            self.add_statement(args, source, StatementKind::Branch)?;
+        }
+        let merge = self.new_block();
+        let mut cursor = body.walk();
+        let clauses: Vec<_> = body
+            .children(&mut cursor)
+            .filter(|c| c.is_named() && c.kind() != "else_block")
+            .collect();
+        if clauses.is_empty() {
+            self.visit_block(body, source)?;
+            return Ok(());
+        }
+        for clause in clauses {
+            let arm = self.new_block();
+            self.cfg
+                .add_edge(self.current_block, arm, CfgEdgeType::IfTrue);
+            self.flow_active = true;
+            self.current_block = arm;
+            self.visit_statement(clause, source)?;
+            if self.flow_active {
+                self.cfg
+                    .add_edge(self.current_block, merge, CfgEdgeType::Next);
+            }
+        }
+        self.flow_active = true;
+        self.current_block = merge;
+        Ok(())
+    }
+
     fn visit_if(&mut self, node: Node, source: &[u8]) -> Result<()> {
         // Go: `if init; cond` — init runs in the current block before the condition.
         if let Some(init) = node.child_by_field_name("initializer") {
@@ -1653,27 +1994,25 @@ impl<'a> CfgBuilder<'a> {
             .child_by_field_name("condition")
             .or_else(|| node.child_by_field_name("operand"))
             .or_else(|| {
-                // Puppet / field-less grammars: first non-block named child before body.
-                if self.language == "puppet" {
-                    find_direct_child_kinds(
-                        node,
-                        &[
-                            "expression",
-                            "binary_expression",
-                            "unary_expression",
-                            "variable",
-                            "function_call",
-                            "parenthesized_expression",
-                            "selector",
-                            "literal",
-                            "boolean",
-                            "string",
-                            "number",
-                        ],
-                    )
-                } else {
-                    None
-                }
+                // Field-less grammars (Puppet, Swift, Bash, …): first predicate-like child.
+                find_direct_child_kinds(
+                    node,
+                    &[
+                        "expression",
+                        "binary_expression",
+                        "comparison_expression",
+                        "unary_expression",
+                        "test_command",
+                        "variable",
+                        "function_call",
+                        "parenthesized_expression",
+                        "selector",
+                        "literal",
+                        "boolean",
+                        "string",
+                        "number",
+                    ],
+                )
             });
         let (cxx_init, cond_value) = cond_node
             .map(split_condition_clause)
@@ -1684,10 +2023,26 @@ impl<'a> CfgBuilder<'a> {
 
         let alternative = node
             .child_by_field_name("alternative")
-            .or_else(|| node.child_by_field_name("else"))
+            .or_else(|| node.child_by_field_name("else_clause"))
+            .or_else(|| find_direct_child_kind(node, "else_clause"))
             .or_else(|| find_direct_child_kind(node, "else_statement"))
             .or_else(|| find_direct_child_kind(node, "elsif_statement"))
-            .or_else(|| node.child_by_field_name("else_clause"));
+            // Swift: bare `else` keyword followed by `{` + `statements` — take the
+            // second `statements` child when present.
+            .or_else(|| {
+                let mut stmts = Vec::new();
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "statements" {
+                        stmts.push(child);
+                    }
+                }
+                if stmts.len() >= 2 {
+                    Some(stmts[1])
+                } else {
+                    None
+                }
+            });
         let has_else = alternative.is_some();
 
         let cond_block = if self.can_reuse_current_as_cond() {
@@ -1733,8 +2088,44 @@ impl<'a> CfgBuilder<'a> {
             .child_by_field_name("consequence")
             .or_else(|| node.child_by_field_name("body"))
             .or_else(|| find_direct_child_kind(node, "block"))
+            .or_else(|| find_direct_child_kind(node, "statements"))
+            .or_else(|| find_direct_child_kind(node, "compound_statement"))
+            // Bash: then-arm is often a bare `command` after `then`.
+            .or_else(|| {
+                let mut after_cond = false;
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if !child.is_named() {
+                        continue;
+                    }
+                    if matches!(
+                        child.kind(),
+                        "test_command"
+                            | "comparison_expression"
+                            | "binary_expression"
+                            | "expression"
+                            | "parenthesized_expression"
+                    ) {
+                        after_cond = true;
+                        continue;
+                    }
+                    if after_cond
+                        && !matches!(
+                            child.kind(),
+                            "else_clause" | "else_statement" | "elsif_statement"
+                        )
+                    {
+                        return Some(child);
+                    }
+                }
+                None
+            })
         {
-            self.visit_block(consequence, source)?;
+            if is_block_like(consequence.kind()) {
+                self.visit_block(consequence, source)?;
+            } else {
+                self.visit_statement(consequence, source)?;
+            }
         }
         true_end = self.current_block;
         true_reaches = self.flow_active;
@@ -1748,7 +2139,10 @@ impl<'a> CfgBuilder<'a> {
                 let alt = if alternative.kind() == "else_clause"
                     || alternative.kind() == "else_statement"
                 {
-                    find_child_kind(alternative, "block").unwrap_or(alternative)
+                    find_child_kind(alternative, "block")
+                        .or_else(|| find_child_kind(alternative, "statements"))
+                        .or_else(|| find_child_kind(alternative, "compound_statement"))
+                        .unwrap_or(alternative)
                 } else if alternative.kind() == "if_expression"
                     || alternative.kind() == "if_statement"
                     || alternative.kind() == "elsif_statement"
@@ -1763,8 +2157,12 @@ impl<'a> CfgBuilder<'a> {
                     || alt.kind() == "elsif_statement"
                 {
                     self.visit_if(alt, source)?;
-                } else {
+                } else if is_block_like(alt.kind()) {
                     self.visit_block(alt, source)?;
+                } else if alt.kind() == "else_clause" || alt.kind() == "else_statement" {
+                    self.visit_statement(alt, source)?;
+                } else {
+                    self.visit_statement(alt, source)?;
                 }
                 false_end = self.current_block;
                 false_reaches = self.flow_active;
@@ -4033,6 +4431,7 @@ fn is_block_like(kind: &str) -> bool {
         "block"
             | "statement_block"
             | "statement_list"
+            | "statements" // Swift function_body / if arms
             | "compound_statement"
             | "source_file"
             | "function_body"
@@ -4040,6 +4439,8 @@ fn is_block_like(kind: &str) -> bool {
             | "body_statement"
             | "begin_block"
             | "do_block"
+            | "else_block" // Elixir if/else arms
+            | "body" // HCL / Terraform block body
             | "program"
             | "async_block"
             | "unsafe_block"
@@ -4047,6 +4448,17 @@ fn is_block_like(kind: &str) -> bool {
 }
 
 fn function_body_node<'a>(func_node: Node<'a>, language: &str) -> Option<Node<'a>> {
+    let lang = language.to_lowercase();
+    // Elixir `def … do … end` — body is the `do_block` child of the `call`.
+    if matches!(lang.as_str(), "elixir" | "ex") && func_node.kind() == "call" {
+        return func_node
+            .child_by_field_name("do_block")
+            .or_else(|| find_direct_child_kind(func_node, "do_block"));
+    }
+    // HCL/Terraform: statements live in child `body`, not the `block` wrapper itself.
+    if matches!(lang.as_str(), "hcl" | "terraform" | "tf") && func_node.kind() == "block" {
+        return find_direct_child_kind(func_node, "body").or(Some(func_node));
+    }
     // Java instance initializer: the function node *is* the block body.
     if func_node.kind() == "block" {
         return Some(func_node);
@@ -4054,7 +4466,7 @@ fn function_body_node<'a>(func_node: Node<'a>, language: &str) -> Option<Node<'a
     if let Some(body) = func_node.child_by_field_name("body") {
         return Some(body);
     }
-    match language.to_lowercase().as_str() {
+    match lang.as_str() {
         "rust" | "rs" => func_node.child_by_field_name("block"),
         _ => {
             let mut cursor = func_node.walk();
@@ -4066,6 +4478,19 @@ fn function_body_node<'a>(func_node: Node<'a>, language: &str) -> Option<Node<'a
             None
         }
     }
+}
+
+fn elixir_call_head<'a>(node: Node<'a>, source: &'a [u8]) -> Option<&'a str> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "identifier" {
+            return child.utf8_text(source).ok();
+        }
+        if child.is_named() {
+            break;
+        }
+    }
+    None
 }
 
 fn is_constant_false(text: &str) -> bool {
@@ -7879,5 +8304,164 @@ int live(int a) {
             .unwrap()
             .expect("function node");
         assert_eq!(node.kind(), "function_item");
+    }
+
+    #[test]
+    fn test_swift_if_cfg() {
+        let code = r#"
+func validate(_ x: Int) -> Int {
+  if x > 0 {
+    return x
+  } else {
+    return -x
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("swift", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "swift if should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_scala_if_cfg() {
+        let code = r#"
+object App {
+  def validate(x: Int): Int = {
+    if (x > 0) x else -x
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("scala", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "scala if should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_dart_if_cfg() {
+        let code = r#"
+int validate(int x) {
+  if (x > 0) {
+    return x;
+  } else {
+    return -x;
+  }
+}
+"#;
+        let cfg = build_cfg_for_function("dart", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "dart if should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_lua_if_cfg() {
+        let code = r#"
+function validate(x)
+  if x > 0 then
+    return x
+  else
+    return -x
+  end
+end
+"#;
+        let cfg = build_cfg_for_function("lua", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "lua if should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_bash_if_cfg() {
+        let code = r#"
+validate() {
+  if [ "$1" -gt 0 ]; then
+    echo "$1"
+  else
+    echo "0"
+  fi
+}
+"#;
+        let cfg = build_cfg_for_function("bash", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "bash if should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_elixir_if_cfg() {
+        let code = r#"
+defmodule App do
+  def validate(x) do
+    if x > 0 do
+      x
+    else
+      -x
+    end
+  end
+end
+"#;
+        let cfg = build_cfg_for_function("elixir", code, "validate").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "elixir if should branch, got {}",
+            cfg.blocks.len()
+        );
+        assert!(
+            cfg.edges
+                .iter()
+                .any(|e| matches!(e.edge_type, CfgEdgeType::IfTrue | CfgEdgeType::IfFalse)),
+            "expected conditional edges"
+        );
+    }
+
+
+    #[test]
+    fn test_hcl_conditional_cfg() {
+        let code = r#"
+resource "aws_instance" "web" {
+  ami = var.use_arm ? "ami-arm" : "ami-x86"
+  count = var.enabled ? 1 : 0
+}
+"#;
+        let cfg = build_cfg_for_function("hcl", code, "resource.aws_instance.web").unwrap();
+        assert!(
+            cfg.blocks.len() >= 3,
+            "hcl conditional should branch, got {}",
+            cfg.blocks.len()
+        );
+    }
+
+    #[test]
+    fn test_sql_function_cfg() {
+        let code = r#"
+CREATE FUNCTION validate(x INT) RETURNS INT
+BEGIN
+  IF x > 0 THEN
+    RETURN x;
+  ELSE
+    RETURN -x;
+  END IF;
+END;
+"#;
+        let cfg = build_cfg_for_function("sql", code, "validate");
+        // Grammars vary on create_function body shape; require at least a CFG.
+        let cfg = cfg.expect("sql create_function CFG");
+        assert!(
+            cfg.blocks.len() >= 2,
+            "sql function should produce CFG, got {}",
+            cfg.blocks.len()
+        );
     }
 }
