@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+use sysinfo::{Pid, ProcessRefreshKind, System};
 
 /// Monitor for tracking memory usage throughout the analysis pipeline.
 pub struct MemoryMonitor {
@@ -29,13 +29,10 @@ impl MemoryMonitor {
 
     /// Create a monitor, propagating PID lookup failures.
     pub fn try_new() -> Result<Self> {
-        let mut system = System::new_with_specifics(
-            RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
-        );
-        system.refresh_all();
-
         let pid = sysinfo::get_current_pid()
             .map_err(|e| Error::Other(format!("Failed to get current PID: {e}")))?;
+        let mut system = System::new();
+        system.refresh_pids_specifics(&[pid], ProcessRefreshKind::new().with_memory());
         let start_memory = Self::current_memory(&system, pid);
 
         Ok(Self {
@@ -66,14 +63,17 @@ impl MemoryMonitor {
         let stop_flag = Arc::clone(&stop);
         self.sampler_stop = Some(stop);
         self.sampler_handle = Some(thread::spawn(move || {
-            while !stop_flag.load(Ordering::Relaxed) {
+            while !stop_flag.load(Ordering::Acquire) {
                 if let Ok(mut sys) = system.lock() {
-                    sys.refresh_processes_specifics(ProcessRefreshKind::new().with_memory());
+                    sys.refresh_pids_specifics(&[pid], ProcessRefreshKind::new().with_memory());
                     let current = Self::current_memory(&sys, pid);
                     peak.fetch_max(current, Ordering::Relaxed);
                     phase.fetch_max(current, Ordering::Relaxed);
                 }
-                thread::sleep(interval);
+                if stop_flag.load(Ordering::Acquire) {
+                    break;
+                }
+                thread::park_timeout(interval);
             }
         }));
     }
@@ -81,9 +81,10 @@ impl MemoryMonitor {
     /// Stop the background sampler (if any) and take a final peak sample.
     pub fn stop_periodic_sampling(&mut self) {
         if let Some(stop) = self.sampler_stop.take() {
-            stop.store(true, Ordering::Relaxed);
+            stop.store(true, Ordering::Release);
         }
         if let Some(handle) = self.sampler_handle.take() {
+            handle.thread().unpark();
             let _ = handle.join();
         }
         let _ = self.snapshot();
@@ -103,7 +104,7 @@ impl MemoryMonitor {
             .system
             .lock()
             .map_err(|e| Error::GraphError(format!("MemoryMonitor system lock poisoned: {e}")))?;
-        system.refresh_processes_specifics(ProcessRefreshKind::new().with_memory());
+        system.refresh_pids_specifics(&[self.pid], ProcessRefreshKind::new().with_memory());
         let current = Self::current_memory(&system, self.pid);
         self.peak_memory.fetch_max(current, Ordering::Relaxed);
         self.phase_peak.fetch_max(current, Ordering::Relaxed);
@@ -125,7 +126,7 @@ impl MemoryMonitor {
             .system
             .lock()
             .map_err(|e| Error::GraphError(format!("MemoryMonitor system lock poisoned: {e}")))?;
-        system.refresh_processes_specifics(ProcessRefreshKind::new().with_memory());
+        system.refresh_pids_specifics(&[self.pid], ProcessRefreshKind::new().with_memory());
         let current = Self::current_memory(&system, self.pid);
         self.phase_peak.store(current, Ordering::Relaxed);
         Ok(phase_mb)
@@ -145,7 +146,7 @@ impl MemoryMonitor {
             .system
             .lock()
             .map_err(|e| Error::GraphError(format!("MemoryMonitor system lock poisoned: {e}")))?;
-        system.refresh_processes_specifics(ProcessRefreshKind::new().with_memory());
+        system.refresh_pids_specifics(&[self.pid], ProcessRefreshKind::new().with_memory());
         let current = Self::current_memory(&system, self.pid);
 
         Ok(MemorySnapshot {

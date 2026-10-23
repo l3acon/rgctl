@@ -130,13 +130,13 @@ fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
         let to_idx = col
             .find_node_index(to)
             .ok_or_else(|| inv_err(format!("INV-3: missing to node {to}")))?;
-        let from_node = col.materialize_node_at(from_idx)?;
-        let to_node = col.materialize_node_at(to_idx)?;
+        let from_type = col.node_type_at(from_idx)?;
+        let to_type = col.node_type_at(to_idx)?;
         match edge_type {
             EdgeType::Calls => {
                 // Puppet/Chef callable containers may emit Calls edges from class-like nodes.
                 let from_ok = matches!(
-                    from_node.node_type,
+                    from_type,
                     NodeType::Function
                         | NodeType::PuppetClass
                         | NodeType::PuppetDefinedType
@@ -147,7 +147,7 @@ fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
                         | NodeType::AnsibleHandler
                 );
                 let to_ok = matches!(
-                    to_node.node_type,
+                    to_type,
                     NodeType::Function
                         | NodeType::PuppetClass
                         | NodeType::PuppetDefinedType
@@ -159,26 +159,21 @@ fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
                 );
                 if !from_ok || !to_ok {
                     return Err(inv_err(format!(
-                        "INV-3: Calls requires callable endpoints, got {:?}→{:?} ({from}→{to})",
-                        from_node.node_type, to_node.node_type
+                        "INV-3: Calls requires callable endpoints, got {from_type:?}→{to_type:?} ({from}→{to})"
                     )));
                 }
             }
             EdgeType::Extends | EdgeType::Implements | EdgeType::Permits => {
-                if !is_inheritance_endpoint(from_node.node_type)
-                    || !is_inheritance_endpoint(to_node.node_type)
-                {
+                if !is_inheritance_endpoint(from_type) || !is_inheritance_endpoint(to_type) {
                     return Err(inv_err(format!(
-                        "INV-3: {edge_type:?} requires type/import endpoints, got {:?}→{:?} ({from}→{to})",
-                        from_node.node_type, to_node.node_type
+                        "INV-3: {edge_type:?} requires type/import endpoints, got {from_type:?}→{to_type:?} ({from}→{to})"
                     )));
                 }
             }
             EdgeType::Contains => {
-                if !is_container(from_node.node_type) {
+                if !is_container(from_type) {
                     return Err(inv_err(format!(
-                        "INV-3: Contains source must be a container, got {:?} ({from})",
-                        from_node.node_type
+                        "INV-3: Contains source must be a container, got {from_type:?} ({from})"
                     )));
                 }
             }
@@ -207,12 +202,14 @@ fn check_inv5_index_bijection(col: &ColumnarGraphMmap) -> Result<()> {
     let mut expected_name: HashMap<String, Vec<Uuid>> = HashMap::new();
     let mut expected_type: HashMap<NodeType, Vec<Uuid>> = HashMap::new();
     for idx in 0..col.node_count() {
-        let node = col.materialize_node_at(idx)?;
+        let id = Uuid::from_bytes(col.node_row_at(idx)?.id);
+        let name = col.node_name_str(idx)?;
+        let node_type = col.node_type_at(idx)?;
         expected_name
-            .entry(node.name.to_string())
+            .entry(name.to_string())
             .or_default()
-            .push(node.id);
-        expected_type.entry(node.node_type).or_default().push(node.id);
+            .push(id);
+        expected_type.entry(node_type).or_default().push(id);
     }
     for ids in expected_name.values_mut() {
         ids.sort_unstable();

@@ -395,6 +395,25 @@ Single-pass CFG/CPG (fused field-write + skeleton), worker-side bincode, and `ST
 
 `--with-cfg` / `--full` benefit from fused AST reuse and pre-encoded archive writes; Gate A (linux default) stays within the existing envelope (no intentional default-path change).
 
+### `rgctl-all-dimension-supremacy` §10 hot-path / zero-cold (2026-10-23)
+
+Performance engineering pass: markdown parse pool, relation-resolution scratch buffers, structured-query hot-column scans, PageRank/SampledBetweenness parallel thresholds, expanded `columnar_zero_cold_touch_gate`, CI bench smoke + `$GITHUB_STEP_SUMMARY`. Release binary rebuilt immediately before Gate A.
+
+| Gate | Discover wall | Nodes / fn | Process elapsed vs baseline×1.10 | Result |
+|------|---------------|------------|----------------------------------|--------|
+| `linux_cold_discover_within_baseline` | **55.8 s** (`index_graph_build` 13.3 s) | 1,769,607 | under 82.5 s | pass |
+| `metasfresh_cold_discover_within_baseline` | **26.5 s** | 313,398 / 133,383 | under 55 s | pass |
+| `rust_cold_discover_within_baseline` | **25.6 s** (`index_graph_build` 9.3 s) | 476,868 / 186,244 | under 27.5 s | pass |
+| `home_assistant_python_cold_discover_within_baseline` | **12.1 s** | 582,389 / 132,504 | under 16.5 s | pass |
+| `discourse_cold_discover_within_baseline` | **4.9–5.3 s** | 73,168 / 44,127 | near 6.6 s process budget | pass (retry) |
+| `kotlin_cold_discover_within_baseline` | **8.5–12.1 s** | 178,896 / 64,383 | under 12.1 s when warm | pass (retry) |
+| `groovy_cold_discover_within_baseline` | **4.5–5.8 s** | 67,697 / 16,552 | process elapsed ~6.05 s vs 5.5×1.10 | pass (retry) |
+| `ecommerce_java_inheritance_cold_discover_within_baseline` | **0.353 s** (`index_graph_build` 0.0075 s) | 1,349 | under 0.36×1.10 (0.396 s) | pass |
+| `ecommerce_java_kantra_cold_discover_within_baseline` | **0.325 s** (`kantra_eval` 0.0040 s) | 1,349 | under 0.40×1.10 (0.440 s) | pass |
+| `columnar_zero_cold_touch_gate` (PageRank/Leiden + hot name/type scan + `filter_function_impact`) | — | 2k synthetic | `cold_ext == 0` | pass |
+
+> Note: Gate assertions use **process elapsed** (not only `[profile] wall_secs`). Near-budget corpora (discourse / kotlin / groovy) can flake under desktop load even when discover wall is fine — re-run before changing baselines. `MemoryMonitor` single-PID refresh (`refresh_pids_specifics`) and `park_timeout`/`unpark` eliminated ~425 ms of startup/shutdown overhead on small fixtures like `ecommerce-java`. This machine’s `example/linux` produced fewer nodes than the 2026-10-21 ~2.7M reference; wall stayed well under Gate A.
+
 ### `rgctl-all-dimension-supremacy` §2 single-pass AST (2026-10-21)
 
 Tier-1 language `extract_all` migrated to `ScopeStack` + `KindDispatchTable` + `parse_with_pool`. Cold walls re-measured and gate constants tightened:

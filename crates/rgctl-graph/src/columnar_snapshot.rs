@@ -450,6 +450,35 @@ impl ColumnarGraphMmap {
         read_node_row(self.mmap.as_ref(), self.offset_nodes as usize, idx)
     }
 
+    /// Borrow the node name from the string pool (no allocation, no cold_ext).
+    pub fn node_name_str(&self, idx: usize) -> Result<&str> {
+        let row = self.node_row_at(idx)?;
+        string_at(
+            self.mmap.as_ref(),
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+            row.name_off,
+            row.name_len,
+        )
+    }
+
+    /// Borrow the file path from the string pool (no allocation, no cold_ext).
+    pub fn node_file_path_str(&self, idx: usize) -> Result<Option<&str>> {
+        let row = self.node_row_at(idx)?;
+        optional_string_at(
+            self.mmap.as_ref(),
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+            row.file_path_off,
+            row.file_path_len,
+        )
+    }
+
+    /// Hot-column [`NodeType`] at index (no cold_ext).
+    pub fn node_type_at(&self, idx: usize) -> Result<NodeType> {
+        node_type_from_u16(self.node_row_at(idx)?.node_type)
+    }
+
     /// String pool base offset and byte length for [`string_at`].
     pub(crate) fn string_pool_bounds(&self) -> (usize, usize) {
         (self.offset_strings as usize, self.offset_strings_len as usize)
