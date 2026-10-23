@@ -13,3 +13,6 @@ rgctl-plugin-helpers = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-c-sharp = "0.23.5"
 serde_json = "1"
+
+[dev-dependencies]
+rgctl-ast-coverage = { workspace = true }

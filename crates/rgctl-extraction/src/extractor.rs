@@ -131,9 +131,32 @@ impl Extractor {
         let digest = blake3::hash(&source);
         let file_hash = Some(digest.to_hex().to_string());
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
+            let path_str = path.to_string_lossy();
             let extracted = if let Some(facts) = &self.facts {
                 let key = facts_key_for_hash(plugin.as_ref(), *digest.as_bytes());
-                if let Some(cached) = facts.get(&key) {
+                let cached = facts.get(&key).and_then(|mut hit| {
+                    let old_file = hit
+                        .symbols
+                        .first()
+                        .map(|s| s.location.file.as_str())
+                        .or_else(|| hit.relations.first().map(|r| r.location.file.as_str()));
+                    if let Some(old) = old_file {
+                        if old != path_str.as_ref() {
+                            if Path::new(old).file_stem() != path.file_stem() {
+                                return None;
+                            }
+                            let new_file = path_str.to_string();
+                            for sym in &mut hit.symbols {
+                                sym.location.file = new_file.clone();
+                            }
+                            for rel in &mut hit.relations {
+                                rel.location.file = new_file.clone();
+                            }
+                        }
+                    }
+                    Some(hit)
+                });
+                if let Some(cached) = cached {
                     cached
                 } else {
                     let fresh = plugin.extract_all(path, &source)?;

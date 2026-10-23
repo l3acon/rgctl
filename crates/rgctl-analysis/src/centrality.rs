@@ -108,8 +108,8 @@ fn is_external_intrinsic_name(name: &str) -> bool {
         || bare.eq_ignore_ascii_case("readFileSync")
 }
 
-/// Keep production hotspots by default; pass `include_tests = true` to keep Test /
-/// ExternalIntrinsic nodes in the ranking.
+/// Keep production hotspots by default; pass `include_tests = true` to also keep
+/// [`NodeRole::Test`] symbols. [`NodeRole::ExternalIntrinsic`] is always excluded.
 pub fn filter_scores_by_role<F>(
     scores: &HashMap<Uuid, f64>,
     include_tests: bool,
@@ -124,11 +124,10 @@ where
             if score <= 0.0 {
                 return None;
             }
-            if !include_tests {
-                match role_of(id) {
-                    NodeRole::Production => {}
-                    NodeRole::Test | NodeRole::ExternalIntrinsic => return None,
-                }
+            match role_of(id) {
+                NodeRole::Production => {}
+                NodeRole::Test if include_tests => {}
+                NodeRole::Test | NodeRole::ExternalIntrinsic => return None,
             }
             Some((id, score))
         })
@@ -1466,8 +1465,11 @@ mod tests {
         };
         let filtered = filter_scores_by_role(&scores, false, role);
         assert_eq!(filtered, vec![(prod, 0.5)]);
-        let all = filter_scores_by_role(&scores, true, role);
-        assert_eq!(all.len(), 3);
-        assert_eq!(all[0].0, test);
+        let with_tests = filter_scores_by_role(&scores, true, role);
+        assert_eq!(with_tests, vec![(test, 0.9), (prod, 0.5)]);
+        assert!(
+            !with_tests.iter().any(|(id, _)| *id == intrinsic),
+            "ExternalIntrinsic must stay excluded when include_tests=true"
+        );
     }
 }

@@ -556,3 +556,65 @@ def safe(request):
     analyzer.detect_patterns("python");
     assert!(analyzer.analyze_with_policy().is_ok());
 }
+
+/// Field sensitivity: a write to `cfg.host` must not create a field-level
+/// data-dep into `connect(cfg.port)`.
+#[test]
+fn taint_field_sensitivity_host_does_not_flow_to_port() {
+    use rgctl::analysis::{ProgramDependenceGraph, build_cfg_for_function};
+
+    let code = r#"
+fn connect_cfg(tainted_input: String) {
+    let mut cfg = Config { host: String::new(), port: 0 };
+    cfg.host = tainted_input;
+    cfg.port = 8080;
+    connect(cfg.port);
+}
+"#;
+    let cfg = build_cfg_for_function("rust", code, "connect_cfg").expect("cfg build");
+    let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).expect("pdg");
+
+    let host_field_defs: Vec<_> = pdg
+        .nodes
+        .values()
+        .filter(|n| {
+            n.defined_vars
+                .iter()
+                .any(|d| d == "cfg.host" || d.ends_with(".host"))
+        })
+        .map(|n| n.id)
+        .collect();
+    let port_field_uses: Vec<_> = pdg
+        .nodes
+        .values()
+        .filter(|n| {
+            n.statement.text.contains("connect")
+                && n.used_vars
+                    .iter()
+                    .any(|u| u == "cfg.port" || u.ends_with(".port"))
+        })
+        .map(|n| n.id)
+        .collect();
+
+    assert!(
+        !host_field_defs.is_empty(),
+        "expected field-sensitive DefVar::Field for cfg.host; nodes={:?}",
+        pdg.nodes
+    );
+    assert!(
+        !port_field_uses.is_empty(),
+        "expected field-sensitive use for cfg.port in connect(cfg.port); nodes={:?}",
+        pdg.nodes
+    );
+
+    let false_field_flow = pdg.data_deps.iter().any(|d| {
+        (d.variable == "cfg.host" || d.variable.ends_with(".host"))
+            && host_field_defs.contains(&d.from)
+            && port_field_uses.contains(&d.to)
+    });
+    assert!(
+        !false_field_flow,
+        "cfg.host must not field-flow into connect(cfg.port); deps={:?}",
+        pdg.data_deps
+    );
+}

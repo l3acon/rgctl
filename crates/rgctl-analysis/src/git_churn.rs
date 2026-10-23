@@ -97,6 +97,7 @@ pub fn compute_and_apply_git_churn(
     config: &GitChurnConfig,
 ) -> Result<GitChurnReport> {
     let nodes = backend.all_nodes()?;
+    let canon_root = repo_root.canonicalize().ok();
     let mut file_path_to_dense: FxHashMap<String, u32> = FxHashMap::default();
     let mut dense_to_uuid: Vec<Uuid> = Vec::new();
     let mut dense_paths: Vec<String> = Vec::new();
@@ -111,7 +112,7 @@ pub fn compute_and_apply_git_churn(
             .as_deref()
             .map(|s| s.as_ref())
             .unwrap_or(node.name.as_str());
-        let path = normalize_repo_path(raw);
+        let path = normalize_node_repo_path(repo_root, canon_root.as_deref(), raw);
         if path.is_empty() || file_path_to_dense.contains_key(&path) {
             continue;
         }
@@ -131,7 +132,7 @@ pub fn compute_and_apply_git_churn(
         let Some(fp) = node.file_path.as_deref() else {
             continue;
         };
-        let path = normalize_repo_path(fp);
+        let path = normalize_node_repo_path(repo_root, canon_root.as_deref(), fp);
         let Some(&dense) = file_path_to_dense.get(&path) else {
             continue;
         };
@@ -446,6 +447,24 @@ fn parse_numstat_count(s: &str) -> u64 {
 
 fn parse_u32_prop(v: Option<&str>) -> Option<u32> {
     v.and_then(|s| s.parse().ok())
+}
+
+fn normalize_node_repo_path(repo_root: &Path, canon_root: Option<&Path>, raw: &str) -> String {
+    let p = Path::new(raw);
+    if let Ok(rel) = p.strip_prefix(repo_root) {
+        return normalize_repo_path(&rel.to_string_lossy());
+    }
+    if let Some(canon) = canon_root {
+        if let Ok(rel) = p.strip_prefix(canon) {
+            return normalize_repo_path(&rel.to_string_lossy());
+        }
+        if let Ok(canon_p) = p.canonicalize() {
+            if let Ok(rel) = canon_p.strip_prefix(canon) {
+                return normalize_repo_path(&rel.to_string_lossy());
+            }
+        }
+    }
+    normalize_repo_path(raw)
 }
 
 fn normalize_repo_path(path: &str) -> String {

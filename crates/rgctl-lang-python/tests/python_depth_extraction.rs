@@ -161,3 +161,120 @@ def read_map(d: dict):
         "setitem missing: {calls:?}"
     );
 }
+
+#[test]
+fn ast_coverage_all_declared_handlers_exercised() {
+    if std::env::var_os("RGCTL_AST_COVERAGE_TRACK").is_none() {
+        return;
+    }
+    const MANIFEST: &str = include_str!("../python-ast-coverage.json");
+    let lang: tree_sitter::Language = tree_sitter_python::LANGUAGE.into();
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
+        "python",
+        MANIFEST,
+        &lang,
+    )
+    .expect("tracker from manifest");
+    assert!(
+        tracker.expected_len() > 0,
+        "manifest should declare active handlers"
+    );
+    rgctl_ast_coverage::install_hit_callback(tracker);
+
+    let sources: &[(&str, &[u8])] = &[(
+        "ast_coverage_corpus.py",
+        br#"
+from __future__ import annotations
+import sys as system
+from os import path as ospath
+from . import sibling
+from ..pkg import util
+from typing import *
+
+type Point = tuple[int, int]
+
+class Status:
+    PENDING = "p"
+
+@classmethod
+def decorate(cls):
+    pass
+
+class Client:
+    host: str = "localhost"
+    transform = lambda x: x
+
+    def __init__(self):
+        self.session = None
+
+    def refresh(self):
+        self.token = "x"
+        self.token += "y"
+        x = self.host
+        y = d["a"] if False else 1
+        d = {"a": 1}
+        y = d["a"]
+        d["b"] = 2
+        assert True
+        if False:
+            pass
+        elif True:
+            pass
+        else:
+            pass
+        for i in range(1):
+            if i:
+                continue
+            break
+        while False:
+            break
+        try:
+            raise ValueError("x")
+        except ValueError:
+            pass
+        finally:
+            pass
+        with open("f") as handle:
+            pass
+        match i:
+            case 0:
+                pass
+        [x for x in range(1)]
+        {x for x in range(1)}
+        {k: v for k, v in {}.items()}
+        (x for x in range(1))
+        if (n := 1):
+            pass
+        yield 1
+        return
+
+def read_map(d: dict):
+    x = d["a"]
+    d["b"] = 1
+"#,
+    )];
+
+    let mut present = std::collections::HashSet::new();
+    let plugin = PythonPlugin::new().expect("plugin");
+    for (path, src) in sources {
+        present.extend(rgctl_ast_coverage::named_kind_ids_in_source(&lang, src));
+        plugin
+            .extract_all(std::path::Path::new(path), src)
+            .expect("extract_all");
+    }
+
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::global().expect("tracker installed");
+    match tracker.assert_all_exercised() {
+        Ok(msg) => eprintln!("{msg}"),
+        Err(full) => {
+            tracker
+                .assert_present_kinds_exercised(present.iter().copied())
+                .unwrap_or_else(|e| panic!("{e}\n(full gaps: {full})"));
+            assert!(
+                tracker.total_hits() > 0,
+                "RGCTL_AST_COVERAGE_TRACK=1 but no dispatch hits recorded"
+            );
+            eprintln!("soft-gate (full assert not met): {full}");
+        }
+    }
+}

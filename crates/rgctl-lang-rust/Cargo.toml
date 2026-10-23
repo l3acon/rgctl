@@ -20,4 +20,5 @@ name = "single_pass_extract"
 harness = false
 
 [dev-dependencies]
+rgctl-ast-coverage = { workspace = true }
 criterion = { version = "0.5", features = ["html_reports"] }

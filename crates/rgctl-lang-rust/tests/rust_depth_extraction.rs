@@ -112,3 +112,123 @@ trait Painter {
                 == Some(true)
     }));
 }
+
+#[test]
+fn ast_coverage_all_declared_handlers_exercised() {
+    if std::env::var_os("RGCTL_AST_COVERAGE_TRACK").is_none() {
+        return;
+    }
+    const MANIFEST: &str = include_str!("../rust-ast-coverage.json");
+    let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
+        "rust",
+        MANIFEST,
+        &lang,
+    )
+    .expect("tracker from manifest");
+    assert!(
+        tracker.expected_len() > 0,
+        "manifest should declare active handlers"
+    );
+    rgctl_ast_coverage::install_hit_callback(tracker);
+
+    let sources: &[(&str, &[u8])] = &[(
+        "ast_coverage_corpus.rs",
+        br#"
+extern crate core;
+use std::fmt::Debug;
+
+mod nested {
+    pub fn ping() {}
+}
+
+const MAX: i32 = 10;
+static GLOBAL: i32 = 0;
+type Id = u64;
+union Word { i: i32, u: u32 }
+
+struct Point { x: i32, y: i32 }
+
+enum Color { Red, Green }
+
+trait Painter {
+    type Medium;
+    fn paint(&self);
+}
+
+macro_rules! noop { () => {}; }
+
+impl Point {
+    fn helper(&self) {}
+    fn run(&self) -> Result<(), ()> {
+        let mut n = 0;
+        n = 1;
+        n += 1;
+        let _c = || 1;
+        let _a = async { 1 };
+        let _u = unsafe { 1 };
+        if let Some(x) = Some(1)
+            && let Some(y) = Some(2)
+        {
+            let _ = x + y;
+        }
+        if true {
+        } else {
+        }
+        for _i in 0..1 {
+            break;
+        }
+        while false {
+            continue;
+        }
+        loop {
+            break;
+        }
+        match n {
+            0 => {}
+            _ => {}
+        }
+        let _ = self.try_me()?;
+        noop!();
+        nested::ping();
+        identity::<i32>(1);
+        Point::helper(self);
+        return Ok(());
+    }
+    fn try_me(&self) -> Result<(), ()> { Ok(()) }
+}
+
+fn identity<T: Debug>(x: T) -> T { x }
+
+fn gen_block() {
+    let _g = gen {
+        yield 1;
+    };
+}
+"#,
+    )];
+
+    let mut present = std::collections::HashSet::new();
+    let plugin = RustPlugin::new().expect("plugin");
+    for (path, src) in sources {
+        present.extend(rgctl_ast_coverage::named_kind_ids_in_source(&lang, src));
+        plugin
+            .extract_all(std::path::Path::new(path), src)
+            .expect("extract_all");
+    }
+
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::global().expect("tracker installed");
+    match tracker.assert_all_exercised() {
+        Ok(msg) => eprintln!("{msg}"),
+        Err(full) => {
+            tracker
+                .assert_present_kinds_exercised(present.iter().copied())
+                .unwrap_or_else(|e| panic!("{e}\n(full gaps: {full})"));
+            assert!(
+                tracker.total_hits() > 0,
+                "RGCTL_AST_COVERAGE_TRACK=1 but no dispatch hits recorded"
+            );
+            eprintln!("soft-gate (full assert not met): {full}");
+        }
+    }
+}

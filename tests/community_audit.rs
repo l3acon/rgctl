@@ -1,10 +1,13 @@
 //! Phase 15 community detection audit — isolation, determinism, modularity.
 
-use rgctl::analysis::{CommunityDetector, PetGraphView, default_community_edge_types};
+use rgctl::analysis::{
+    CommunityDetector, HubStripPolicy, PetGraphView, default_community_edge_types,
+    verify_community_connectedness,
+};
 use rgctl::graph::CodeGraph;
 use rgctl::graph::backend::GraphBackend;
 use rgctl::graph::schema::{Edge, EdgeType, Node, NodeType};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -195,4 +198,182 @@ fn build_monorepo_mock(nodes: usize, edges: usize) -> CodeGraph {
         }
     }
     graph
+}
+
+/// Bridge topology where greedy Louvain can strand disconnected leaves; Fast-Leiden must not.
+#[test]
+fn leiden_every_community_is_connected_subgraph() {
+    let mut graph = CodeGraph::new();
+    let backend = graph.backend_mut();
+
+    // Two leaf groups linked only through bridge B:
+    //   L0--L1--B--R0--R1  plus L0--L1 and R0--R1 dense edges.
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    for i in 0..4 {
+        let l = Node::new(NodeType::Function, format!("left_{i}"))
+            .with_qualified_name(format!("pkg::left_{i}"));
+        let r = Node::new(NodeType::Function, format!("right_{i}"))
+            .with_qualified_name(format!("pkg::right_{i}"));
+        left.push(l.id);
+        right.push(r.id);
+        backend.insert_node(l).unwrap();
+        backend.insert_node(r).unwrap();
+    }
+    let bridge = Node::new(NodeType::Function, "bridge")
+        .with_qualified_name("pkg::bridge");
+    let id_b = bridge.id;
+    backend.insert_node(bridge).unwrap();
+
+    for ids in [&left, &right] {
+        for i in 0..ids.len() {
+            for j in 0..ids.len() {
+                if i != j {
+                    insert_call(backend, ids[i], ids[j]);
+                }
+            }
+        }
+    }
+    insert_call(backend, left[0], id_b);
+    insert_call(backend, id_b, left[0]);
+    insert_call(backend, right[0], id_b);
+    insert_call(backend, id_b, right[0]);
+
+    let view = PetGraphView::from_backend(backend).unwrap();
+    let allowed = &[EdgeType::Calls];
+    let result = CommunityDetector::new()
+        .with_hub_policy(HubStripPolicy::Off)
+        .detect_with_view_filtered(&view, allowed)
+        .unwrap();
+
+    verify_community_connectedness(&view, &result, allowed)
+        .expect("every non-infra community must induce a connected subgraph");
+}
+
+/// Shared Logger hub with in-degree 30 must land in infrastructure_community_id.
+#[test]
+fn statistical_hub_stripping_isolates_logger_hub() {
+    let mut graph = CodeGraph::new();
+    let backend = graph.backend_mut();
+
+    let domains = ["auth", "billing", "inventory"];
+    let mut domain_ids: Vec<Vec<Uuid>> = Vec::new();
+    for domain in domains {
+        domain_ids.push(build_clique(backend, domain, 10));
+    }
+
+    let logger = Node::new(NodeType::Function, "Logger::info")
+        .with_qualified_name("util::Logger::info");
+    let id_logger = logger.id;
+    backend.insert_node(logger).unwrap();
+
+    for clique in &domain_ids {
+        for &id in clique {
+            insert_call(backend, id, id_logger);
+        }
+    }
+
+    let view = PetGraphView::from_backend(backend).unwrap();
+    let result = CommunityDetector::new()
+        .with_hub_policy(HubStripPolicy::Statistical { k: 3.0 })
+        .with_min_nodes_for_hub_strip(20)
+        .detect_with_view_filtered(&view, &[EdgeType::Calls])
+        .unwrap();
+
+    let infra = result
+        .infrastructure_community_id
+        .expect("Logger::info must become an infrastructure hub");
+    assert_eq!(
+        result.assignments.get(&id_logger).copied(),
+        Some(infra),
+        "Logger::info must sit in infrastructure_community_id"
+    );
+
+    let mut domain_labels = HashSet::new();
+    for clique in &domain_ids {
+        let labels: HashSet<_> = clique.iter().map(|id| result.assignments[id]).collect();
+        assert_eq!(
+            labels.len(),
+            1,
+            "each domain clique must share one community label, got {labels:?}"
+        );
+        domain_labels.extend(labels);
+    }
+    domain_labels.remove(&infra);
+    assert_eq!(
+        domain_labels.len(),
+        3,
+        "auth/billing/inventory must remain three separate communities, got {domain_labels:?}"
+    );
+}
+
+/// Community partitions by qualified_name must be invariant under insertion order.
+#[test]
+fn node_insertion_order_invariance() {
+    fn build_with_seed(seed: u64) -> (CodeGraph, f64, BTreeSet<BTreeSet<String>>) {
+        let mut names: Vec<String> = (0..8)
+            .map(|i| format!("auth_{i}"))
+            .chain((0..8).map(|i| format!("billing_{i}")))
+            .collect();
+        // Deterministic LCG Fisher–Yates.
+        let mut state = seed;
+        for i in (1..names.len()).rev() {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1);
+            let j = (state as usize) % (i + 1);
+            names.swap(i, j);
+        }
+
+        let mut graph = CodeGraph::new();
+        let backend = graph.backend_mut();
+        let mut id_by_name = HashMap::new();
+        for name in &names {
+            let node =
+                Node::new(NodeType::Function, name.clone()).with_qualified_name(name.clone());
+            id_by_name.insert(name.clone(), node.id);
+            backend.insert_node(node).unwrap();
+        }
+        for prefix in ["auth", "billing"] {
+            for i in 0..8 {
+                for j in 0..8 {
+                    if i == j {
+                        continue;
+                    }
+                    let a = id_by_name[&format!("{prefix}_{i}")];
+                    let b = id_by_name[&format!("{prefix}_{j}")];
+                    insert_call(backend, a, b);
+                }
+            }
+        }
+
+        let view = PetGraphView::from_backend(backend).unwrap();
+        let result = CommunityDetector::new()
+            .with_hub_policy(HubStripPolicy::Off)
+            .detect_with_view_filtered(&view, &[EdgeType::Calls])
+            .unwrap();
+
+        let mut by_label: HashMap<usize, BTreeSet<String>> = HashMap::new();
+        for (id, label) in &result.assignments {
+            let node = backend.get_node(*id).unwrap().unwrap();
+            let qname = node
+                .qualified_name
+                .as_deref()
+                .unwrap_or(node.name.as_str())
+                .to_string();
+            by_label.entry(*label).or_default().insert(qname);
+        }
+        let partition: BTreeSet<BTreeSet<String>> = by_label.into_values().collect();
+        (graph, result.modularity, partition)
+    }
+
+    let (_g0, q0, p0) = build_with_seed(1);
+    for seed in [2u64, 3, 5, 7, 11] {
+        let (_g, q, p) = build_with_seed(seed);
+        assert_eq!(p, p0, "partition drift at seed {seed}");
+        assert!(
+            (q - q0).abs() < 1e-9,
+            "modularity drift at seed {seed}: {q} vs {q0}"
+        );
+    }
 }

@@ -124,3 +124,78 @@ fn enumerator_as_symbol_kind_visited() {
         .expect("E");
     assert_eq!(e.fields.len(), 2);
 }
+
+#[test]
+fn ast_coverage_all_declared_handlers_exercised() {
+    if std::env::var_os("RGCTL_AST_COVERAGE_TRACK").is_none() {
+        return;
+    }
+    const MANIFEST: &str = include_str!("../cpp-ast-coverage.json");
+    let lang: tree_sitter::Language = tree_sitter_cpp::LANGUAGE.into();
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
+        "cpp",
+        MANIFEST,
+        &lang,
+    )
+    .expect("tracker from manifest");
+    assert!(
+        tracker.expected_len() > 0,
+        "manifest should declare active handlers"
+    );
+    rgctl_ast_coverage::install_hit_callback(tracker);
+
+    let sources: &[(&str, &[u8])] = &[(
+        "ast_coverage_corpus.cpp",
+        br#"
+#include <vector>
+namespace ns {
+  using Alias = int;
+  concept Integral = true;
+  enum Color { Red };
+  union U { int i; };
+  class Base {};
+  class Derived : public Base {
+    void run() {
+      int x = 0;
+      x = 1;
+      if (x) {} else {}
+      for (auto& v : std::vector<int>{}) { break; }
+      while (0) { continue; }
+      do { break; } while (0);
+      switch (x) { case 0: break; }
+      try { throw 1; } catch (...) {}
+      co_await 1;
+      co_yield 1;
+      co_return;
+      new int;
+      return;
+    }
+  };
+}
+"#,
+    )];
+
+    let mut present = std::collections::HashSet::new();
+    let plugin = CppPlugin::new().expect("plugin");
+    for (path, src) in sources {
+        present.extend(rgctl_ast_coverage::named_kind_ids_in_source(&lang, src));
+        plugin
+            .extract_all(std::path::Path::new(path), src)
+            .expect("extract_all");
+    }
+
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::global().expect("tracker installed");
+    match tracker.assert_all_exercised() {
+        Ok(msg) => eprintln!("{msg}"),
+        Err(full) => {
+            tracker
+                .assert_present_kinds_exercised(present.iter().copied())
+                .unwrap_or_else(|e| panic!("{e}\n(full gaps: {full})"));
+            assert!(
+                tracker.total_hits() > 0,
+                "RGCTL_AST_COVERAGE_TRACK=1 but no dispatch hits recorded"
+            );
+            eprintln!("soft-gate (full assert not met): {full}");
+        }
+    }
+}

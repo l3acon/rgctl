@@ -34,8 +34,8 @@ impl LanguagePlugin for SwiftPlugin {
         unimplemented!("use extract_all")
     }
     
-    fn calculate_complexity(&self, _: &Symbol, _: &[u8]) -> Result<Option<ComplexityMetrics>> {
-        Ok(None)
+    fn calculate_complexity(&self, symbol: &Symbol, _: &[u8]) -> Result<Option<ComplexityMetrics>> {
+        Ok(complexity_from_metadata(symbol))
     }
 
     fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {

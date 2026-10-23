@@ -139,7 +139,7 @@ pub use community::{
     Community, CommunityDetector, CommunityResult, DEFAULT_HUB_SIGMA_K,
     DEFAULT_MAX_FROZEN_FRACTION, DEFAULT_MIN_NODES_FOR_HUB_STRIP, DashboardCommunity,
     HubStripPolicy, TieBreakStrategy, community_edge_types_for_backend,
-    default_community_edge_types, detect_communities,
+    default_community_edge_types, detect_communities, verify_community_connectedness,
 };
 pub use community_label::{
     CommunityLabelHints, dedupe_community_labels, fill_community_labels,

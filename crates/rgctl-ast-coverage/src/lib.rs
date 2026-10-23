@@ -11,7 +11,7 @@
 mod tracker;
 
 pub use tracker::{
-    clear_hit_callback, install_hit_callback, AstCoverageTracker,
+    clear_hit_callback, install_hit_callback, named_kind_ids_in_source, AstCoverageTracker,
 };
 
 use rgctl_plugin_api::{AstHandlerTable, HandlerMask};
@@ -665,9 +665,48 @@ mod tests {
     #[test]
     fn bundled_specs_cover_expected_languages() {
         let ids: HashSet<_> = bundled_specs().iter().map(|s| s.id).collect();
-        for need in ["java", "kotlin", "groovy", "markdown", "ruby"] {
-            assert!(ids.contains(need), "missing {need}");
+        // Tier-1 custom plugins + markdown/erb/puppet/groovy (24 bundled specs).
+        // OpenSpec "23 custom" excludes markdown; all of these must be present.
+        const EXPECTED: &[&str] = &[
+            "c",
+            "cpp",
+            "csharp",
+            "go",
+            "groovy",
+            "java",
+            "javascript",
+            "kotlin",
+            "markdown",
+            "php",
+            "puppet",
+            "erb",
+            "python",
+            "ruby",
+            "rust",
+            "typescript",
+            "swift",
+            "scala",
+            "dart",
+            "elixir",
+            "lua",
+            "bash",
+            "sql",
+            "hcl",
+        ];
+        assert_eq!(
+            EXPECTED.len(),
+            24,
+            "update EXPECTED if Tier-1 / bundled set changes"
+        );
+        for need in EXPECTED {
+            assert!(ids.contains(need), "bundled_specs missing {need}");
         }
+        assert!(
+            ids.len() >= EXPECTED.len(),
+            "bundled_specs has {} ids, expected at least {}",
+            ids.len(),
+            EXPECTED.len()
+        );
     }
 
     #[test]
