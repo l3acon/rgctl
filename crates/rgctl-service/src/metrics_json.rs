@@ -33,6 +33,8 @@ pub struct MetricsJsonResponse {
     pub betweenness: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub communities: Option<MetricsCommunitiesSection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub churn_hotspots: Option<Vec<Value>>,
 }
 
 /// Build a metrics response; unset sections are omitted from JSON via `Option`.
@@ -41,11 +43,22 @@ pub fn build_metrics_response(
     betweenness: Option<Vec<Value>>,
     communities: Option<MetricsCommunitiesSection>,
 ) -> MetricsJsonResponse {
+    build_metrics_response_with_churn(pagerank, betweenness, communities, None)
+}
+
+/// Build a metrics response including optional git churn hotspots.
+pub fn build_metrics_response_with_churn(
+    pagerank: Option<MetricsPagerankSection>,
+    betweenness: Option<Vec<Value>>,
+    communities: Option<MetricsCommunitiesSection>,
+    churn_hotspots: Option<Vec<Value>>,
+) -> MetricsJsonResponse {
     MetricsJsonResponse {
         schema_version: METRICS_SCHEMA_VERSION,
         pagerank,
         betweenness,
         communities,
+        churn_hotspots,
     }
 }
 
@@ -79,6 +92,7 @@ pub fn fixture_metrics_response() -> MetricsJsonResponse {
             modularity: 0.42,
             assignments: 10,
         }),
+        churn_hotspots: None,
     }
 }
 

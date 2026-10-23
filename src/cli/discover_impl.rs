@@ -42,6 +42,10 @@ pub(crate) struct AnalysisOptions<'a> {
     pub taint_rules: Option<String>,
     /// Optional SCIP index path (`.scip`) for compiler-exact Calls overlay.
     pub scip: Option<String>,
+    /// Emit `CoChangesWith` + churn hotspot scores from git history.
+    pub with_git: bool,
+    /// Git `--since` window for `--with-git`.
+    pub git_since: String,
     pub with_dfg_loops: bool,
     pub with_ast_skeleton: bool,
     pub write_json_graph: bool,
@@ -92,6 +96,8 @@ pub(crate) fn run_full_analysis(
         with_taint,
         taint_rules,
         scip,
+        with_git,
+        git_since,
         with_dfg_loops,
         with_ast_skeleton,
         write_json_graph,
@@ -304,6 +310,44 @@ pub(crate) fn run_full_analysis(
             );
         }
         profile.save_snapshot.secs += secs(scip_start.elapsed());
+    }
+
+    // Optional git churn / co-change overlay (`--with-git`).
+    if with_git {
+        let git_start = Instant::now();
+        cold_reused = None;
+        let mut graph = rgctl_graph::code_graph::CodeGraph::open_snapshot(&snapshot_path)?;
+        let config = rgctl_analysis::GitChurnConfig {
+            since: git_since.clone(),
+            ..rgctl_analysis::GitChurnConfig::default()
+        };
+        let report = rgctl_analysis::compute_and_apply_git_churn(root, graph.backend_mut(), &config)
+            .map_err(|e| anyhow::anyhow!("git churn failed: {e}"))?;
+        if report.edges_emitted > 0 || report.commits_used > 0 {
+            graph_digest =
+                rgctl_graph::write_columnar_from_backend(graph.backend(), &snapshot_path)?;
+            index_stats.edges_created = graph.backend().edge_count();
+        }
+        let analysis_dir = store.join(".rgctl").join("analysis");
+        std::fs::create_dir_all(&analysis_dir)?;
+        let churn_path = analysis_dir.join("git_churn.json");
+        std::fs::write(
+            &churn_path,
+            serde_json::to_string_pretty(&report)
+                .map_err(|e| anyhow::anyhow!("serialize git_churn.json: {e}"))?,
+        )?;
+        if human_output || verbose {
+            info!(
+                commits_scanned = report.commits_scanned,
+                commits_used = report.commits_used,
+                edges_emitted = report.edges_emitted,
+                files = report.files.len(),
+                duration_secs = %format!("{:.2}", git_start.elapsed().as_secs_f64()),
+                "[✓] Git churn overlay ({} CoChangesWith edges)",
+                report.edges_emitted
+            );
+        }
+        profile.save_snapshot.secs += secs(git_start.elapsed());
     }
 
     if materialize_fields {

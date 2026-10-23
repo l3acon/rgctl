@@ -2702,6 +2702,7 @@ dependencies = [
  "rgctl-plugin-helpers",
  "rgctl-registry",
  "roxmltree",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",

@@ -1,6 +1,7 @@
 //! Maps extracted symbols and relations into graph nodes and edges.
 
 use crate::extractor::SymbolPass1Prep;
+use crate::parked_relations::ParkedRelationRecord;
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::{CodeIndex, hash_code};
 use rgctl_graph::content_store::{ContentStore, INLINE_BODY_MAX_BYTES, hash_bytes};
@@ -12,6 +13,7 @@ use rgctl_graph::structural_sketch::build_token_bloom;
 use rgctl_plugin_api::{
     ComplexityMetrics, ConfigKey, Relation, RelationType, Symbol, SymbolType,
 };
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
@@ -79,6 +81,12 @@ pub struct GraphBuilder {
     type_methods: HashMap<String, Vec<(String, Uuid)>>,
     /// Cached MRO chains (simple type names, self first).
     mro_cache: HashMap<String, Vec<String>>,
+    /// Unresolved / external-stub relations parked for cross-repo merge.
+    parked_relations: Vec<ParkedRelationRecord>,
+    /// `file_path → (imported_symbol_or_alias → module_source_path)` from Import symbols.
+    file_imports_index: FxHashMap<String, FxHashMap<String, String>>,
+    /// External stub node UUIDs (`O(1)` membership test in `park_relation_if_needed`).
+    external_stub_ids: FxHashSet<Uuid>,
 }
 
 /// One annotation usage with argument text (written to `.rgctl/annotation_args.json`).
@@ -536,6 +544,7 @@ impl GraphBuilder {
             .insert(id, symbol.location.file.clone());
         self.index_symbol_resolution(&key, &node);
         self.index_type_method(symbol, id);
+        self.index_import_binding(symbol);
         self.commit_node(node);
         self.add_edge(id, file_id, EdgeType::DefinedIn);
         self.add_edge(file_id, id, EdgeType::Contains);
@@ -543,6 +552,65 @@ impl GraphBuilder {
             self.add_field_members(id, symbol, file_id);
         }
         id
+    }
+
+    /// Record Import symbol bindings for parked-relation module hints.
+    fn index_import_binding(&mut self, symbol: &Symbol) {
+        if symbol.symbol_type != SymbolType::Import {
+            return;
+        }
+        let raw_module = symbol
+            .metadata
+            .get("module")
+            .or_else(|| symbol.metadata.get("module_path"))
+            .and_then(|v| v.as_str())
+            .or_else(|| symbol.qualified_name.as_deref().filter(|q| *q != "*"))
+            .or_else(|| symbol.signature.as_deref())
+            .map(clean_import_module_text)
+            .filter(|m| !m.is_empty())
+            .or_else(|| infer_import_module_from_name(&symbol.name));
+        let Some(module) = raw_module.filter(|m| !m.is_empty()) else {
+            return;
+        };
+
+        let explicit_binding = symbol
+            .metadata
+            .get("binding")
+            .or_else(|| symbol.metadata.get("local"))
+            .or_else(|| symbol.metadata.get("alias"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| infer_import_binding_from_name(&symbol.name, &module));
+
+        let by_file = self
+            .file_imports_index
+            .entry(symbol.location.file.clone())
+            .or_default();
+
+        if let Some(binding) = explicit_binding {
+            by_file.insert(binding, module.clone());
+        } else {
+            by_file.insert("*".to_string(), module.clone());
+        }
+
+        // Always also bind the trailing identifier of the module path (e.g. `UserService`
+        // from `com.acme.billing.UserService` or `acme_billing::user::UserService`) if it
+        // looks like a symbol/package name.
+        let stripped_wildcard = module
+            .strip_suffix(".*")
+            .or_else(|| module.strip_suffix("::*"))
+            .unwrap_or(&module);
+        if stripped_wildcard.len() < module.len() {
+            by_file.insert("*".to_string(), stripped_wildcard.to_string());
+        } else if let Some(tail) = module.rsplit(['.', '/', ':']).next() {
+            let tail = tail.trim();
+            if !tail.is_empty() && tail != "*" {
+                by_file
+                    .entry(tail.to_string())
+                    .or_insert_with(|| module.clone());
+            }
+        }
     }
 
     /// Index `Owner.method` / `Owner::method` / `Owner#method` for MRO Overrides.
@@ -729,8 +797,12 @@ impl GraphBuilder {
     /// external stub nodes (`is_external_stub`) so Instantiates / JPMS /
     /// AnnotatedWith edges survive into GQL. Field-like `References` are not
     /// stubbed (they must not invent Class nodes named like fields).
+    ///
+    /// Unresolved or stubbed `Calls`/`Uses`/`Extends`/`Implements`/`Injects`
+    /// from in-repo nodes are also parked for cross-repo `rgctl merge`.
     pub fn add_relation(&mut self, relation: &Relation) -> Result<()> {
         // Fast reject: unresolved cross-file C calls (no stub policy for Calls).
+        // Still park when `from` resolves so cross-repo merge can recover.
         if relation.relation_type == RelationType::Calls
             && relation.metadata.get("language").and_then(|v| v.as_str()) == Some("c")
             && !self.c_preferred_impl.contains_key(&relation.to)
@@ -744,6 +816,27 @@ impl GraphBuilder {
                         || single_c_preferred_impl(ids, &self.symbol_files).is_some()
                 });
             if !can_resolve {
+                let mut from_id = self.resolve_symbol_tracked(
+                    &relation.from,
+                    &relation.location.file,
+                    None,
+                    None,
+                );
+                if from_id.is_none() {
+                    from_id = self
+                        .symbols_by_qualified
+                        .get(&relation.from)
+                        .and_then(|ids| unique_resolved(ids));
+                }
+                if let Some(from) = from_id {
+                    self.park_relation_if_needed(
+                        relation,
+                        from,
+                        None,
+                        relation.to_type_hint.clone(),
+                        relation.to_qualified_hint.clone(),
+                    );
+                }
                 return Ok(());
             }
         }
@@ -804,6 +897,27 @@ impl GraphBuilder {
             && self.node_types.get(&to).copied() != Some(NodeType::Function)
         {
             to_id = None;
+        }
+
+        if let Some(from) = from_id {
+            self.park_relation_if_needed(
+                relation,
+                from,
+                to_id,
+                to_type_hint
+                    .clone()
+                    .or_else(|| relation.to_type_hint.clone())
+                    .or_else(|| {
+                        relation
+                            .metadata
+                            .get("to_type_hint")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                    }),
+                to_qualified_hint
+                    .clone()
+                    .or_else(|| relation.to_qualified_hint.clone()),
+            );
         }
 
         if let (Some(from), Some(to)) = (from_id, to_id) {
@@ -1186,8 +1300,9 @@ impl GraphBuilder {
 
         const STUB_FILE: &str = "<external>";
         let key = symbol_key(STUB_FILE, simple, Some(qn.as_str()));
-        if let Some(id) = self.symbol_index.get(&key) {
-            return *id;
+        if let Some(&id) = self.symbol_index.get(&key) {
+            self.external_stub_ids.insert(id);
+            return id;
         }
 
         let file_id = self.ensure_file_node(Path::new(STUB_FILE));
@@ -1207,6 +1322,7 @@ impl GraphBuilder {
         }
         let id = node.id;
         self.symbol_index.insert(key, id);
+        self.external_stub_ids.insert(id);
         self.symbols_by_qualified
             .entry(qn)
             .or_default()
@@ -1215,6 +1331,84 @@ impl GraphBuilder {
         self.add_edge(id, file_id, EdgeType::DefinedIn);
         self.add_edge(file_id, id, EdgeType::Contains);
         id
+    }
+
+    /// Park unresolved / external-stub targets for cross-repo merge when applicable.
+    fn park_relation_if_needed(
+        &mut self,
+        relation: &Relation,
+        from_id: Uuid,
+        to_id: Option<Uuid>,
+        to_type_hint: Option<String>,
+        to_qualified_hint: Option<String>,
+    ) {
+        if !is_parkable_relation(relation.relation_type) {
+            return;
+        }
+        let stub_node_id = to_id.filter(|id| self.is_external_stub_id(*id));
+        let unresolved = to_id.is_none();
+        if !unresolved && stub_node_id.is_none() {
+            return;
+        }
+
+        let file_path = &relation.location.file;
+        let import_module_hint = self.lookup_import_module_hint(
+            file_path,
+            &relation.to,
+            to_type_hint.as_deref(),
+        );
+
+        self.parked_relations.push(ParkedRelationRecord {
+            from_node_id: from_id,
+            from_qualified_name: relation.from.clone(),
+            from_file: file_path.clone(),
+            to_name: relation.to.clone(),
+            to_qualified_hint,
+            to_type_hint,
+            import_module_hint,
+            relation_type: relation.relation_type,
+            call_site_line: relation.location.start_line as u32,
+            stub_node_id,
+        });
+    }
+
+    #[inline]
+    fn is_external_stub_id(&self, id: Uuid) -> bool {
+        self.external_stub_ids.contains(&id)
+    }
+
+    fn lookup_import_module_hint(
+        &self,
+        file_path: &str,
+        to_name: &str,
+        to_type_hint: Option<&str>,
+    ) -> Option<String> {
+        let by_file = self.file_imports_index.get(file_path)?;
+        if let Some(module) = by_file.get(to_name) {
+            return Some(module.clone());
+        }
+        if let Some(hint) = to_type_hint {
+            if let Some(module) = by_file.get(hint) {
+                return Some(module.clone());
+            }
+        }
+        // `UserService.charge` / `UserService::charge` → bind on receiver prefix.
+        let prefix = to_name
+            .split(['.', ':'])
+            .next()
+            .filter(|s| !s.is_empty() && *s != to_name);
+        if let Some(prefix) = prefix {
+            if let Some(module) = by_file.get(prefix) {
+                return Some(module.clone());
+            }
+        }
+        // Wildcard import fallback.
+        by_file.get("*").cloned()
+    }
+
+    /// Drain parked relations accumulated during graph build.
+    pub fn take_parked_relations(&mut self) -> Vec<ParkedRelationRecord> {
+        std::mem::take(&mut self.parked_relations)
     }
 
     /// Late-bind Go `recv.field.Method` using field Variable nodes from Pass 1.
@@ -1828,6 +2022,107 @@ fn join_path_normalized(base: &Path, rel: &str) -> String {
         }
     }
     normalize_file_key(out.to_string_lossy().as_ref())
+}
+
+fn is_parkable_relation(relation_type: RelationType) -> bool {
+    matches!(
+        relation_type,
+        RelationType::Calls
+            | RelationType::Uses
+            | RelationType::Extends
+            | RelationType::Implements
+            | RelationType::Injects
+    )
+}
+
+fn clean_import_module_text(raw: &str) -> String {
+    let mut s = raw.trim().trim_end_matches(';').trim();
+    for prefix in [
+        "import static ",
+        "import ",
+        "using static ",
+        "using ",
+        "use ",
+        "#include ",
+    ] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest.trim();
+            break;
+        }
+    }
+    // C# alias `using Alias = Namespace.Type` → extract RHS module path
+    if let Some((_, rhs)) = s.split_once('=') {
+        s = rhs.trim();
+    }
+    // `module:binding` (ECMAScript/Python helper convention, not Rust `::`)
+    if !s.contains("::")
+        && let Some((module, _)) = s.split_once(':')
+        && !module.is_empty()
+    {
+        s = module.trim();
+    }
+    s.trim_matches(['"', '\'', '<', '>']).trim().to_string()
+}
+
+fn infer_import_module_from_name(name: &str) -> Option<String> {
+    let cleaned = clean_import_module_text(name);
+    if cleaned.is_empty() {
+        return None;
+    }
+    if cleaned.contains('/')
+        || cleaned.contains('.')
+        || cleaned.contains("::")
+        || cleaned.starts_with('@')
+        || name.trim_start().starts_with("import ")
+        || name.trim_start().starts_with("using ")
+    {
+        return Some(cleaned);
+    }
+    None
+}
+
+fn infer_import_binding_from_name(name: &str, cleaned_module: &str) -> Option<String> {
+    let trimmed = name.trim().trim_end_matches(';').trim();
+    // C# alias: `using Alias = Namespace.Type`
+    if let Some(rest) = trimmed.strip_prefix("using ") {
+        if let Some((lhs, _)) = rest.split_once('=') {
+            let alias = lhs.trim();
+            if !alias.is_empty() && !alias.contains(' ') {
+                return Some(alias.to_string());
+            }
+        }
+    }
+    // ECMAScript/Python `module:binding` / `module:* as alias` (skip Rust `::`)
+    if !trimmed.contains("::")
+        && let Some((_, rest)) = trimmed.split_once(':')
+    {
+        let rest = rest.trim();
+        if rest.is_empty() {
+            return None;
+        }
+        if rest == "*" {
+            return Some("*".to_string());
+        }
+        if let Some(alias) = rest.strip_prefix("* as ") {
+            let alias = alias.trim();
+            if !alias.is_empty() {
+                return Some(alias.to_string());
+            }
+        }
+        return Some(rest.to_string());
+    }
+    // Rust / Go / Zig style: `symbol.name` is a bare identifier (`"UserService"`, `"tu"`, `"*"`)
+    // while `cleaned_module` has the full module path (`"acme_billing::user::UserService"`).
+    if trimmed == "*" {
+        return Some("*".to_string());
+    }
+    if !trimmed.is_empty()
+        && trimmed != cleaned_module
+        && !trimmed.contains(['/', '.', ':', ' ', ';', '"', '\''])
+    {
+        return Some(trimmed.to_string());
+    }
+    None
 }
 
 fn relation_allows_external_stub(relation: &Relation) -> bool {

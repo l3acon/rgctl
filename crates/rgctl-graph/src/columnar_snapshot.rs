@@ -659,11 +659,7 @@ impl ColumnarGraphMmap {
         let mut edges = Vec::with_capacity(self.edge_count);
         for idx in 0..self.edge_count {
             let row = read_edge_row(self.mmap.as_ref(), self.offset_edges as usize, idx)?;
-            edges.push(Edge::new(
-                Uuid::from_bytes(row.from),
-                Uuid::from_bytes(row.to),
-                edge_type_from_u8(row.edge_type)?,
-            ));
+            edges.push(edge_from_row(&row)?);
         }
         Ok(PreparedGraphSnapshot {
             schema_version: self.schema_version,
@@ -722,7 +718,7 @@ impl PreparedGraphSnapshot {
                 from: *edge.from.as_bytes(),
                 to: *edge.to.as_bytes(),
                 edge_type: edge_type_to_u8(edge.edge_type),
-                _pad: [0; 7],
+                _pad: encode_edge_pad(edge),
             });
         }
 
@@ -1013,6 +1009,74 @@ fn encode_node_row(row: &NodeRow) -> [u8; NODE_ROW_SIZE] {
     buf[56..60].copy_from_slice(&row.extension_len.to_le_bytes());
     buf[60..64].copy_from_slice(&row._pad_end.to_le_bytes());
     buf
+}
+
+fn encode_edge_pad(edge: &Edge) -> [u8; 7] {
+    if edge.properties.is_empty() {
+        return [0u8; 7];
+    }
+    let mut pad = [0u8; 7];
+    if edge.edge_type == EdgeType::CoChangesWith {
+        let count = edge
+            .properties
+            .get("cochange_count")
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0)
+            .min(u32::from(u16::MAX)) as u16;
+        let jaccard_bp = edge
+            .properties
+            .get("jaccard")
+            .and_then(|s| s.parse::<f32>().ok())
+            .map(|j| (j * 10_000.0).round().clamp(0.0, 10_000.0) as u16)
+            .unwrap_or(0);
+        pad[0..2].copy_from_slice(&count.to_le_bytes());
+        pad[2..4].copy_from_slice(&jaccard_bp.to_le_bytes());
+    }
+    if edge.properties.get("cross_repo").map(String::as_str) == Some("true") {
+        pad[4] = 1;
+    }
+    if let Some(line) = edge
+        .properties
+        .get("call_site_line")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        let line_u16 = line.min(u32::from(u16::MAX)) as u16;
+        pad[5..7].copy_from_slice(&line_u16.to_le_bytes());
+    }
+    pad
+}
+
+fn edge_from_row(row: &EdgeRow) -> Result<Edge> {
+    let edge_type = edge_type_from_u8(row.edge_type)?;
+    let mut edge = Edge::new(
+        Uuid::from_bytes(row.from),
+        Uuid::from_bytes(row.to),
+        edge_type,
+    );
+    if row._pad != [0u8; 7] {
+        if edge_type == EdgeType::CoChangesWith {
+            let count = u16::from_le_bytes([row._pad[0], row._pad[1]]);
+            let jaccard_bp = u16::from_le_bytes([row._pad[2], row._pad[3]]);
+            if count > 0 || jaccard_bp > 0 {
+                edge.properties
+                    .insert("cochange_count".to_string(), count.to_string());
+                edge.properties.insert(
+                    "jaccard".to_string(),
+                    format!("{:.4}", f32::from(jaccard_bp) / 10_000.0),
+                );
+            }
+        }
+        if row._pad[4] == 1 {
+            edge.properties
+                .insert("cross_repo".to_string(), "true".to_string());
+        }
+        let line = u16::from_le_bytes([row._pad[5], row._pad[6]]);
+        if line > 0 {
+            edge.properties
+                .insert("call_site_line".to_string(), line.to_string());
+        }
+    }
+    Ok(edge)
 }
 
 fn encode_edge_row(row: &EdgeRow) -> [u8; EDGE_ROW_SIZE] {
@@ -1331,7 +1395,7 @@ pub fn write_columnar_from_nodes_edges(
             from: *edge.from.as_bytes(),
             to: *edge.to.as_bytes(),
             edge_type: edge_type_to_u8(edge.edge_type),
-            _pad: [0; 7],
+            _pad: encode_edge_pad(edge),
         });
     }
     drop(edges);
@@ -1382,22 +1446,23 @@ pub fn write_columnar_from_backend(backend: &MemoryBackend, path: &Path) -> Resu
         Ok(())
     })?;
 
-    let mut edge_meta: Vec<(Uuid, Uuid, EdgeType)> = Vec::with_capacity(backend.edge_count());
+    let mut edge_meta: Vec<(Uuid, Uuid, EdgeType, [u8; 7])> =
+        Vec::with_capacity(backend.edge_count());
     backend.for_each_edge(|edge| {
-        edge_meta.push((edge.from, edge.to, edge.edge_type));
+        edge_meta.push((edge.from, edge.to, edge.edge_type, encode_edge_pad(edge)));
     })?;
-    edge_meta.sort_by_key(|a| (a.0, a.1, edge_type_to_u8(a.2)));
-    edge_meta.dedup();
+    edge_meta.sort_by_key(|a| (a.0, a.1, edge_type_to_u8(a.2), a.3));
+    edge_meta.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1 && a.2 == b.2);
 
     let mut edge_rows = Vec::with_capacity(edge_meta.len());
-    for (from, to, edge_type) in &edge_meta {
+    for (from, to, edge_type, pad) in &edge_meta {
         let canonical = Edge::new(*from, *to, *edge_type);
         hasher.update(&edge_digest_bytes(&canonical)?);
         edge_rows.push(EdgeRow {
             from: *from.as_bytes(),
             to: *to.as_bytes(),
             edge_type: edge_type_to_u8(*edge_type),
-            _pad: [0; 7],
+            _pad: *pad,
         });
     }
     drop(edge_meta);
@@ -1659,6 +1724,7 @@ mod tests {
         assert_eq!(edge_type_to_u8(EdgeType::Permits), 29);
         assert_eq!(edge_type_to_u8(EdgeType::ExposesRoute), 32);
         assert_eq!(edge_type_to_u8(EdgeType::Injects), 33);
+        assert_eq!(edge_type_to_u8(EdgeType::CoChangesWith), 47);
         assert_eq!(node_type_to_u16(NodeType::Annotation), 35);
     }
 

@@ -31,6 +31,7 @@ mod agent_pack;
 mod install;
 pub mod install_output;
 mod markup;
+mod merge;
 mod metrics;
 pub mod metrics_output;
 mod pipeline_session;
@@ -165,6 +166,17 @@ pub enum Commands {
         #[arg(long = "scip", value_name = "PATH.scip",
             help_heading = "Pipeline features")]
         scip: Option<String>,
+
+        /// Stream git history for co-change edges (`CoChangesWith`) and churn hotspots.
+        /// Off by default — never on the cold discover path.
+        #[arg(long = "with-git",
+            help_heading = "Pipeline features")]
+        with_git: bool,
+
+        /// Git `--since` window for `--with-git` (default: 90.days).
+        #[arg(long = "git-since", default_value = "90.days",
+            help_heading = "Pipeline features")]
+        git_since: String,
 
         /// Classify loop-carried data dependencies on the PDG (implies CFG).
         #[arg(long = "with-dfg-loops",
@@ -674,6 +686,10 @@ pub enum Commands {
         #[arg(long)]
         communities: bool,
 
+        /// Rank files/functions by `git_hotspot_score` (requires `discover --with-git`)
+        #[arg(long)]
+        churn: bool,
+
         #[arg(long)]
         iterations: Option<usize>,
 
@@ -914,6 +930,19 @@ pub enum Commands {
         /// Head snapshot file or directory containing `graph.snapshot.bin`
         #[arg(long, value_name = "PATH")]
         head: std::path::PathBuf,
+    },
+
+    /// Merge multiple discovered repos, resolving parked cross-repo relations
+    #[command(display_order = 6)]
+    Merge {
+        /// Repository roots (with `.rgctl/`) or direct `.rgctl` directories
+        #[arg(value_name = "REPOS", required = true, num_args = 1..)]
+        repos: Vec<std::path::PathBuf>,
+
+        /// Output directory that will receive `.rgctl/graph.snapshot.bin`
+        /// (long-only: global `-o`/`--output` is the format flag)
+        #[arg(long = "output-dir", value_name = "OUTPUT_DIR", required = true)]
+        output_dir: std::path::PathBuf,
     },
 
     /// Install bundled agent pack (skills, optional policy)
@@ -1624,6 +1653,8 @@ impl Cli {
                 with_taint,
                 taint_rules,
                 scip,
+                with_git,
+                git_since,
                 with_dfg_loops,
                 with_ast_skeleton,
                 write_json_graph,
@@ -1658,6 +1689,8 @@ impl Cli {
                         with_taint,
                         taint_rules,
                         scip,
+                        with_git,
+                        git_since,
                         with_dfg_loops,
                         with_ast_skeleton,
                         write_json_graph,
@@ -2108,6 +2141,7 @@ impl Cli {
                 pagerank,
                 betweenness,
                 communities,
+                churn,
                 iterations,
                 include_tests,
             } => metrics::run(
@@ -2116,6 +2150,7 @@ impl Cli {
                     pagerank,
                     betweenness,
                     communities,
+                    churn,
                     iterations,
                     include_tests,
                 },
@@ -2551,6 +2586,10 @@ impl Cli {
                 &ctx,
                 diff::DiffArgs { base, head },
             ),
+            Commands::Merge { repos, output_dir } => merge::run(
+                &ctx,
+                merge::MergeArgs { repos, output_dir },
+            ),
             Commands::Serve {
                 path,
                 no_pipeline,
@@ -2668,6 +2707,7 @@ fn command_label_for(command: &Commands) -> &'static str {
             SecurityCommands::Taint { .. } => "security taint",
         },
         Commands::Diff { .. } => "diff",
+        Commands::Merge { .. } => "merge",
         Commands::Serve { .. } => "serve",
     }
 }

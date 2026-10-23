@@ -213,6 +213,7 @@ impl ProcessingPipeline {
         let content_store = builder.take_content_store();
         let node_path_mapping = builder.take_tracker_mapping();
         let annotation_args = builder.take_annotation_args();
+        let parked_relations = builder.take_parked_relations();
         let spill_start = Instant::now();
         let finished = builder.finish_spill()?;
         let digest = write_columnar_from_spill(finished, snapshot_path)?;
@@ -227,6 +228,22 @@ impl ProcessingPipeline {
             });
             if let Ok(json) = serde_json::to_string_pretty(&payload) {
                 let _ = std::fs::write(&args_path, json);
+            }
+        }
+        if !parked_relations.is_empty()
+            && let Some(parent) = snapshot_path.parent()
+        {
+            let parked_path = parent.join(rgctl_extraction::PARKED_RELATIONS_FILE);
+            if let Err(err) =
+                rgctl_extraction::save_parked_relations(&parked_path, &parked_relations)
+            {
+                tracing::warn!(error = %err, "failed to persist parked_relations.bin");
+            } else {
+                tracing::debug!(
+                    parked = parked_relations.len(),
+                    path = %parked_path.display(),
+                    "wrote parked_relations.bin"
+                );
             }
         }
         let spill_elapsed = spill_start.elapsed();

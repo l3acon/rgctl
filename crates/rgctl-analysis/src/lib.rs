@@ -33,6 +33,7 @@ pub mod field_write;
 pub mod field_write_locals;
 pub mod flow_cache;
 pub mod fragment_clones;
+pub mod git_churn;
 pub mod graph_utils;
 pub mod hash_maps;
 pub mod interprocedural_cfg;
@@ -172,6 +173,9 @@ pub use flow_cache::{CachedAnalysis, CfgPdgCache, FlowCache, NodePdgCache};
 pub use fragment_clones::{
     discover_fragment_clones, query_fragment_clones, resolve_cfg_for_function,
     stage1_filter_functions, FragmentSeedQuery,
+};
+pub use git_churn::{
+    FileChurnMetrics, GitChurnConfig, GitChurnReport, compute_and_apply_git_churn,
 };
 pub use graph_utils::{
     DEFAULT_TRAVERSAL_DEPTH, PetGraphView, TraversalConfig, edge_type_set,

@@ -6,6 +6,8 @@ pub mod extractor;
 pub mod facts_cache;
 pub mod graph_builder;
 pub mod manifests;
+pub mod merge;
+pub mod parked_relations;
 pub mod usage_detector;
 
 pub use discovery::{DiscoveryConfig, FileDiscoverer};
@@ -15,3 +17,11 @@ pub use facts_cache::{
 };
 pub use graph_builder::{AnnotationArgEntry, GraphBuilder};
 pub use manifests::{DependencyDeclaration, extract_declarations, extract_manifest};
+pub use merge::{
+    CrossRepoExportIndex, ExportCandidate, MergeReport, merge_repositories,
+    normalize_module_path_segments,
+};
+pub use parked_relations::{
+    PARKED_RELATIONS_FILE, PARKED_RELATIONS_MAGIC, PARKED_RELATIONS_VERSION, ParkedRelationRecord,
+    load_parked_relations, save_parked_relations,
+};

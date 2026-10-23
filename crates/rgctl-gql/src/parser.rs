@@ -465,6 +465,7 @@ fn parse_edge_type_name(name: &str) -> Result<EdgeType> {
         "OVERRIDES" => Ok(EdgeType::Overrides),
         "EXPOSESROUTE" | "EXPOSES_ROUTE" => Ok(EdgeType::ExposesRoute),
         "INJECTS" => Ok(EdgeType::Injects),
+        "COCHANGESWITH" | "CO_CHANGES_WITH" | "COCHANGE" => Ok(EdgeType::CoChangesWith),
         _ => Err(Error::InvalidQuery(format!("unknown edge type: {name}"))),
     }
 }

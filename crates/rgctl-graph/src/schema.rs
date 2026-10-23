@@ -315,6 +315,8 @@ pub enum EdgeType {
     ExposesRoute,
     /// Class, constructor, field, or handler injects a dependency provider/type
     Injects,
+    /// Temporal git co-change coupling (`File -> File`, emitted by `rgctl discover --with-git`)
+    CoChangesWith,
     /// Unknown or forward-compatible edge type; excluded from call-graph traversals.
     #[serde(other)]
     Unknown,
@@ -785,9 +787,10 @@ mod tests {
             EdgeType::Overrides,
             EdgeType::ExposesRoute,
             EdgeType::Injects,
+            EdgeType::CoChangesWith,
             EdgeType::Unknown,
         ];
-        assert_eq!(types.len(), 35);
+        assert_eq!(types.len(), 36);
     }
 
     #[test]

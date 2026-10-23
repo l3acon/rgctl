@@ -47,6 +47,7 @@ pub fn edge_type_to_u8(t: EdgeType) -> u8 {
         EdgeType::Overrides => 31,
         EdgeType::ExposesRoute => 32,
         EdgeType::Injects => 33,
+        EdgeType::CoChangesWith => 47,
         EdgeType::Unknown => 255,
     }
 }
@@ -88,6 +89,7 @@ pub fn edge_type_from_u8(v: u8) -> Result<EdgeType> {
         31 => EdgeType::Overrides,
         32 => EdgeType::ExposesRoute,
         33 => EdgeType::Injects,
+        47 => EdgeType::CoChangesWith,
         255 => EdgeType::Unknown,
         _ => return Err(Error::SerdeError(format!("unknown edge type code {v}"))),
     })

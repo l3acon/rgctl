@@ -99,6 +99,7 @@ pub const ALL_EDGE_TYPES: &[EdgeType] = &[
     EdgeType::Overrides,
     EdgeType::ExposesRoute,
     EdgeType::Injects,
+    EdgeType::CoChangesWith,
 ];
 
 /// How `--scope` filters `qualified_name` prefixes.
@@ -1314,6 +1315,9 @@ pub fn parse_node_type(s: &str) -> Result<NodeType> {
 /// Parse CLI edge type string.
 pub fn parse_edge_type(s: &str) -> Result<EdgeType> {
     let key = s.to_ascii_lowercase().replace('-', "").replace('_', "");
+    if matches!(key.as_str(), "cochange" | "cochangeswith" | "cochanges") {
+        return Ok(EdgeType::CoChangesWith);
+    }
     for t in ALL_EDGE_TYPES {
         if edge_type_cli(*t).replace('_', "") == key {
             return Ok(*t);
