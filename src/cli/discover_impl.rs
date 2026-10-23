@@ -40,6 +40,8 @@ pub(crate) struct AnalysisOptions<'a> {
     pub with_cfg: bool,
     pub with_taint: bool,
     pub taint_rules: Option<String>,
+    /// Optional SCIP index path (`.scip`) for compiler-exact Calls overlay.
+    pub scip: Option<String>,
     pub with_dfg_loops: bool,
     pub with_ast_skeleton: bool,
     pub write_json_graph: bool,
@@ -89,6 +91,7 @@ pub(crate) fn run_full_analysis(
         with_cfg,
         with_taint,
         taint_rules,
+        scip,
         with_dfg_loops,
         with_ast_skeleton,
         write_json_graph,
@@ -219,7 +222,7 @@ pub(crate) fn run_full_analysis(
     let index_start = Instant::now();
     let graph_from_snapshot = !force_reindex && file_changes.is_empty() && snapshot_path.is_file();
     let mut cold_reused: Option<crate::analysis::ColdMetadataDb> = None;
-    let (mut index_stats, graph_digest) = if graph_from_snapshot {
+    let (mut index_stats, mut graph_digest) = if graph_from_snapshot {
         let load_start = Instant::now();
         let cold = crate::analysis::ColdMetadataDb::open(&snapshot_path)?;
         let digest = cold.store().content_digest()?.to_string();
@@ -268,6 +271,40 @@ pub(crate) fn run_full_analysis(
     profile.nodes = index_stats.nodes_created;
     // Snapshot write is folded into index_graph_build (Lever 1: no separate backend rewrite).
     profile.save_snapshot.secs = 0.0;
+
+    // Optional SCIP overlay: hydrate → merge compiler-exact Calls → rewrite columnar.
+    // Opt-in only (`--scip`); default cold discover never pays this cost.
+    if let Some(ref scip_path) = scip {
+        let scip_start = Instant::now();
+        let scip_file = PathBuf::from(scip_path);
+        if !scip_file.is_file() {
+            return Err(anyhow::anyhow!(
+                "SCIP index not found: {}",
+                scip_file.display()
+            ));
+        }
+        // Drop reused cold mmap before rewrite.
+        cold_reused = None;
+        let mut graph = rgctl_graph::code_graph::CodeGraph::open_snapshot(&snapshot_path)?;
+        let stats = rgctl_analysis::apply_scip_overlay(graph.backend_mut(), &scip_file)
+            .map_err(|e| anyhow::anyhow!("SCIP overlay failed: {e}"))?;
+        if stats.calls_added > 0 {
+            graph_digest =
+                rgctl_graph::write_columnar_from_backend(graph.backend(), &snapshot_path)?;
+            index_stats.edges_created = graph.backend().edge_count();
+        }
+        if human_output || verbose {
+            info!(
+                documents = stats.documents,
+                definitions_mapped = stats.definitions_mapped,
+                calls_added = stats.calls_added,
+                duration_secs = %format!("{:.2}", scip_start.elapsed().as_secs_f64()),
+                "[✓] SCIP overlay applied ({} calls added)",
+                stats.calls_added
+            );
+        }
+        profile.save_snapshot.secs += secs(scip_start.elapsed());
+    }
 
     if materialize_fields {
         let _ = super::pipeline_status::write_digest_marker(

@@ -152,17 +152,30 @@ struct PendingDef {
 fn is_definition_span_kind(kind: &str) -> bool {
     !kind.ends_with("_declarator")
         && !kind.ends_with("_name")
+        && !kind.ends_with("_statement")
         && (kind.ends_with("_definition")
             || kind.ends_with("_declaration")
             || matches!(
                 kind,
-                "method" | "singleton_method" | "binding" | "message" | "service" | "rpc"
+                "method"
+                    | "singleton_method"
+                    | "binding"
+                    | "message"
+                    | "service"
+                    | "rpc"
+                    | "function"
+                    | "subroutine"
+                    | "list_lit"
+                    | "class"
+                    | "data_type"
+                    | "newtype"
             ))
 }
 
 /// Prefer the immediate enclosing `*_definition` / `*_declaration` node when `@definition.*`
-/// is captured on a header/declarator child (e.g. `function_declarator`, `rpc_name`), without
-/// walking past a `function_definition` up to its enclosing `contract_declaration`/`class_declaration`.
+/// is captured on a header/declarator child (e.g. `function_declarator`, `rpc_name`,
+/// Fortran `function_statement`/`module_statement`), without walking past a `function_definition`
+/// up to its enclosing `contract_declaration`/`class_declaration`.
 fn definition_span_node(node: Node<'_>) -> Node<'_> {
     if is_definition_span_kind(node.kind()) {
         return node;
@@ -173,6 +186,10 @@ fn definition_span_node(node: Node<'_>) -> Node<'_> {
             break;
         };
         let kind = parent.kind();
+        // Fortran `module_statement` (line 1) lives inside `module` (full module span).
+        if node.kind() == "module_statement" && kind == "module" {
+            return parent;
+        }
         if is_definition_span_kind(kind) {
             return parent;
         }
@@ -193,6 +210,25 @@ fn definition_span_node(node: Node<'_>) -> Node<'_> {
         cur = parent;
     }
     node
+}
+
+/// True when a `@reference.call` node is actually the function/macro signature header
+/// inside a definition (e.g. Julia `function add(a, b)` where `signature` wraps a `call_expression`).
+fn is_inside_declaration_header(node: Node<'_>) -> bool {
+    let mut cur = node;
+    for _ in 0..4 {
+        let Some(parent) = cur.parent() else {
+            break;
+        };
+        if matches!(
+            parent.kind(),
+            "signature" | "function_declarator" | "method_declarator"
+        ) {
+            return true;
+        }
+        cur = parent;
+    }
+    false
 }
 
 #[derive(Debug)]
@@ -296,6 +332,9 @@ pub fn extract_with_query(
         }
 
         if let (Some(role), Some(node)) = (ref_role, ref_node) {
+            if role == CaptureRole::ReferenceCall && is_inside_declaration_header(node) {
+                continue;
+            }
             let resolved_name = name.or_else(|| {
                 node.utf8_text(source)
                     .ok()

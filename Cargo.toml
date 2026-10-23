@@ -52,6 +52,17 @@ members = [
     "crates/rgctl-lang-nix",
     "crates/rgctl-lang-proto",
     "crates/rgctl-lang-solidity",
+    "crates/rgctl-lang-json",
+    "crates/rgctl-lang-yaml",
+    "crates/rgctl-lang-julia",
+    "crates/rgctl-lang-r",
+    "crates/rgctl-lang-haskell",
+    "crates/rgctl-lang-gdscript",
+    "crates/rgctl-lang-fortran",
+    "crates/rgctl-lang-verilog",
+    "crates/rgctl-lang-objc",
+    "crates/rgctl-lang-clojure",
+    "crates/rgctl-lang-ocaml",
     "crates/rgctl-ast-coverage",
     "crates/rgctl-languages",
     "crates/rgctl-agent-pack-codegen",
@@ -117,6 +128,17 @@ rgctl-lang-zig = { path = "crates/rgctl-lang-zig", version = "0.4.20" }
 rgctl-lang-nix = { path = "crates/rgctl-lang-nix", version = "0.4.20" }
 rgctl-lang-proto = { path = "crates/rgctl-lang-proto", version = "0.4.20" }
 rgctl-lang-solidity = { path = "crates/rgctl-lang-solidity", version = "0.4.20" }
+rgctl-lang-json = { path = "crates/rgctl-lang-json", version = "0.4.20" }
+rgctl-lang-yaml = { path = "crates/rgctl-lang-yaml", version = "0.4.20" }
+rgctl-lang-julia = { path = "crates/rgctl-lang-julia", version = "0.4.20" }
+rgctl-lang-r = { path = "crates/rgctl-lang-r", version = "0.4.20" }
+rgctl-lang-haskell = { path = "crates/rgctl-lang-haskell", version = "0.4.20" }
+rgctl-lang-gdscript = { path = "crates/rgctl-lang-gdscript", version = "0.4.20" }
+rgctl-lang-fortran = { path = "crates/rgctl-lang-fortran", version = "0.4.20" }
+rgctl-lang-verilog = { path = "crates/rgctl-lang-verilog", version = "0.4.20" }
+rgctl-lang-objc = { path = "crates/rgctl-lang-objc", version = "0.4.20" }
+rgctl-lang-clojure = { path = "crates/rgctl-lang-clojure", version = "0.4.20" }
+rgctl-lang-ocaml = { path = "crates/rgctl-lang-ocaml", version = "0.4.20" }
 rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.20" }
 rgctl-languages = { path = "crates/rgctl-languages", version = "0.4.20" }
 tree-sitter = "0.25"

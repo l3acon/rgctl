@@ -52,6 +52,9 @@ rayon = { workspace = true }
 smallvec = { version = "1", features = ["serde"] }
 rustc-hash = "2"
 blake3 = "1"
+# Optional SCIP protobuf overlay (`--scip`); pinned by the `scip` crate.
+scip = "0.10"
+protobuf = "=3.7.2"
 
 [features]
 default = []

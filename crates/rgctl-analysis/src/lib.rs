@@ -50,6 +50,7 @@ pub mod violation_ledger;
 pub mod results;
 pub mod review_paths;
 pub mod scoped_policy;
+pub mod scip_overlay;
 pub mod semantic_code_daemon;
 pub mod semantic_diffuse;
 #[cfg(feature = "semantic-onnx")]
@@ -200,6 +201,10 @@ pub use migration::{
 pub use mro::{
     InheritanceGraph, MroIndex, MroPassStats, MroStrategy, annotate_call_edge, apply_mro_pass,
     c3_linearize, c3_merge,
+};
+pub use scip_overlay::{
+    ScipOverlayStats, apply_scip_index, apply_scip_overlay, load_scip_index, normalize_path,
+    scip_display_name,
 };
 pub use node_lookup::NodeLookup;
 pub use pdg::{

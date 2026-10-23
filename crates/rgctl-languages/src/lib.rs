@@ -33,6 +33,17 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_nix::register(registry);
     rgctl_lang_proto::register(registry);
     rgctl_lang_solidity::register(registry);
+    // JSON/YAML stay on config-format plugins (`rgctl-config-formats`); Tier-2
+    // query crates exist for standalone use but are not dual-registered here.
+    rgctl_lang_julia::register(registry);
+    rgctl_lang_r::register(registry);
+    rgctl_lang_haskell::register(registry);
+    rgctl_lang_gdscript::register(registry);
+    rgctl_lang_fortran::register(registry);
+    rgctl_lang_verilog::register(registry);
+    rgctl_lang_objc::register(registry);
+    rgctl_lang_clojure::register(registry);
+    rgctl_lang_ocaml::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -143,6 +154,16 @@ mod tests {
             ("flake.nix", "nix"),
             ("api/v1.proto", "proto"),
             ("contracts/Token.sol", "solidity"),
+            ("math.jl", "julia"),
+            ("math.R", "r"),
+            ("Math.hs", "haskell"),
+            ("math.gd", "gdscript"),
+            ("math.f90", "fortran"),
+            ("adder.v", "verilog"),
+            ("Foo.m", "objc"),
+            ("math.clj", "clojure"),
+            ("math.ml", "ocaml"),
+            ("math.mli", "ocaml"),
         ] {
             assert!(
                 registry.can_process_file(Path::new(path)),

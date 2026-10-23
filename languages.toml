@@ -365,3 +365,158 @@ import_kinds = []
 enable_complexity = false
 enable_type_inference = false
 tags_scm = "crates/rgctl-lang-solidity/queries/tags.scm"
+
+
+[languages.json]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_json"
+crate = "tree-sitter-json"
+extensions = ["json"]
+aliases = ["json"]
+function_kinds = []
+class_kinds = ["object"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-json/queries/tags.scm"
+
+[languages.yaml]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_yaml"
+crate = "tree-sitter-yaml"
+extensions = ["yaml", "yml"]
+aliases = ["yaml", "yml"]
+function_kinds = []
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-yaml/queries/tags.scm"
+
+[languages.julia]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_julia"
+crate = "tree-sitter-julia"
+extensions = ["jl"]
+aliases = ["julia", "jl"]
+function_kinds = ["function_definition"]
+class_kinds = ["struct_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-julia/queries/tags.scm"
+
+[languages.r]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_r"
+crate = "tree-sitter-r"
+extensions = ["r", "R"]
+aliases = ["r", "R"]
+function_kinds = ["function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-r/queries/tags.scm"
+
+[languages.haskell]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_haskell"
+crate = "tree-sitter-haskell"
+extensions = ["hs"]
+aliases = ["haskell", "hs"]
+function_kinds = ["function"]
+class_kinds = ["class", "data_type", "newtype"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-haskell/queries/tags.scm"
+
+[languages.gdscript]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_gdscript"
+crate = "tree-sitter-gdscript"
+extensions = ["gd"]
+aliases = ["gdscript", "godot"]
+function_kinds = ["function_definition"]
+class_kinds = ["class_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-gdscript/queries/tags.scm"
+
+[languages.fortran]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_fortran"
+crate = "tree-sitter-fortran"
+extensions = ["f90", "f95", "f03", "f08", "F90"]
+aliases = ["fortran", "f90"]
+function_kinds = ["function", "subroutine"]
+class_kinds = ["derived_type_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-fortran/queries/tags.scm"
+
+[languages.verilog]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_verilog"
+crate = "tree-sitter-verilog"
+extensions = ["v", "sv", "svh"]
+aliases = ["verilog", "systemverilog", "sv"]
+function_kinds = ["function_declaration", "task_declaration"]
+class_kinds = ["class_declaration", "module_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-verilog/queries/tags.scm"
+
+[languages.objc]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_objc"
+crate = "tree-sitter-objc"
+extensions = ["m", "mm"]
+aliases = ["objc", "objective-c", "objectivec"]
+function_kinds = ["function_definition", "method_definition"]
+class_kinds = ["class_interface", "class_implementation"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-objc/queries/tags.scm"
+
+[languages.clojure]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_clojure"
+crate = "tree-sitter-clojure"
+extensions = ["clj", "cljs", "cljc"]
+aliases = ["clojure", "clj"]
+function_kinds = ["list_lit"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-clojure/queries/tags.scm"
+
+[languages.ocaml]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_ocaml"
+crate = "tree-sitter-ocaml"
+extensions = ["ml", "mli"]
+aliases = ["ocaml", "ml", "mli"]
+function_kinds = ["value_definition"]
+class_kinds = ["class_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-ocaml/queries/tags.scm"

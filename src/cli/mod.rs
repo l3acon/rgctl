@@ -159,6 +159,13 @@ pub enum Commands {
             help_heading = "Pipeline features")]
         taint_rules: Option<String>,
 
+        /// Optional SCIP protobuf index (`.scip`) to upgrade ambiguous call edges
+        /// with compiler-exact symbol/occurrence resolution (`resolved_via=scip`).
+        /// Hydrates the snapshot for a post-pass merge — not used on the default cold path.
+        #[arg(long = "scip", value_name = "PATH.scip",
+            help_heading = "Pipeline features")]
+        scip: Option<String>,
+
         /// Classify loop-carried data dependencies on the PDG (implies CFG).
         #[arg(long = "with-dfg-loops",
             help_heading = "Pipeline features")]
@@ -1616,6 +1623,7 @@ impl Cli {
                 with_cfg,
                 with_taint,
                 taint_rules,
+                scip,
                 with_dfg_loops,
                 with_ast_skeleton,
                 write_json_graph,
@@ -1649,6 +1657,7 @@ impl Cli {
                         with_cfg,
                         with_taint,
                         taint_rules,
+                        scip,
                         with_dfg_loops,
                         with_ast_skeleton,
                         write_json_graph,

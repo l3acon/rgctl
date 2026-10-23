@@ -38,6 +38,17 @@ rgctl-lang-zig = { workspace = true }
 rgctl-lang-nix = { workspace = true }
 rgctl-lang-proto = { workspace = true }
 rgctl-lang-solidity = { workspace = true }
+rgctl-lang-ocaml = { workspace = true }
+rgctl-lang-clojure = { workspace = true }
+rgctl-lang-objc = { workspace = true }
+rgctl-lang-verilog = { workspace = true }
+rgctl-lang-fortran = { workspace = true }
+rgctl-lang-gdscript = { workspace = true }
+rgctl-lang-haskell = { workspace = true }
+rgctl-lang-r = { workspace = true }
+rgctl-lang-julia = { workspace = true }
+# JSON/YAML: optional Tier-2 query crates exist but are not dual-registered
+# (config-format plugins own `.json` / `.yaml` ingest).
 
 [build-dependencies]
 rgctl-ast-coverage = { workspace = true }
