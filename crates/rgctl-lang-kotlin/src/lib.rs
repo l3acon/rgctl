@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[allow(dead_code)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::KotlinPlugin;
 
 /// Register the Kotlin language plugin.

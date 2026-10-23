@@ -1,11 +1,12 @@
 //! Groovy language plugin — best-effort symbols/calls with dynamic-call honesty.
 
+use crate::single_pass::{extract_all_single_pass, groovy_ast_handlers};
 use rgctl_plugin_api::*;
-use rgctl_plugin_api::{Error, Result};
+use rgctl_plugin_api::{complexity_from_metadata, parse_with_pool, Error, Result};
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
-const BRANCH_KINDS: &[&str] = &[
+pub(crate) const GROOVY_BRANCH_KINDS: &[&str] = &[
     "if_statement",
     "while_statement",
     "for_statement",
@@ -14,6 +15,14 @@ const BRANCH_KINDS: &[&str] = &[
     "switch_expression",
     "catch_clause",
 ];
+
+pub(crate) const GROOVY_CALL_KINDS: &[&str] = &[
+    "method_invocation",
+    "juxt_function_call",
+    "object_creation_expression",
+];
+
+const BRANCH_KINDS: &[&str] = GROOVY_BRANCH_KINDS;
 
 /// Groovy Tier 1 plugin.
 pub struct GroovyPlugin;
@@ -24,19 +33,17 @@ impl GroovyPlugin {
         Ok(Self)
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_groovy::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Groovy grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 1,
-            message: "Failed to parse Groovy source".to_string(),
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
+        parse_with_pool("groovy", tree_sitter_groovy::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 1,
+                message: e,
+            }
         })
     }
 
-    fn package_name(root: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn package_name(root: Node, source: &[u8]) -> Option<String> {
         let mut stack = vec![root];
         while let Some(node) = stack.pop() {
             if node.kind() == "package_declaration" {
@@ -59,14 +66,14 @@ impl GroovyPlugin {
         None
     }
 
-    fn qualify(package: Option<&str>, path: &str) -> String {
+    pub(crate) fn qualify(package: Option<&str>, path: &str) -> String {
         match package {
             Some(pkg) if !pkg.is_empty() => format!("{pkg}.{path}"),
             _ => path.to_string(),
         }
     }
 
-    fn loc(file_path: &str, node: Node) -> SourceLocation {
+    pub(crate) fn loc(file_path: &str, node: Node) -> SourceLocation {
         SourceLocation {
             file: file_path.to_string(),
             start_line: node.start_position().row + 1,
@@ -76,7 +83,7 @@ impl GroovyPlugin {
         }
     }
 
-    fn type_name(node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn type_name(node: Node, source: &[u8]) -> Option<String> {
         node.child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok())
             .map(|s| s.trim().to_string())
@@ -92,7 +99,7 @@ impl GroovyPlugin {
             })
     }
 
-    fn enclosing_class(node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn enclosing_class(node: Node, source: &[u8]) -> Option<String> {
         let mut current = node.parent();
         while let Some(n) = current {
             if matches!(
@@ -106,7 +113,7 @@ impl GroovyPlugin {
         None
     }
 
-    fn extract_parameters(&self, node: Node, source: &[u8]) -> Vec<Parameter> {
+    pub(crate) fn extract_parameters(&self, node: Node, source: &[u8]) -> Vec<Parameter> {
         let Some(params) = node
             .child_by_field_name("parameters")
             .or_else(|| {
@@ -149,6 +156,211 @@ impl GroovyPlugin {
             });
         }
         out
+    }
+
+    pub(crate) fn extract_method_symbol(
+        &self,
+        node: Node,
+        source: &[u8],
+        file: &str,
+        package: Option<&str>,
+    ) -> Option<Symbol> {
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(|s| s.trim().to_string())
+            .or_else(|| {
+                let mut c = node.walk();
+                node.children(&mut c).find_map(|n| {
+                    if n.kind() == "identifier" {
+                        n.utf8_text(source).ok().map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+            })?;
+        let enclosing = Self::enclosing_class(node, source);
+        let is_ctor = enclosing.as_ref().is_some_and(|cls| cls == &name);
+        let (sym_name, qn, metadata) = if is_ctor {
+            let cls = enclosing.clone().unwrap_or_else(|| name.clone());
+            (
+                cls.clone(),
+                Self::qualify(package, &format!("{cls}.<init>")),
+                serde_json::json!({
+                    "language": "groovy",
+                    "is_constructor": true,
+                }),
+            )
+        } else {
+            let qn = if let Some(cls) = &enclosing {
+                Self::qualify(package, &format!("{cls}.{name}"))
+            } else {
+                Self::qualify(package, &name)
+            };
+            (
+                name,
+                qn,
+                serde_json::json!({ "language": "groovy" }),
+            )
+        };
+        Some(Symbol {
+            name: sym_name,
+            symbol_type: SymbolType::Function,
+            qualified_name: Some(qn),
+            location: Self::loc(file, node),
+            signature: node
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
+            return_type: if is_ctor {
+                None
+            } else {
+                node.child_by_field_name("type")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(|s| s.trim().to_string())
+            },
+            parameters: self.extract_parameters(node, source),
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata,
+        })
+    }
+
+    pub(crate) fn extract_constructor_symbol(
+        &self,
+        node: Node,
+        source: &[u8],
+        file: &str,
+        package: Option<&str>,
+    ) -> Option<Symbol> {
+        let cls = Self::enclosing_class(node, source)
+            .or_else(|| Self::type_name(node, source))
+            .unwrap_or_else(|| "Unknown".into());
+        let qn = Self::qualify(package, &format!("{cls}.<init>"));
+        Some(Symbol {
+            name: cls,
+            symbol_type: SymbolType::Function,
+            qualified_name: Some(qn),
+            location: Self::loc(file, node),
+            signature: node
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
+            return_type: None,
+            parameters: self.extract_parameters(node, source),
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({
+                "language": "groovy",
+                "is_constructor": true,
+            }),
+        })
+    }
+
+    pub(crate) fn extract_import_symbol(
+        node: Node,
+        source: &[u8],
+        file: &str,
+    ) -> Option<Symbol> {
+        let text = node.utf8_text(source).unwrap_or("").trim();
+        let imported = text
+            .trim_start_matches("import")
+            .trim()
+            .trim_end_matches(".*")
+            .trim()
+            .trim_end_matches(';')
+            .trim();
+        if imported.is_empty() {
+            return None;
+        }
+        let simple = imported.rsplit('.').next().unwrap_or(imported).to_string();
+        Some(Symbol {
+            name: simple,
+            symbol_type: SymbolType::Import,
+            qualified_name: Some(imported.to_string()),
+            location: Self::loc(file, node),
+            signature: Some(text.to_string()),
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "groovy" }),
+        })
+    }
+
+    pub(crate) fn append_type_and_annotation_relations(
+        &self,
+        root: Node,
+        source: &[u8],
+        file_path: &Path,
+        relations: &mut Vec<Relation>,
+    ) -> Result<()> {
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            if node.kind() == "class_declaration"
+                && let Some(from) = Self::type_name(node, source)
+            {
+                let package = Self::package_name(root, source);
+                let from_qn = Self::qualify(package.as_deref(), &from);
+                let header = node
+                    .utf8_text(source)
+                    .ok()
+                    .map(|s| s.lines().next().unwrap_or("").to_string())
+                    .unwrap_or_default();
+                if let Some(rest) = header.split_once("extends").map(|(_, r)| r) {
+                    let parent = rest
+                        .split(['{', ',', 'i'])
+                        .next()
+                        .unwrap_or("")
+                        .trim();
+                    if !parent.is_empty() {
+                        relations.push(Relation {
+                            from: from_qn.clone(),
+                            to: parent.to_string(),
+                            relation_type: RelationType::Extends,
+                            location: Self::loc(&file_path.to_string_lossy(), node),
+                            metadata: serde_json::json!({ "language": "groovy" }),
+                            to_qualified_hint: None,
+                            to_type_hint: None,
+                        });
+                    }
+                }
+                if let Some(rest) = header.split_once("implements").map(|(_, r)| r) {
+                    for iface in rest.split(['{', ',']).map(str::trim).filter(|s| !s.is_empty()) {
+                        relations.push(Relation {
+                            from: from_qn.clone(),
+                            to: iface.to_string(),
+                            relation_type: RelationType::Implements,
+                            location: Self::loc(&file_path.to_string_lossy(), node),
+                            metadata: serde_json::json!({ "language": "groovy" }),
+                            to_qualified_hint: None,
+                            to_type_hint: None,
+                        });
+                    }
+                }
+            }
+            if matches!(
+                node.kind(),
+                "class_declaration"
+                    | "interface_declaration"
+                    | "enum_declaration"
+                    | "annotation_type_declaration"
+                    | "method_declaration"
+                    | "function_definition"
+                    | "constructor_declaration"
+                    | "compact_constructor_declaration"
+            ) {
+                Self::push_annotated_with_for(node, source, file_path, root, relations);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        Ok(())
     }
 
     fn symbols_from_tree(
@@ -345,7 +557,7 @@ impl GroovyPlugin {
             source,
             file_path,
             symbols,
-            &["method_invocation", "juxt_function_call", "object_creation_expression"],
+            GROOVY_CALL_KINDS,
             "groovy",
             &mut relations,
         );
@@ -565,11 +777,11 @@ impl LanguagePlugin for GroovyPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(groovy_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -579,6 +791,9 @@ impl LanguagePlugin for GroovyPlugin {
     ) -> Result<Option<ComplexityMetrics>> {
         if symbol.symbol_type != SymbolType::Function {
             return Ok(None);
+        }
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
         }
         let tree = self.parse(Path::new(&symbol.location.file), source)?;
         let target_line = symbol.location.start_line.saturating_sub(1);

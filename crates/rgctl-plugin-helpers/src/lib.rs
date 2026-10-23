@@ -2,8 +2,13 @@
 
 pub mod complexity;
 pub mod ecmascript;
+pub mod framework;
 pub mod python;
 pub mod tree_sitter;
+
+pub use framework::{
+    apply_framework_catalog, format_route_target, load_with_repo_overrides, normalize_route_path,
+};
 
 pub use complexity::ComplexityCalculator;
 pub use ecmascript::{

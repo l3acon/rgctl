@@ -84,7 +84,8 @@ pub struct WatchConfig {
 }
 
 fn default_debounce_ms() -> u64 {
-    500
+    // Decision 6 / §7.3: 25ms debounce for sub-100ms single-file watch updates.
+    25
 }
 
 impl Default for WatchConfig {

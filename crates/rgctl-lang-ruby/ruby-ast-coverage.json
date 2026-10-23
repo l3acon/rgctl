@@ -117,7 +117,7 @@
     "string_content": "Literal",
     "subshell": "CfgStatement",
     "super": "Literal",
-    "superclass": "Skip",
+    "superclass": "Relation",
     "symbol_array": "Literal",
     "test_pattern": "Skip",
     "then": "CfgStatement",

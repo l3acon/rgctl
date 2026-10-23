@@ -44,7 +44,7 @@ pub struct StreamStats {
 /// Run parallel extractors into a bounded channel while the caller consumes on the main thread.
 pub fn start_parallel_extraction(
     thread_count: Option<usize>,
-    registry: Arc<LanguageRegistry>,
+    extractor: Arc<Extractor>,
     files: Arc<Vec<PathBuf>>,
     capacity: usize,
     on_file_done: impl Fn() + Send + Sync + 'static,
@@ -55,7 +55,6 @@ pub fn start_parallel_extraction(
     std::thread::spawn(move || {
         with_pool(thread_count, || {
             files.par_iter().for_each(|path| {
-                let extractor = Extractor::new(Arc::clone(&registry));
                 let read_start = Instant::now();
                 let read_result = std::fs::read(path);
                 read_ns.fetch_add(duration_as_nanos_u64(read_start.elapsed()), Ordering::Relaxed);
@@ -97,7 +96,7 @@ pub fn start_parallel_extraction(
 pub fn stream_into_graph(
     thread_count: Option<usize>,
     extractor: &Extractor,
-    registry: Arc<LanguageRegistry>,
+    _registry: Arc<LanguageRegistry>,
     files: &[PathBuf],
     capacity: usize,
     builder: &mut GraphBuilder,
@@ -109,7 +108,7 @@ pub fn stream_into_graph(
     let parse_ns = Arc::new(AtomicU64::new(0));
     let rx = start_parallel_extraction(
         thread_count,
-        registry,
+        Arc::new(extractor.clone()),
         files,
         capacity,
         on_file_done,

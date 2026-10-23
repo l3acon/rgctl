@@ -22,6 +22,12 @@ pub struct DiscoverArgs {
     pub with_taint: bool,
     /// Extra taint rule pack path (file or directory).
     pub taint_rules: Option<String>,
+    /// Optional SCIP protobuf index for compiler-exact call overlay.
+    pub scip: Option<String>,
+    /// Emit CoChangesWith + churn hotspot scores from git history. Default off.
+    pub with_git: bool,
+    /// Git `--since` window for `--with-git`.
+    pub git_since: String,
     /// Classify loop-carried PDG data deps (implies CFG). Default off.
     pub with_dfg_loops: bool,
     /// Write coarse AST skeleton archive (implies CFG). Default off.
@@ -184,6 +190,9 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
             with_cfg: args.with_cfg,
             with_taint: args.with_taint,
             taint_rules: args.taint_rules.clone(),
+            scip: args.scip.clone(),
+            with_git: args.with_git,
+            git_since: args.git_since.clone(),
             with_dfg_loops: args.with_dfg_loops,
             with_ast_skeleton: args.with_ast_skeleton,
             write_json_graph: args.write_json_graph,

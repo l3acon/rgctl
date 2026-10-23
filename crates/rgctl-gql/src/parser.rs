@@ -462,6 +462,10 @@ fn parse_edge_type_name(name: &str) -> Result<EdgeType> {
         "INHERITSCLASS" | "INHERITS_CLASS" => Ok(EdgeType::InheritsClass),
         "REQUIRESRESOURCE" | "REQUIRES_RESOURCE" => Ok(EdgeType::RequiresResource),
         "USESFACT" | "USES_FACT" => Ok(EdgeType::UsesFact),
+        "OVERRIDES" => Ok(EdgeType::Overrides),
+        "EXPOSESROUTE" | "EXPOSES_ROUTE" => Ok(EdgeType::ExposesRoute),
+        "INJECTS" => Ok(EdgeType::Injects),
+        "COCHANGESWITH" | "CO_CHANGES_WITH" | "COCHANGE" => Ok(EdgeType::CoChangesWith),
         _ => Err(Error::InvalidQuery(format!("unknown edge type: {name}"))),
     }
 }

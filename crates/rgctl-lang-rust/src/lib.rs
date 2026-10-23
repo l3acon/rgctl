@@ -7,6 +7,7 @@ mod extract_depth;
 #[cfg(test)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::RustPlugin;
 
 /// Register this language plugin.

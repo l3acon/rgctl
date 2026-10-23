@@ -1,12 +1,12 @@
 # rgctl tree-sitter language configuration
-# Source of truth for Tier 1 language metadata.
+# Source of truth for Tier-1 (custom) and Tier-2 (queries) language metadata.
 
 [metadata]
-version = "2.0"
-description = "Tier 1 custom tree-sitter plugins for rgctl"
+version = "2.1"
+description = "Two-tier language plugins for rgctl (custom + tags.scm queries)"
 
 # ---------------------------------------------------------------------------
-# Tier 1 — custom LanguagePlugin implementations
+# Tier 1 — custom LanguagePlugin implementations (`handler = "custom"`)
 # ---------------------------------------------------------------------------
 
 [languages.rust]
@@ -201,3 +201,632 @@ class_kinds = []
 import_kinds = []
 enable_complexity = false
 enable_type_inference = false
+
+[languages.swift]
+handler = "custom"
+plugin = "SwiftPlugin"
+module = "crate::languages::builtin::swift"
+crate = "tree-sitter-swift"
+extensions = ["swift"]
+aliases = ["swift"]
+function_kinds = ["function_declaration", "init_declaration", "deinit_declaration", "subscript_declaration"]
+class_kinds = ["class_declaration", "protocol_declaration"]
+import_kinds = ["import_declaration"]
+enable_complexity = true
+enable_type_inference = false
+
+[languages.scala]
+handler = "custom"
+plugin = "ScalaPlugin"
+module = "crate::languages::builtin::scala"
+crate = "tree-sitter-scala"
+extensions = ["scala", "sc"]
+aliases = ["scala"]
+function_kinds = ["function_definition"]
+class_kinds = ["class_definition", "object_definition", "trait_definition", "enum_definition"]
+import_kinds = ["import_declaration"]
+enable_complexity = true
+enable_type_inference = false
+
+[languages.dart]
+handler = "custom"
+plugin = "DartPlugin"
+module = "crate::languages::builtin::dart"
+crate = "tree-sitter-dart"
+extensions = ["dart"]
+aliases = ["dart"]
+function_kinds = ["function_declaration", "method_declaration", "function_expression"]
+class_kinds = ["class_declaration", "enum_declaration", "mixin_declaration", "extension_declaration"]
+import_kinds = ["import_or_export", "library_import"]
+enable_complexity = true
+enable_type_inference = false
+
+[languages.elixir]
+handler = "custom"
+plugin = "ElixirPlugin"
+module = "crate::languages::builtin::elixir"
+crate = "tree-sitter-elixir"
+extensions = ["ex", "exs"]
+aliases = ["elixir", "ex"]
+function_kinds = ["call"]
+class_kinds = ["call"]
+import_kinds = ["call"]
+enable_complexity = true
+enable_type_inference = false
+
+[languages.lua]
+handler = "custom"
+plugin = "LuaPlugin"
+module = "crate::languages::builtin::lua"
+crate = "tree-sitter-lua"
+extensions = ["lua"]
+aliases = ["lua"]
+function_kinds = ["function_declaration", "function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = true
+enable_type_inference = false
+
+[languages.bash]
+handler = "custom"
+plugin = "BashPlugin"
+module = "crate::languages::builtin::bash"
+crate = "tree-sitter-bash"
+extensions = ["sh", "bash"]
+aliases = ["bash", "shell", "sh"]
+function_kinds = ["function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = true
+enable_type_inference = false
+
+[languages.sql]
+handler = "custom"
+plugin = "SqlPlugin"
+module = "crate::languages::builtin::sql"
+crate = "tree-sitter-sequel"
+extensions = ["sql"]
+aliases = ["sql"]
+function_kinds = ["create_function"]
+class_kinds = ["create_table", "create_view"]
+import_kinds = []
+enable_complexity = true
+enable_type_inference = false
+
+[languages.hcl]
+handler = "custom"
+plugin = "HclPlugin"
+module = "crate::languages::builtin::hcl"
+crate = "tree-sitter-hcl"
+extensions = ["hcl", "tf", "tfvars"]
+aliases = ["hcl", "terraform", "tf"]
+function_kinds = ["block"]
+class_kinds = ["block"]
+import_kinds = []
+enable_complexity = true
+enable_type_inference = false
+
+# ---------------------------------------------------------------------------
+# Tier 2 — declarative tags.scm (`handler = "queries"`, rgctl-lang-runtime)
+# ---------------------------------------------------------------------------
+
+[languages.zig]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_zig"
+crate = "tree-sitter-zig"
+extensions = ["zig", "zon"]
+aliases = ["zig"]
+function_kinds = ["function_declaration"]
+class_kinds = ["struct_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-zig/queries/tags.scm"
+
+[languages.nix]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_nix"
+crate = "tree-sitter-nix"
+extensions = ["nix"]
+aliases = ["nix"]
+function_kinds = ["function_expression"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-nix/queries/tags.scm"
+
+[languages.proto]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_proto"
+crate = "tree-sitter-proto"
+extensions = ["proto"]
+aliases = ["protobuf", "proto"]
+function_kinds = ["rpc"]
+class_kinds = ["message"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-proto/queries/tags.scm"
+
+[languages.solidity]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_solidity"
+crate = "tree-sitter-solidity"
+extensions = ["sol"]
+aliases = ["solidity", "sol"]
+function_kinds = ["function_definition"]
+class_kinds = ["contract_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-solidity/queries/tags.scm"
+
+
+[languages.json]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_json"
+crate = "tree-sitter-json"
+extensions = ["json"]
+aliases = ["json"]
+function_kinds = []
+class_kinds = ["object"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-json/queries/tags.scm"
+
+[languages.yaml]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_yaml"
+crate = "tree-sitter-yaml"
+extensions = ["yaml", "yml"]
+aliases = ["yaml", "yml"]
+function_kinds = []
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-yaml/queries/tags.scm"
+
+[languages.julia]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_julia"
+crate = "tree-sitter-julia"
+extensions = ["jl"]
+aliases = ["julia", "jl"]
+function_kinds = ["function_definition"]
+class_kinds = ["struct_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-julia/queries/tags.scm"
+
+[languages.r]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_r"
+crate = "tree-sitter-r"
+extensions = ["r", "R"]
+aliases = ["r", "R"]
+function_kinds = ["function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-r/queries/tags.scm"
+
+[languages.haskell]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_haskell"
+crate = "tree-sitter-haskell"
+extensions = ["hs"]
+aliases = ["haskell", "hs"]
+function_kinds = ["function"]
+class_kinds = ["class", "data_type", "newtype"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-haskell/queries/tags.scm"
+
+[languages.gdscript]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_gdscript"
+crate = "tree-sitter-gdscript"
+extensions = ["gd"]
+aliases = ["gdscript", "godot"]
+function_kinds = ["function_definition"]
+class_kinds = ["class_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-gdscript/queries/tags.scm"
+
+[languages.fortran]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_fortran"
+crate = "tree-sitter-fortran"
+extensions = ["f90", "f95", "f03", "f08", "F90"]
+aliases = ["fortran", "f90"]
+function_kinds = ["function", "subroutine"]
+class_kinds = ["derived_type_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-fortran/queries/tags.scm"
+
+[languages.verilog]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_verilog"
+crate = "tree-sitter-verilog"
+extensions = ["v", "sv", "svh"]
+aliases = ["verilog", "systemverilog", "sv"]
+function_kinds = ["function_declaration", "task_declaration"]
+class_kinds = ["class_declaration", "module_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-verilog/queries/tags.scm"
+
+[languages.objc]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_objc"
+crate = "tree-sitter-objc"
+extensions = ["m", "mm"]
+aliases = ["objc", "objective-c", "objectivec"]
+function_kinds = ["function_definition", "method_definition"]
+class_kinds = ["class_interface", "class_implementation"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-objc/queries/tags.scm"
+
+[languages.clojure]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_clojure"
+crate = "tree-sitter-clojure"
+extensions = ["clj", "cljs", "cljc"]
+aliases = ["clojure", "clj"]
+function_kinds = ["list_lit"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-clojure/queries/tags.scm"
+
+[languages.ocaml]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_ocaml"
+crate = "tree-sitter-ocaml"
+extensions = ["ml", "mli"]
+aliases = ["ocaml", "ml", "mli"]
+function_kinds = ["value_definition"]
+class_kinds = ["class_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-ocaml/queries/tags.scm"
+
+[languages.html]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_html"
+crate = "tree-sitter-html"
+extensions = ["html", "htm"]
+aliases = ["html", "htm"]
+function_kinds = ["script_element"]
+class_kinds = ["element"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-html/queries/tags.scm"
+
+[languages.css]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_css"
+crate = "tree-sitter-css"
+extensions = ["css"]
+aliases = ["css"]
+function_kinds = ["keyframes_statement"]
+class_kinds = ["rule_set"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-css/queries/tags.scm"
+
+[languages.svelte]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_svelte"
+crate = "tree-sitter-svelte-ng"
+extensions = ["svelte"]
+aliases = ["svelte"]
+function_kinds = ["script_element"]
+class_kinds = ["element"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-svelte/queries/tags.scm"
+
+[languages.graphql]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_graphql"
+crate = "tree-sitter-graphql"
+extensions = ["graphql", "gql"]
+aliases = ["graphql", "gql"]
+function_kinds = ["operation_definition", "fragment_definition"]
+class_kinds = ["object_type_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-graphql/queries/tags.scm"
+
+[languages.prisma]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_prisma"
+crate = "tree-sitter-prisma"
+extensions = ["prisma"]
+aliases = ["prisma"]
+function_kinds = []
+class_kinds = ["model_declaration", "enum_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-prisma/queries/tags.scm"
+
+[languages.elm]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_elm"
+crate = "tree-sitter-elm"
+extensions = ["elm"]
+aliases = ["elm"]
+function_kinds = ["value_declaration"]
+class_kinds = ["type_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-elm/queries/tags.scm"
+
+[languages.erlang]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_erlang"
+crate = "tree-sitter-erlang"
+extensions = ["erl", "hrl"]
+aliases = ["erlang", "erl"]
+function_kinds = ["fun_decl", "function_clause"]
+class_kinds = ["record_decl"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-erlang/queries/tags.scm"
+
+[languages.gleam]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_gleam"
+crate = "tree-sitter-gleam"
+extensions = ["gleam"]
+aliases = ["gleam"]
+function_kinds = ["function"]
+class_kinds = ["type_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-gleam/queries/tags.scm"
+
+[languages.fsharp]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_fsharp"
+crate = "tree-sitter-fsharp"
+extensions = ["fs", "fsi", "fsx"]
+aliases = ["fsharp", "f#", "fs"]
+function_kinds = ["function_or_value_defn"]
+class_kinds = ["type_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-fsharp/queries/tags.scm"
+
+
+[languages.racket]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_racket"
+crate = "tree-sitter-racket"
+extensions = ["rkt"]
+aliases = ["racket", "rkt"]
+function_kinds = ["list"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-racket/queries/tags.scm"
+
+[languages.scheme]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_scheme"
+crate = "tree-sitter-scheme"
+extensions = ["scm", "ss"]
+aliases = ["scheme", "scm"]
+function_kinds = ["list"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-scheme/queries/tags.scm"
+
+[languages.d]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_d"
+crate = "tree-sitter-d"
+extensions = ["d"]
+aliases = ["d", "dlang"]
+function_kinds = ["function_declaration"]
+class_kinds = ["class_declaration", "struct_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-d/queries/tags.scm"
+
+[languages.odin]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_odin"
+crate = "tree-sitter-odin"
+extensions = ["odin"]
+aliases = ["odin"]
+function_kinds = ["procedure_declaration"]
+class_kinds = ["struct_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-odin/queries/tags.scm"
+
+[languages.cuda]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_cuda"
+crate = "tree-sitter-cuda"
+extensions = ["cu", "cuh"]
+aliases = ["cuda"]
+function_kinds = ["function_definition"]
+class_kinds = ["struct_specifier", "class_specifier"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-cuda/queries/tags.scm"
+
+[languages.glsl]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_glsl"
+crate = "tree-sitter-glsl"
+extensions = ["glsl", "vert", "frag", "comp"]
+aliases = ["glsl"]
+function_kinds = ["function_definition"]
+class_kinds = ["struct_specifier"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-glsl/queries/tags.scm"
+
+[languages.vhdl]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_vhdl"
+crate = "tree-sitter-vhdl"
+extensions = ["vhd", "vhdl"]
+aliases = ["vhdl"]
+function_kinds = ["subprogram_definition"]
+class_kinds = ["component_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-vhdl/queries/tags.scm"
+
+[languages.cmake]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_cmake"
+crate = "tree-sitter-cmake"
+extensions = ["cmake"]
+aliases = ["cmake"]
+function_kinds = ["function_def"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-cmake/queries/tags.scm"
+
+[languages.make]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_make"
+crate = "tree-sitter-make"
+extensions = ["mk", "mak"]
+aliases = ["make", "makefile"]
+function_kinds = ["rule"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-make/queries/tags.scm"
+
+[languages.starlark]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_starlark"
+crate = "tree-sitter-starlark"
+extensions = ["star", "bzl"]
+aliases = ["starlark", "bazel", "bzl"]
+function_kinds = ["function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-starlark/queries/tags.scm"
+
+[languages.powershell]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_powershell"
+crate = "tree-sitter-powershell"
+extensions = ["ps1", "psm1"]
+aliases = ["powershell", "pwsh", "ps1"]
+function_kinds = ["function_statement"]
+class_kinds = ["class_statement"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-powershell/queries/tags.scm"
+
+[languages.toml]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_toml"
+crate = "tree-sitter-toml-ng"
+extensions = ["toml"]
+aliases = ["toml"]
+function_kinds = []
+class_kinds = ["table"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-toml/queries/tags.scm"
+
+[languages.elisp]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_elisp"
+crate = "tree-sitter-elisp"
+extensions = ["el"]
+aliases = ["elisp", "emacs-lisp", "emacs"]
+function_kinds = ["function_definition"]
+class_kinds = []
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-elisp/queries/tags.scm"
+

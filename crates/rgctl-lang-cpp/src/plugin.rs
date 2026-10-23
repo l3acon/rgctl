@@ -1,7 +1,7 @@
 //! C++ language plugin using Tree-sitter.
 
+use crate::single_pass::{cpp_ast_handlers, extract_all_single_pass};
 use rgctl_plugin_api::*;
-use rgctl_plugin_helpers::parse_source;
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -18,11 +18,17 @@ impl CppPlugin {
         Ok(Self)
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        parse_source(source, file_path, tree_sitter_cpp::LANGUAGE.into())
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
+        parse_with_pool("cpp", tree_sitter_cpp::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
+        })
     }
 
-    fn extract_function(
+    pub(crate) fn extract_function(
         &self,
         node: Node,
         source: &[u8],
@@ -66,7 +72,7 @@ impl CppPlugin {
         }))
     }
 
-    fn extract_class(
+    pub(crate) fn extract_class(
         &self,
         node: Node,
         source: &[u8],
@@ -79,10 +85,11 @@ impl CppPlugin {
             message: "Type missing name".to_string(),
         })?;
 
-        // F1: fields from field_declaration in class/struct body.
-        // Enums have no fields; leave empty.
+        // Class/struct: field_declaration; enum: enumerator list.
         let fields = if matches!(symbol_type, SymbolType::Class | SymbolType::Struct) {
             extract_type_fields(node, source)?
+        } else if symbol_type == SymbolType::Enum {
+            crate::depth::extract_enumerator_fields(node, source)
         } else {
             vec![]
         };
@@ -434,23 +441,26 @@ impl LanguagePlugin for CppPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(cpp_ast_handlers())
     }
 
     fn calculate_complexity(
         &self,
-        _symbol: &Symbol,
+        symbol: &Symbol,
         _source: &[u8],
     ) -> Result<Option<ComplexityMetrics>> {
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
         Ok(None)
     }
 }
 
-fn collect_base_relations(
+pub(crate) fn collect_base_relations(
     from: &str,
     base_clause: Node,
     source: &[u8],
@@ -512,7 +522,7 @@ fn base_type_name(node: Node, source: &[u8]) -> Option<String> {
     }
 }
 
-fn scoped_type_name(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn scoped_type_name(node: Node, source: &[u8]) -> Option<String> {
     match node.kind() {
         "type_identifier" => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
         "qualified_identifier" | "qualified_type_identifier" => {
@@ -536,7 +546,7 @@ fn scoped_type_name(node: Node, source: &[u8]) -> Option<String> {
     }
 }
 
-fn type_name_from_type_node(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn type_name_from_type_node(node: Node, source: &[u8]) -> Option<String> {
     if node.kind() == "type_specifier" {
         return node.named_child(0).and_then(|n| base_type_name(n, source));
     }
@@ -556,7 +566,7 @@ fn last_named_child_by_field<'a>(node: Node<'a>, field: &str) -> Option<Node<'a>
     last
 }
 
-fn using_import_names(node: Node, source: &[u8]) -> (String, Option<String>) {
+pub(crate) fn using_import_names(node: Node, source: &[u8]) -> (String, Option<String>) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {
@@ -578,7 +588,7 @@ fn using_import_names(node: Node, source: &[u8]) -> (String, Option<String>) {
     (text, None)
 }
 
-fn template_enclosed_type(node: Node) -> Option<Node> {
+pub(crate) fn template_enclosed_type(node: Node) -> Option<Node> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if matches!(child.kind(), "class_specifier" | "struct_specifier") {
@@ -588,7 +598,7 @@ fn template_enclosed_type(node: Node) -> Option<Node> {
     None
 }
 
-fn method_modifiers(node: Node, source: &[u8]) -> Vec<String> {
+pub(crate) fn method_modifiers(node: Node, source: &[u8]) -> Vec<String> {
     let mut mods = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -685,7 +695,7 @@ fn walk_cpp_calls(
 
 /// Prefix single-segment qualified calls with the enclosing namespace parent
 /// (`repositories::foo` inside `ecommerce::services` → `ecommerce::repositories::foo`).
-fn enrich_cpp_namespace_hint(hint: &str, active_scope: &str) -> Option<String> {
+pub(crate) fn enrich_cpp_namespace_hint(hint: &str, active_scope: &str) -> Option<String> {
     const SKIP_QUALS: &[&str] = &["std", "boost", "absl", "fmt", "detail"];
     let (qual, name) = hint.rsplit_once("::")?;
     if qual.contains("::") {
@@ -781,7 +791,7 @@ fn extract_parameters(node: Node, source: &[u8]) -> Result<Vec<Parameter>> {
     Ok(parameters)
 }
 
-fn extract_type_fields(type_node: Node, source: &[u8]) -> Result<Vec<Field>> {
+pub(crate) fn extract_type_fields(type_node: Node, source: &[u8]) -> Result<Vec<Field>> {
     let mut fields = Vec::new();
     let Some(body) = type_node.child_by_field_name("body") else {
         return Ok(fields);
@@ -867,12 +877,26 @@ fn name_from_declarator(root: Node, source: &[u8]) -> Option<String> {
     None
 }
 
-fn type_name(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn type_name(node: Node, source: &[u8]) -> Option<String> {
     node.child_by_field_name("name")
         .and_then(|n| n.utf8_text(source).ok().map(str::to_string))
 }
 
-fn source_location(node: Node, file_path: &str) -> SourceLocation {
+/// Typedef alias from `type_definition` (`typedef union { ... } Alias` → `Alias`).
+pub(crate) fn type_definition_typedef_name(node: Node, source: &[u8]) -> Option<String> {
+    if node.kind() != "type_definition" {
+        return None;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "type_identifier" {
+            return child.utf8_text(source).ok().map(str::to_string);
+        }
+    }
+    None
+}
+
+pub(crate) fn source_location(node: Node, file_path: &str) -> SourceLocation {
     SourceLocation {
         file: file_path.to_string(),
         start_line: node.start_position().row + 1,

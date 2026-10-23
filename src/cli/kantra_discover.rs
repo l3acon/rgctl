@@ -262,6 +262,8 @@ fn build_eval_graph(cold: &ColdMetadataDb, view: &PetGraphView) -> Result<EvalGr
             EdgeType::Extends => "EXTENDS",
             EdgeType::Implements => "IMPLEMENTS",
             EdgeType::AnnotatedWith => "ANNOTATED_WITH",
+            EdgeType::ExposesRoute => "EXPOSES_ROUTE",
+            EdgeType::Injects => "INJECTS",
             _ => return,
         };
         let Some(&from_id) = index_to_uuid.get(src as usize) else {

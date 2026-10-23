@@ -2,10 +2,11 @@
 //!
 //! Uses a single tree-sitter parse per `extract_all` (AGENTS.md: reuse Tree per file).
 
+use crate::single_pass::{extract_all_single_pass, kotlin_ast_handlers};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 const TYPE_KINDS: &[&str] = &[
     "class_declaration",
@@ -23,7 +24,7 @@ const BRANCH_KINDS: &[&str] = &[
     "catch_block",
 ];
 
-struct CtorEmitCtx<'a> {
+pub(crate) struct CtorEmitCtx<'a> {
     file_path: &'a str,
     package: Option<&'a str>,
     type_path: &'a [String],
@@ -39,18 +40,16 @@ impl KotlinPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_kotlin_ng::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Kotlin grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 1,
-            message: "Failed to parse Kotlin source".to_string(),
+        parse_with_pool("kotlin", tree_sitter_kotlin_ng::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 1,
+                message: e,
+            }
         })
     }
 
-    fn package_name(root: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn package_name(root: Node, source: &[u8]) -> Option<String> {
         let mut stack = vec![root];
         while let Some(node) = stack.pop() {
             if node.kind() == "package_header" {
@@ -232,6 +231,30 @@ impl KotlinPlugin {
         let mut fields = Vec::new();
         let mut stack = vec![body];
         while let Some(node) = stack.pop() {
+            if node.kind() == "enum_entry" {
+                let name = node
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(|s| s.trim().to_string())
+                    .or_else(|| {
+                        let mut c = node.walk();
+                        node.children(&mut c).find_map(|n| {
+                            if matches!(n.kind(), "simple_identifier" | "identifier") {
+                                n.utf8_text(source).ok().map(|s| s.trim().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                if let Some(name) = name {
+                    fields.push(Field {
+                        name,
+                        field_type: None,
+                        visibility: None,
+                    });
+                }
+                continue;
+            }
             if node.kind() == "property_declaration" {
                 let name = node
                     .child_by_field_name("name")
@@ -282,7 +305,7 @@ impl KotlinPlugin {
         fields
     }
 
-    fn push_ctor(
+    pub(crate) fn push_ctor(
         &self,
         symbols: &mut Vec<Symbol>,
         ctx: &CtorEmitCtx<'_>,
@@ -329,6 +352,173 @@ impl KotlinPlugin {
         let _ = fields;
     }
 
+    /// Emit class/object/companion symbol plus primary/secondary constructors.
+    pub(crate) fn emit_type_and_ctors(
+        &self,
+        node: Node,
+        source: &[u8],
+        file: &str,
+        package: Option<&str>,
+        symbols: &mut Vec<Symbol>,
+    ) {
+        let Some(simple) = Self::type_name(node, source).or_else(|| {
+            if node.kind() == "companion_object" {
+                Some("Companion".to_string())
+            } else {
+                None
+            }
+        }) else {
+            return;
+        };
+        let mut type_path = Self::enclosing_type_path(node, source);
+        if type_path.last() != Some(&simple) {
+            type_path.push(simple.clone());
+        }
+        let (kind_meta, symbol_type) = Self::is_interface_or_enum(node, source);
+        let qn = Self::qualify(package, &type_path.join("."));
+
+        let mut fields = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "primary_constructor" || child.kind() == "class_parameters" {
+                for p in self.extract_parameters(
+                    if child.kind() == "class_parameters" {
+                        node
+                    } else {
+                        child
+                    },
+                    source,
+                ) {
+                    fields.push(Field {
+                        name: p.name,
+                        field_type: p.param_type,
+                        visibility: None,
+                    });
+                }
+            }
+            if child.kind() == "class_body" || child.kind() == "enum_class_body" {
+                fields.extend(self.property_fields(child, source));
+            }
+        }
+
+        symbols.push(Symbol {
+            name: simple.clone(),
+            symbol_type,
+            qualified_name: Some(qn.clone()),
+            location: Self::loc(file, node),
+            signature: node
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
+            return_type: None,
+            parameters: vec![],
+            fields,
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({
+                "language": "kotlin",
+                "kind": kind_meta,
+            }),
+        });
+
+        let mut c2 = node.walk();
+        for child in node.children(&mut c2) {
+            let ctor_ctx = CtorEmitCtx {
+                file_path: file,
+                package,
+                type_path: &type_path,
+            };
+            if child.kind() == "primary_constructor" {
+                self.push_ctor(symbols, &ctor_ctx, child, source, true);
+            }
+            if child.kind() == "secondary_constructor" {
+                self.push_ctor(symbols, &ctor_ctx, child, source, false);
+            }
+        }
+    }
+
+    pub(crate) fn emit_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file: &str,
+        package: Option<&str>,
+    ) -> Option<Symbol> {
+        let name = node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(|s| s.trim().to_string())
+            .or_else(|| {
+                let mut c = node.walk();
+                node.children(&mut c).find_map(|n| {
+                    if matches!(n.kind(), "simple_identifier" | "identifier") {
+                        n.utf8_text(source).ok().map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+            })?;
+        let type_path = Self::enclosing_type_path(node, source);
+        let qn = if type_path.is_empty() {
+            Self::qualify(package, &name)
+        } else {
+            Self::qualify(package, &format!("{}.{}", type_path.join("."), name))
+        };
+        let return_type = node
+            .child_by_field_name("type")
+            .and_then(|n| n.utf8_text(source).ok())
+            .map(|s| s.trim().to_string());
+        let parameters = self.extract_parameters(node, source);
+        Some(Symbol {
+            name,
+            symbol_type: SymbolType::Function,
+            qualified_name: Some(qn),
+            location: Self::loc(file, node),
+            signature: node
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
+            return_type,
+            parameters,
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "kotlin" }),
+        })
+    }
+
+    pub(crate) fn emit_import(
+        &self,
+        node: Node,
+        source: &[u8],
+        file: &str,
+        symbols: &mut Vec<Symbol>,
+    ) {
+        let text = node.utf8_text(source).unwrap_or("").trim();
+        let imported = text
+            .trim_start_matches("import")
+            .trim()
+            .trim_end_matches(".*")
+            .trim();
+        if imported.is_empty() {
+            return;
+        }
+        let simple = imported.rsplit('.').next().unwrap_or(imported).to_string();
+        symbols.push(Symbol {
+            name: simple,
+            symbol_type: SymbolType::Import,
+            qualified_name: Some(imported.to_string()),
+            location: Self::loc(file, node),
+            signature: Some(text.to_string()),
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "kotlin" }),
+        });
+    }
+
     fn symbols_from_tree(
         &self,
         root: Node,
@@ -343,165 +533,23 @@ impl KotlinPlugin {
         while let Some(node) = stack.pop() {
             match node.kind() {
                 "class_declaration" | "object_declaration" | "companion_object" => {
-                    let Some(simple) = Self::type_name(node, source).or_else(|| {
-                        if node.kind() == "companion_object" {
-                            Some("Companion".to_string())
-                        } else {
-                            None
-                        }
-                    }) else {
-                        let mut cursor = node.walk();
-                        for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev()
-                        {
-                            stack.push(child);
-                        }
-                        continue;
-                    };
-                    let mut type_path = Self::enclosing_type_path(node, source);
-                    // enclosing_type_path walks parents — for the node itself add simple
-                    if type_path.last() != Some(&simple) {
-                        type_path.push(simple.clone());
-                    }
-                    let (kind_meta, symbol_type) = Self::is_interface_or_enum(node, source);
-                    let qn = Self::qualify(package.as_deref(), &type_path.join("."));
-
-                    let mut fields = Vec::new();
-                    // Primary constructor parameters as fields
-                    let mut cursor = node.walk();
-                    for child in node.children(&mut cursor) {
-                        if child.kind() == "primary_constructor" || child.kind() == "class_parameters"
-                        {
-                            for p in self.extract_parameters(
-                                if child.kind() == "class_parameters" {
-                                    // wrap: extract_parameters looks for params child — pass parent
-                                    node
-                                } else {
-                                    child
-                                },
-                                source,
-                            ) {
-                                fields.push(Field {
-                                    name: p.name,
-                                    field_type: p.param_type,
-                                    visibility: None,
-                                });
-                            }
-                        }
-                        if child.kind() == "class_body" || child.kind() == "enum_class_body" {
-                            fields.extend(self.property_fields(child, source));
-                        }
-                    }
-
-                    symbols.push(Symbol {
-                        name: simple.clone(),
-                        symbol_type,
-                        qualified_name: Some(qn.clone()),
-                        location: Self::loc(&file, node),
-                        signature: node
-                            .utf8_text(source)
-                            .ok()
-                            .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
-                        return_type: None,
-                        parameters: vec![],
-                        fields,
-                        modifiers: vec![],
-                        documentation: None,
-                        metadata: serde_json::json!({
-                            "language": "kotlin",
-                            "kind": kind_meta,
-                        }),
-                    });
-
-                    // Constructors
-                    let mut c2 = node.walk();
-                    for child in node.children(&mut c2) {
-                        let ctor_ctx = CtorEmitCtx {
-                            file_path: &file,
-                            package: package.as_deref(),
-                            type_path: &type_path,
-                        };
-                        if child.kind() == "primary_constructor" {
-                            self.push_ctor(&mut symbols, &ctor_ctx, child, source, true);
-                        }
-                        if child.kind() == "secondary_constructor" {
-                            self.push_ctor(&mut symbols, &ctor_ctx, child, source, false);
-                        }
-                    }
+                    self.emit_type_and_ctors(
+                        node,
+                        source,
+                        &file,
+                        package.as_deref(),
+                        &mut symbols,
+                    );
                 }
                 "function_declaration" => {
-                    let name = node
-                        .child_by_field_name("name")
-                        .and_then(|n| n.utf8_text(source).ok())
-                        .map(|s| s.trim().to_string())
-                        .or_else(|| {
-                            let mut c = node.walk();
-                            node.children(&mut c).find_map(|n| {
-                                if matches!(n.kind(), "simple_identifier" | "identifier") {
-                                    n.utf8_text(source).ok().map(|s| s.trim().to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                        });
-                    let Some(name) = name else {
-                        let mut cursor = node.walk();
-                        for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev()
-                        {
-                            stack.push(child);
-                        }
-                        continue;
-                    };
-                    let type_path = Self::enclosing_type_path(node, source);
-                    let qn = if type_path.is_empty() {
-                        Self::qualify(package.as_deref(), &name)
-                    } else {
-                        Self::qualify(package.as_deref(), &format!("{}.{}", type_path.join("."), name))
-                    };
-                    let return_type = node
-                        .child_by_field_name("type")
-                        .and_then(|n| n.utf8_text(source).ok())
-                        .map(|s| s.trim().to_string());
-                    let parameters = self.extract_parameters(node, source);
-                    symbols.push(Symbol {
-                        name,
-                        symbol_type: SymbolType::Function,
-                        qualified_name: Some(qn),
-                        location: Self::loc(&file, node),
-                        signature: node
-                            .utf8_text(source)
-                            .ok()
-                            .map(|s| s.lines().next().unwrap_or("").trim().to_string()),
-                        return_type,
-                        parameters,
-                        fields: vec![],
-                        modifiers: vec![],
-                        documentation: None,
-                        metadata: serde_json::json!({ "language": "kotlin" }),
-                    });
+                    if let Some(sym) =
+                        self.emit_function(node, source, &file, package.as_deref())
+                    {
+                        symbols.push(sym);
+                    }
                 }
                 "import" => {
-                    let text = node.utf8_text(source).unwrap_or("").trim();
-                    let imported = text
-                        .trim_start_matches("import")
-                        .trim()
-                        .trim_end_matches(".*")
-                        .trim();
-                    if !imported.is_empty() {
-                        let simple = imported.rsplit('.').next().unwrap_or(imported).to_string();
-                        symbols.push(Symbol {
-                            name: simple,
-                            symbol_type: SymbolType::Import,
-                            qualified_name: Some(imported.to_string()),
-                            location: Self::loc(&file, node),
-                            signature: Some(text.to_string()),
-                            return_type: None,
-                            parameters: vec![],
-                            fields: vec![],
-                            modifiers: vec![],
-                            documentation: None,
-                            metadata: serde_json::json!({ "language": "kotlin" }),
-                        });
-                    }
+                    self.emit_import(node, source, &file, &mut symbols);
                 }
                 _ => {}
             }
@@ -513,6 +561,47 @@ impl KotlinPlugin {
         }
 
         Ok(symbols)
+    }
+
+    pub(crate) fn collect_inheritance_relations(
+        &self,
+        root: Node,
+        source: &[u8],
+        file_path: &Path,
+        relations: &mut Vec<Relation>,
+    ) {
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            if (node.kind() == "class_declaration" || node.kind() == "object_declaration")
+                && let Some(from_name) = Self::type_name(node, source)
+            {
+                let package = Self::package_name(root, source);
+                let mut type_path = Self::enclosing_type_path(node, source);
+                if type_path.last() != Some(&from_name) {
+                    type_path.push(from_name.clone());
+                }
+                let from_qn = Self::qualify(package.as_deref(), &type_path.join("."));
+                let mut inner = vec![node];
+                while let Some(n) = inner.pop() {
+                    if n.kind() == "delegation_specifier" {
+                        self.emit_delegation_edges(n, source, file_path, &from_qn, relations);
+                    }
+                    if n.id() != node.id()
+                        && (TYPE_KINDS.contains(&n.kind()) || n.kind() == "function_declaration")
+                    {
+                        continue;
+                    }
+                    let mut c = n.walk();
+                    for ch in n.children(&mut c).collect::<Vec<_>>().into_iter().rev() {
+                        inner.push(ch);
+                    }
+                }
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+                stack.push(child);
+            }
+        }
     }
 
     fn relations_from_tree(
@@ -528,70 +617,11 @@ impl KotlinPlugin {
             source,
             file_path,
             symbols,
-            rgctl_plugin_api::KOTLIN_CALL_KINDS,
+            KOTLIN_CALL_KINDS,
             "kotlin",
             &mut relations,
         );
-
-        // Inheritance: delegation_specifier under class_declaration
-        let mut stack = vec![root];
-        while let Some(node) = stack.pop() {
-            if (node.kind() == "class_declaration" || node.kind() == "object_declaration")
-                && let Some(from_name) = Self::type_name(node, source)
-            {
-                    let package = Self::package_name(root, source);
-                    let mut type_path = Self::enclosing_type_path(node, source);
-                    if type_path.last() != Some(&from_name) {
-                        type_path.push(from_name.clone());
-                    }
-                    let from_qn = Self::qualify(package.as_deref(), &type_path.join("."));
-                    let mut cursor = node.walk();
-                    for child in node.children(&mut cursor) {
-                        if child.kind() != "delegation_specifiers" && child.kind() != "delegation_specifier"
-                        {
-                            // also walk nested
-                            if child.kind() == "delegation_specifiers" {
-                                // handled below
-                            }
-                            continue;
-                        }
-                        self.emit_delegation_edges(
-                            child,
-                            source,
-                            file_path,
-                            &from_qn,
-                            &mut relations,
-                        );
-                    }
-                    // Walk all descendants for delegation_specifier
-                    let mut inner = vec![node];
-                    while let Some(n) = inner.pop() {
-                        if n.kind() == "delegation_specifier" {
-                            self.emit_delegation_edges(
-                                n,
-                                source,
-                                file_path,
-                                &from_qn,
-                                &mut relations,
-                            );
-                        }
-                        if n.id() != node.id()
-                            && (TYPE_KINDS.contains(&n.kind()) || n.kind() == "function_declaration")
-                        {
-                            continue;
-                        }
-                        let mut c = n.walk();
-                        for ch in n.children(&mut c).collect::<Vec<_>>().into_iter().rev() {
-                            inner.push(ch);
-                        }
-                    }
-            }
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
-                stack.push(child);
-            }
-        }
-
+        self.collect_inheritance_relations(root, source, file_path, &mut relations);
         Ok(relations)
     }
 
@@ -695,11 +725,11 @@ impl LanguagePlugin for KotlinPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(kotlin_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -710,7 +740,17 @@ impl LanguagePlugin for KotlinPlugin {
         if symbol.symbol_type != SymbolType::Function {
             return Ok(None);
         }
-        let tree = self.parse(Path::new(&symbol.location.file), source)?;
+
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
+
+        let tree = parse_with_pool("kotlin", tree_sitter_kotlin_ng::LANGUAGE.into(), source)
+            .map_err(|e| Error::ParseError {
+                file: symbol.location.file.clone().into(),
+                line: symbol.location.start_line,
+                message: e,
+            })?;
         let target_line = symbol.location.start_line.saturating_sub(1);
         let mut found = None;
         let mut stack = vec![tree.root_node()];

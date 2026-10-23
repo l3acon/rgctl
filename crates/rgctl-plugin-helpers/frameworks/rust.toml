@@ -1,0 +1,51 @@
+language = "rust"
+
+[[rules]]
+id = "actix.rocket.route_decorator"
+framework = "actix"
+kind = "RouteDecorator"
+method_annotations = [
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "delete", method = "DELETE" },
+  { name = "patch", method = "PATCH" },
+  { name = "head", method = "HEAD" },
+  { name = "options", method = "OPTIONS" },
+  { name = "route", method_arg = "method", default_method = "GET" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rest api handler actix rocket"
+
+[[rules]]
+id = "axum.actix.route_call"
+framework = "axum"
+kind = "RouteCall"
+router_callees = [
+  { name = "route", method = "ANY" },
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "delete", method = "DELETE" },
+  { name = "patch", method = "PATCH" },
+  { name = "to", method = "ANY" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http axum actix router"
+
+[[rules]]
+id = "axum.actix.extractor_di"
+framework = "axum"
+kind = "ParamWrapperInject"
+wrapper_types = ["State", "Extension", "Data"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection extract state extension data axum actix"
+target_vocab = "dependency injection provider service injectable state"
+
+[[rules]]
+id = "rust.reflection"
+framework = "rust"
+kind = "ConceptTagger"
+call_callees = ["type_name", "TypeId", "downcast_ref", "downcast_mut"]
+tags = ["role:reflection"]
+vocab = "reflection reflect typeid downcast dynamic rust"

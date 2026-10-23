@@ -3,10 +3,11 @@
 //! Extracts symbols, relationships, and complexity metrics from Python source code
 //! using TreeSitter.
 
+use crate::single_pass::{extract_all_single_pass, python_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, infer_python_method_target, ComplexityMetrics, Error,
-    ExtractAllResult, Field, LanguagePlugin, Parameter, Relation, RelationType, Result,
-    SourceLocation, Symbol, SymbolType,
+    callee_name, complexity_from_metadata, containing_function, infer_python_method_target,
+    parse_with_pool, AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field,
+    LanguagePlugin, Parameter, Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
 };
 use rgctl_plugin_helpers::{
     containing_class_name, extract_decorator_relations, extract_python_class_extends_relations,
@@ -14,25 +15,24 @@ use rgctl_plugin_helpers::{
 };
 use rgctl_semantic::type_inference::TypeInferencer;
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Python language plugin
-pub struct PythonPlugin {
-    _parser: Parser,
-}
+pub struct PythonPlugin;
 
 impl PythonPlugin {
     /// Create a new Python plugin
     pub fn new() -> Result<Self> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {}", e)))?;
-        Ok(Self { _parser: parser })
+        Ok(Self)
     }
 
     /// Extract function definition
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut parameters = Vec::new();
@@ -266,7 +266,12 @@ impl PythonPlugin {
     }
 
     /// Extract class definition
-    fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_class(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -310,8 +315,12 @@ impl PythonPlugin {
         })
     }
 
-    /// Extract class fields from class-body assignments and `self.attr =` in `__init__`.
-    fn extract_class_fields(&self, block_node: Node, source: &[u8]) -> Result<Vec<Field>> {
+    /// Extract class fields: annotated attrs, body assigns, lambdas, `self`/`cls` in methods.
+    pub(crate) fn extract_class_fields(
+        &self,
+        block_node: Node,
+        source: &[u8],
+    ) -> Result<Vec<Field>> {
         let mut fields = Vec::new();
         let mut seen = std::collections::HashSet::new();
         let mut cursor = block_node.walk();
@@ -321,40 +330,52 @@ impl PythonPlugin {
                 "expression_statement" => {
                     let mut expr_cursor = child.walk();
                     for expr_child in child.children(&mut expr_cursor) {
-                        if expr_child.kind() == "assignment" {
-                            let mut assign_cursor = expr_child.walk();
-                            for assign_child in expr_child.children(&mut assign_cursor) {
-                                if assign_child.kind() == "identifier" {
-                                    let name = assign_child.utf8_text(source)?.to_string();
-                                    if seen.insert(name.clone()) {
-                                        fields.push(Field {
-                                            name,
-                                            field_type: None,
-                                            visibility: None,
-                                        });
-                                    }
-                                    break;
-                                }
+                        if expr_child.kind() != "assignment" {
+                            continue;
+                        }
+                        if expr_child.child_by_field_name("type").is_some() {
+                            if let Some((name, ty)) =
+                                crate::depth::annotated_assignment_field(expr_child, source)
+                            {
+                                crate::depth::push_field(&mut fields, &mut seen, name, ty);
+                                continue;
+                            }
+                        }
+                        if let Some(name) =
+                            crate::depth::class_lambda_binding_name(expr_child, source)
+                        {
+                            crate::depth::push_field(
+                                &mut fields,
+                                &mut seen,
+                                name,
+                                Some("Callable".to_string()),
+                            );
+                            continue;
+                        }
+                        // Plain class attr / enum member (`PENDING = "x"`).
+                        if let Some(left) = expr_child.child_by_field_name("left") {
+                            if left.kind() == "identifier" {
+                                let name = left.utf8_text(source)?.to_string();
+                                crate::depth::push_field(&mut fields, &mut seen, name, None);
                             }
                         }
                     }
                 }
                 "function_definition" => {
-                    let fn_name = child
-                        .child_by_field_name("name")
-                        .and_then(|n| n.utf8_text(source).ok().map(str::to_string))
-                        .or_else(|| {
-                            let mut c = child.walk();
-                            for n in child.children(&mut c) {
-                                if n.kind() == "identifier" {
-                                    return n.utf8_text(source).ok().map(str::to_string);
-                                }
-                            }
-                            None
-                        });
-                    if fn_name.as_deref() == Some("__init__") {
-                        self.collect_self_assignments(child, source, &mut fields, &mut seen)?;
-                        self.infer_init_param_field_types(child, source, &mut fields)?;
+                    self.harvest_method_fields(child, source, &mut fields, &mut seen)?;
+                }
+                "decorated_definition" => {
+                    // `@classmethod` / `@staticmethod` wrap the real function_definition.
+                    let mut dc = child.walk();
+                    for inner in child.children(&mut dc) {
+                        if inner.kind() == "function_definition" {
+                            self.harvest_method_fields(
+                                inner,
+                                source,
+                                &mut fields,
+                                &mut seen,
+                            )?;
+                        }
                     }
                 }
                 _ => {}
@@ -362,6 +383,24 @@ impl PythonPlugin {
         }
 
         Ok(fields)
+    }
+
+    fn harvest_method_fields(
+        &self,
+        fn_node: Node,
+        source: &[u8],
+        fields: &mut Vec<Field>,
+        seen: &mut std::collections::HashSet<String>,
+    ) -> Result<()> {
+        // All methods: harvest `self.x` / `cls.x` (not only `__init__`).
+        self.collect_self_assignments(fn_node, source, fields, seen)?;
+        let fn_name = fn_node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source).ok().map(str::to_string));
+        if fn_name.as_deref() == Some("__init__") {
+            self.infer_init_param_field_types(fn_node, source, fields)?;
+        }
+        Ok(())
     }
 
     fn infer_init_param_field_types(
@@ -400,38 +439,14 @@ impl PythonPlugin {
     ) -> Result<()> {
         if node.kind() == "assignment" {
             if let Some(left) = node.child_by_field_name("left") {
-                if left.kind() == "attribute" {
-                    let object = left.child_by_field_name("object");
-                    let attr = left.child_by_field_name("attribute");
-                    let is_self = object
-                        .and_then(|o| o.utf8_text(source).ok())
-                        .is_some_and(|t| t == "self");
-                    if is_self {
-                        if let Some(name) = attr
-                            .and_then(|a| a.utf8_text(source).ok())
-                            .map(str::to_string)
-                        {
-                            let field_type = node
-                                .child_by_field_name("right")
-                                .and_then(|r| infer_field_type_from_rhs(r, source));
-                            if seen.insert(name.clone()) {
-                                fields.push(Field {
-                                    name,
-                                    field_type,
-                                    visibility: None,
-                                });
-                            } else if let Some(field) =
-                                fields.iter_mut().find(|f| f.name == name)
-                            {
-                                if field.field_type.is_none() {
-                                    field.field_type = field_type;
-                                }
-                            }
-                        }
-                    }
+                if let Some(name) = crate::depth::self_or_cls_attr_name(left, source) {
+                    let field_type = node
+                        .child_by_field_name("right")
+                        .and_then(|r| infer_field_type_from_rhs(r, source));
+                    crate::depth::push_field(fields, seen, name, field_type);
                 }
             } else {
-                // Fallback without field names: attribute whose first identifier is self
+                // Fallback without field names: attribute whose first identifier is self/cls
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
                     if child.kind() == "attribute" {
@@ -442,15 +457,9 @@ impl PythonPlugin {
                             .collect();
                         if parts.len() >= 2 {
                             let obj = parts[0].utf8_text(source)?;
-                            if obj == "self" {
+                            if obj == "self" || obj == "cls" {
                                 let name = parts[1].utf8_text(source)?.to_string();
-                                if seen.insert(name.clone()) {
-                                    fields.push(Field {
-                                        name,
-                                        field_type: None,
-                                        visibility: None,
-                                    });
-                                }
+                                crate::depth::push_field(fields, seen, name, None);
                             }
                         }
                         break;
@@ -559,14 +568,12 @@ impl PythonPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Python source".to_string(),
+        parse_with_pool("python", tree_sitter_python::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
@@ -600,6 +607,38 @@ impl PythonPlugin {
                         file_path,
                         "python",
                     ));
+                }
+                "type_alias_statement" => {
+                    if let Some(sym) =
+                        crate::depth::extract_type_alias_statement(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "as_pattern_target" => {
+                    if let Some(sym) =
+                        crate::depth::extract_as_pattern_target(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "named_expression" => {
+                    if let Some(sym) =
+                        crate::depth::extract_named_expression(node, source, file_path)
+                    {
+                        symbols.push(sym);
+                    }
+                }
+                "lambda" => {
+                    let class_qn = containing_class_name(node, source);
+                    if let Some(sym) = crate::depth::extract_lambda_symbol(
+                        node,
+                        source,
+                        file_path,
+                        class_qn.as_deref(),
+                    ) {
+                        symbols.push(sym);
+                    }
                 }
                 "decorated_definition" => {}
                 _ => {}
@@ -816,7 +855,7 @@ fn infer_field_type_from_rhs(node: Node, source: &[u8]) -> Option<String> {
     }
 }
 
-fn instantiation_target(
+pub(crate) fn instantiation_target(
     call: Node,
     source: &[u8],
     class_names: &std::collections::HashSet<String>,
@@ -901,11 +940,11 @@ impl LanguagePlugin for PythonPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(python_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -917,18 +956,17 @@ impl LanguagePlugin for PythonPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Python grammar: {}", e)))?;
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("python", tree_sitter_python::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
-            })?;
+                message: e,
+            },
+        )?;
 
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1;
@@ -1150,6 +1188,40 @@ def list_orders():
     }
 
     #[test]
+    fn test_extract_all_single_pass_forward_calls_and_complexity() {
+        let source = br#"
+def caller():
+    helper()
+    if True:
+        return
+
+def helper():
+    pass
+"#;
+        let plugin = PythonPlugin::new().unwrap();
+        let path = Path::new("test.py");
+        let result = plugin.extract_all(path, source).unwrap();
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to.contains("helper")
+            }),
+            "forward Calls -> helper: {:?}",
+            result.relations
+        );
+        let caller = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "caller")
+            .expect("caller");
+        let from_meta =
+            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        assert_eq!(from_meta.cyclomatic, 2);
+        assert_eq!(from_meta.returns, 1);
+        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        assert_eq!(via_api, from_meta);
+    }
+
+    #[test]
     fn test_instantiates_and_typed_call() {
         let source = br#"
 class Order:
@@ -1184,6 +1256,48 @@ class OrderService:
                     && r.to_type_hint.as_deref() == Some("OrderRepository")
             }),
             "{relations:?}"
+        );
+    }
+
+    #[test]
+    fn fastapi_extract_all_emits_exposes_route_and_injects() {
+        let source = br#"
+from fastapi import Depends
+
+@app.get("/users/{id}")
+def get_user(id: str, db = Depends(get_db)):
+    return db
+"#;
+        let plugin = PythonPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("users.py"), source)
+            .unwrap();
+        let route = result
+            .relations
+            .iter()
+            .find(|r| r.relation_type == RelationType::ExposesRoute)
+            .expect("ExposesRoute");
+        assert_eq!(route.to, "GET /users/{id}");
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Injects && r.to == "get_db"
+            }),
+            "Injects get_db: {:?}",
+            result.relations
+        );
+        let handler = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "get_user")
+            .expect("get_user");
+        let tags = handler
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            tags.contains("endpoint") && tags.contains("dependency"),
+            "semantic_tags={tags:?}"
         );
     }
 }

@@ -294,6 +294,7 @@ mod tests {
                 code_hash: None,
                 node_type: None,
                 kind: None,
+                semantic_tags: None,
             },
             fused_score: None,
         };

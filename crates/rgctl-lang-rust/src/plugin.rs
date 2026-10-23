@@ -7,11 +7,14 @@ use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 
 use crate::extract_depth::{
-    extract_mod_symbol, extract_trait_symbols, extract_use_symbols, module_prefix_from_path,
-    push_children, qualify_with_module, walk_depth_relations, AST_MAX_DEPTH,
+    extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
+    extract_macro_definition, extract_mod_symbol, extract_trait_symbols, extract_type_item,
+    extract_use_symbols, module_prefix_from_path, push_children, qualify_with_module,
+    walk_depth_relations, AST_MAX_DEPTH,
 };
+use crate::single_pass::{extract_all_single_pass, rust_ast_handlers};
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Rust language plugin
 pub struct RustPlugin;
@@ -22,8 +25,17 @@ impl RustPlugin {
         Ok(Self)
     }
 
-    /// Extract function node details
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    /// Extract function node details.
+    ///
+    /// `impl_type` is the active `impl` receiver from [`ScopeStack`] (single-pass)
+    /// or a parent CST walk (legacy `symbols_from_tree`).
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        impl_type: Option<&str>,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut parameters = Vec::new();
@@ -85,11 +97,15 @@ impl RustPlugin {
             message: "Function missing name".to_string(),
         })?;
 
-        let impl_type = self.find_containing_impl_type(node, source);
         let module_prefix = module_prefix_from_path(Path::new(file_path));
         let is_constructor = raw_name == "new" && impl_type.is_some();
+        let symbol_type = if impl_type.is_some() {
+            SymbolType::Method
+        } else {
+            SymbolType::Function
+        };
         let (qualified_name, metadata) = if is_constructor {
-            let ty = impl_type.clone().unwrap_or_else(|| "Unknown".to_string());
+            let ty = impl_type.unwrap_or("Unknown");
             let local = format!("{ty}::<init>");
             (
                 Some(qualify_with_module(module_prefix.as_deref(), &local)),
@@ -112,7 +128,7 @@ impl RustPlugin {
 
         Ok(Symbol {
             name: raw_name,
-            symbol_type: SymbolType::Function,
+            symbol_type,
             qualified_name,
             location: SourceLocation {
                 file: file_path.to_string(),
@@ -138,6 +154,7 @@ impl RustPlugin {
         })
     }
 
+    /// Parent-walk fallback when no [`ScopeStack`] is available (legacy symbol walk).
     fn find_containing_impl_type(&self, node: Node, source: &[u8]) -> Option<String> {
         let mut current = node;
         while let Some(parent) = current.parent() {
@@ -145,7 +162,13 @@ impl RustPlugin {
                 if let Some(ty) = parent
                     .child_by_field_name("type")
                     .and_then(|n| n.utf8_text(source).ok())
-                    .map(str::to_string)
+                    .map(|s| {
+                        s.rsplit("::")
+                            .next()
+                            .unwrap_or(s)
+                            .trim()
+                            .to_string()
+                    })
                 {
                     return Some(ty);
                 }
@@ -220,7 +243,7 @@ impl RustPlugin {
     }
 
     /// Extract struct or enum definition
-    fn extract_type_definition(
+    pub(crate) fn extract_type_definition(
         &self,
         node: Node,
         source: &[u8],
@@ -242,6 +265,9 @@ impl RustPlugin {
                 }
                 "field_declaration_list" => {
                     fields = self.extract_fields(child, source)?;
+                }
+                "enum_variant_list" => {
+                    fields = self.extract_enum_variant_fields(child, source)?;
                 }
                 _ => {}
             }
@@ -279,6 +305,33 @@ impl RustPlugin {
             documentation: None,
             metadata: serde_json::json!({}),
         })
+    }
+
+    /// Collect `enum_variant` names as [`Field`] entries on the enum symbol.
+    pub(crate) fn extract_enum_variant_fields(
+        &self,
+        variant_list: Node,
+        source: &[u8],
+    ) -> Result<Vec<Field>> {
+        let mut fields = Vec::new();
+        let mut cursor = variant_list.walk();
+        for child in variant_list.children(&mut cursor) {
+            if child.kind() != "enum_variant" {
+                continue;
+            }
+            let name = child
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source).ok())
+                .map(str::to_string);
+            if let Some(name) = name {
+                fields.push(Field {
+                    name,
+                    field_type: None,
+                    visibility: None,
+                });
+            }
+        }
+        Ok(fields)
     }
 
     /// Extract struct fields
@@ -442,14 +495,12 @@ impl RustPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Rust grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Rust source".to_string(),
+        parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
@@ -480,7 +531,13 @@ impl RustPlugin {
 
             match node.kind() {
                 "function_item" => {
-                    symbols.push(self.extract_function(node, source, &file_path_str)?);
+                    let impl_ty = self.find_containing_impl_type(node, source);
+                    symbols.push(self.extract_function(
+                        node,
+                        source,
+                        &file_path_str,
+                        impl_ty.as_deref(),
+                    )?);
                 }
                 "struct_item" => {
                     symbols.push(self.extract_type_definition(node, source, &file_path_str, false)?);
@@ -503,6 +560,77 @@ impl RustPlugin {
                         &file_path_str,
                         module_prefix.as_deref(),
                     ));
+                }
+                "type_item" => {
+                    if let Some(t) = extract_type_item(node, source, &file_path_str) {
+                        symbols.push(t);
+                    }
+                }
+                "macro_definition" => {
+                    if let Some(m) = extract_macro_definition(node, source, &file_path_str) {
+                        symbols.push(m);
+                    }
+                }
+                "associated_type" => {
+                    // Trait-associated types are emitted inside `extract_trait_symbols`.
+                    let under_trait = {
+                        let mut cur = node;
+                        let mut found = false;
+                        while let Some(parent) = cur.parent() {
+                            if parent.kind() == "trait_item" {
+                                found = true;
+                                break;
+                            }
+                            if matches!(
+                                parent.kind(),
+                                "function_item" | "impl_item" | "struct_item" | "enum_item"
+                            ) {
+                                break;
+                            }
+                            cur = parent;
+                        }
+                        found
+                    };
+                    if !under_trait {
+                        if let Some(at) =
+                            extract_associated_type(node, source, &file_path_str, None)
+                        {
+                            symbols.push(at);
+                        }
+                    }
+                }
+                "enum_variant" => {
+                    let mut cur = node;
+                    let mut enum_name = None;
+                    let mut enum_qn = None;
+                    while let Some(parent) = cur.parent() {
+                        if parent.kind() == "enum_item" {
+                            enum_name = parent
+                                .child_by_field_name("name")
+                                .and_then(|n| n.utf8_text(source).ok())
+                                .map(str::to_string);
+                            if let Some(ref name) = enum_name {
+                                enum_qn = Some(qualify_with_module(
+                                    module_prefix.as_deref(),
+                                    name,
+                                ));
+                            }
+                            break;
+                        }
+                        cur = parent;
+                    }
+                    if let (Some(en), Some(eqn)) = (enum_name, enum_qn) {
+                        if let Some(v) =
+                            extract_enum_variant_symbol(node, source, &file_path_str, &en, &eqn)
+                        {
+                            symbols.push(v);
+                        }
+                    }
+                }
+                "extern_crate_declaration" => {
+                    if let Some(c) = extract_extern_crate(node, source, &file_path_str) {
+                        symbols.push(c);
+                    }
                 }
                 _ => {}
             }
@@ -570,11 +698,11 @@ impl LanguagePlugin for RustPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(rust_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -586,21 +714,19 @@ impl LanguagePlugin for RustPlugin {
             return Ok(None);
         }
 
-        // Re-parse to find the function node
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Rust grammar: {}", e)))?;
+        // Prefer metrics harvested during single-pass `extract_all`.
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(
+            |e| Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
-            })?;
+                message: e,
+            },
+        )?;
 
-        // Find the function node by location
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1; // TreeSitter uses 0-indexed lines
 
@@ -724,7 +850,7 @@ impl User {
         let ctor = symbols
             .iter()
             .find(|s| {
-                s.symbol_type == SymbolType::Function
+                matches!(s.symbol_type, SymbolType::Function | SymbolType::Method)
                     && s.metadata.get("is_constructor").and_then(|v| v.as_bool()) == Some(true)
             })
             .expect("constructor");
@@ -750,9 +876,18 @@ impl User {
             .extract_symbols(Path::new("test.rs"), source)
             .unwrap();
 
-        assert_eq!(symbols.len(), 1);
-        assert_eq!(symbols[0].name, "Status");
-        assert_eq!(symbols[0].symbol_type, SymbolType::Enum);
+        let status = symbols
+            .iter()
+            .find(|s| s.name == "Status" && s.symbol_type == SymbolType::Enum)
+            .expect("Status enum");
+        assert_eq!(status.fields.len(), 3);
+        assert!(symbols.iter().any(|s| {
+            s.name == "Active"
+                && s.metadata
+                    .get("is_enum_variant")
+                    .and_then(|v| v.as_bool())
+                    == Some(true)
+        }));
     }
 
     #[test]
@@ -955,6 +1090,216 @@ impl Default for Item {
         assert_eq!(
             item.qualified_name.as_deref(),
             Some("item::Item")
+        );
+    }
+
+    #[test]
+    fn test_extract_all_single_pass_forward_calls_and_complexity() {
+        let source = br#"
+fn caller() {
+    helper();
+    if true {
+        return;
+    }
+}
+
+fn helper() {}
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let path = Path::new("test.rs");
+        let result = plugin.extract_all(path, source).unwrap();
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to.contains("helper")
+            }),
+            "forward Calls -> helper: {:?}",
+            result.relations
+        );
+        let caller = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "caller")
+            .expect("caller");
+        let from_meta =
+            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        assert_eq!(from_meta.cyclomatic, 2);
+        assert_eq!(from_meta.returns, 1);
+        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        assert_eq!(via_api, from_meta);
+    }
+
+    #[test]
+    fn test_rust_depth_scoped_self_and_turbofish_calls() {
+        let source = br#"
+struct Widget { id: u32 }
+
+impl Widget {
+    fn new() -> Self { Self { id: 0 } }
+    fn helper(&self) {}
+    fn build(&self) {
+        let _w = Widget::new();
+        Self::helper(self);
+        let _ = parse::<Widget>("");
+        self.helper();
+    }
+}
+
+fn parse<T>(_s: &str) -> Option<T> { None }
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("widget.rs"), source)
+            .unwrap();
+        let calls: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::Calls)
+            .collect();
+        let widget_new = calls.iter().find(|r| {
+            r.to_type_hint.as_deref() == Some("Widget")
+                && (r.to.contains("new")
+                    || r.to.contains("<init>")
+                    || r.to_qualified_hint
+                        .as_deref()
+                        .is_some_and(|h| h.contains("Widget") && h.contains("new")))
+        });
+        assert!(
+            widget_new.is_some(),
+            "expected Widget::new type hint, calls={calls:?}"
+        );
+        let self_helper = calls.iter().find(|r| {
+            r.to.contains("helper")
+                && r.to_type_hint.as_deref() == Some("Widget")
+                && r.from.contains("build")
+        });
+        assert!(
+            self_helper.is_some(),
+            "expected Self::helper -> Widget, calls={calls:?}"
+        );
+        let turbofish = calls.iter().find(|r| r.to.contains("parse"));
+        assert!(
+            turbofish.is_some(),
+            "expected parse::<Widget> call, calls={calls:?}"
+        );
+    }
+
+    #[test]
+    fn test_rust_depth_enum_variants_type_alias_macro_trait() {
+        let source = br#"
+enum Status { Active, Inactive }
+
+type Point = (i32, i32);
+
+macro_rules! say {
+    ($x:expr) => { $x };
+}
+
+trait Drawable {
+    type Brush;
+    fn draw(&self);
+}
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("depth.rs"), source)
+            .unwrap();
+        let status = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "Status" && s.symbol_type == SymbolType::Enum)
+            .expect("enum");
+        assert!(
+            status.fields.iter().any(|f| f.name == "Active"),
+            "enum fields: {:?}",
+            status.fields
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "Active"
+                    && s.metadata
+                        .get("is_enum_variant")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "variant symbol missing: {:?}",
+            result.symbols
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Point" && s.symbol_type == SymbolType::TypeAlias),
+            "type alias: {:?}",
+            result.symbols
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "say" && s.symbol_type == SymbolType::Macro),
+            "macro: {:?}",
+            result.symbols
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "Brush"
+                    && s.symbol_type == SymbolType::TypeAlias
+                    && s.metadata
+                        .get("associated")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "associated type: {:?}",
+            result.symbols
+        );
+        assert!(
+            result.symbols.iter().any(|s| {
+                s.name == "draw"
+                    && s.metadata
+                        .get("trait_method")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "trait method signature: {:?}",
+            result.symbols
+        );
+    }
+
+    #[test]
+    fn actix_get_and_axum_state_emit_exposes_route_and_injects() {
+        let source = br#"
+use axum::extract::State;
+use std::sync::Arc;
+
+#[get("/health")]
+async fn health() -> &'static str { "ok" }
+
+async fn list_users(State(state): State<Arc<AppState>>) -> String {
+    state.name.clone()
+}
+
+struct AppState { name: String }
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("src/routes.rs"), source)
+            .unwrap();
+        let routes: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::ExposesRoute)
+            .collect();
+        assert!(
+            routes.iter().any(|r| r.to == "GET /health"),
+            "actix #[get]: {:?}",
+            result.relations
+        );
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Injects && r.to.contains("AppState")
+            }),
+            "State<Arc<AppState>> Injects: {:?}",
+            result.relations
         );
     }
 }

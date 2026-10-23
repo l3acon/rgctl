@@ -1,0 +1,33 @@
+language = "ruby"
+
+[[rules]]
+id = "rails.controller.stereotype"
+framework = "rails"
+kind = "ConceptTagger"
+annotations = ["ActionController", "ApplicationController"]
+call_callees = ["ActionController"]
+tags = ["role:controller"]
+vocab = "controller controllers rest api endpoint endpoints rails"
+
+[[rules]]
+id = "rails.route_call"
+framework = "rails"
+kind = "RouteCall"
+router_callees = [
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "patch", method = "PATCH" },
+  { name = "delete", method = "DELETE" },
+  { name = "resources", method = "ANY" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rails resources"
+
+[[rules]]
+id = "ruby.reflection"
+framework = "ruby"
+kind = "ConceptTagger"
+call_callees = ["send", "public_send", "const_get", "instance_variable_get"]
+tags = ["role:reflection"]
+vocab = "reflection reflect send const_get dynamic ruby"

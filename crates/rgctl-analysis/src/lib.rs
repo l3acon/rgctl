@@ -33,6 +33,7 @@ pub mod field_write;
 pub mod field_write_locals;
 pub mod flow_cache;
 pub mod fragment_clones;
+pub mod git_churn;
 pub mod graph_utils;
 pub mod hash_maps;
 pub mod interprocedural_cfg;
@@ -41,6 +42,7 @@ pub mod language_profile;
 pub mod macro_call_index;
 pub mod macro_call_lookup;
 pub mod migration;
+pub mod mro;
 pub mod node_lookup;
 pub mod pdg;
 pub mod policy;
@@ -49,6 +51,7 @@ pub mod violation_ledger;
 pub mod results;
 pub mod review_paths;
 pub mod scoped_policy;
+pub mod scip_overlay;
 pub mod semantic_code_daemon;
 pub mod semantic_diffuse;
 #[cfg(feature = "semantic-onnx")]
@@ -97,8 +100,9 @@ pub use centrality::{
     BetweennessCentrality, CentralityAnalyzer, CentralityReport, CentralityRunSummary,
     CentralityScore, CentralityScores, CsrOutAdj, DegreeCentrality, FastPageRank, FlatGraphIndex,
     HarmonicCentrality, LARGE_GRAPH_PAGERANK_ITERATIONS, LARGE_GRAPH_PAGERANK_NODE_LIMIT,
-    LARGE_GRAPH_PAGERANK_TOLERANCE, PAGERANK_TOLERANCE, PageRankStats, STRUCTURAL_EDGE_TYPES,
-    adaptive_pagerank_config, default_behavioral_edges, degree_centrality,
+    LARGE_GRAPH_PAGERANK_TOLERANCE, NodeRole, PAGERANK_TOLERANCE, PageRankStats,
+    STRUCTURAL_EDGE_TYPES, adaptive_pagerank_config, classify_node_role, default_behavioral_edges,
+    degree_centrality, filter_scores_by_role,
 };
 pub use centrality_approx::{
     BetweennessMode, CentralityApproxStats, DEFAULT_EXACT_CENTRALITY_LIMIT,
@@ -111,10 +115,13 @@ pub use cfg::{
     StatementKind,
 };
 pub use cfg_builder::{
-    FunctionLocation, ParsedSourceFile, build_cfg_for_function, build_cfg_for_function_in_tree,
-    index_function_locations,
+    FunctionLocation, ParsedSourceFile, build_cfg_for_byte_range, build_cfg_for_function,
+    build_cfg_for_function_in_tree, index_function_locations, seek_function_node,
 };
-pub use cfg_pdg_archive::{CFG_PDG_ARCHIVE_FILE, CfgPdgArchive, CfgPdgRecord};
+pub use cfg_pdg_archive::{
+    ARCHIVE_VERSION, CFG_PDG_ARCHIVE_FILE, CfgPdgArchive, CfgPdgArchiveMmap, CfgPdgRecord,
+    EnsureCfgPdgOpts, TocEntry, ensure_cfg_pdg_for_source, stable_record_uuid,
+};
 pub use clones::{
     BloomCloneOptions, CLONE_REPORT_SCHEMA_VERSION, CLONE_REPORT_SCHEMA_VERSION_V2,
     CLONES_FRAGMENT_SIDECAR_FILE, CLONES_SIDECAR_FILE, DEFAULT_BLOOM_MAX_BUCKET,
@@ -149,7 +156,7 @@ pub use cpg::{
     cpg_function, cpg_mutations, cpg_status, find_function_nodes,
 };
 pub use cpg_export::{CpgExportFormat, CpgExportScope, export_cpg};
-pub use dataflow::{Definition, ReachingDefs, compute_reaching_definitions};
+pub use dataflow::{Definition, ReachingDefs, VarId, compute_reaching_definitions};
 pub use def_use::{extract_def_use, extract_used_variables};
 pub use dependency::{CircularDependency, DependencyAnalyzer, ImpactResult};
 pub use dominance::{DominatorTree, verify_idom_acyclic};
@@ -166,6 +173,9 @@ pub use flow_cache::{CachedAnalysis, CfgPdgCache, FlowCache, NodePdgCache};
 pub use fragment_clones::{
     discover_fragment_clones, query_fragment_clones, resolve_cfg_for_function,
     stage1_filter_functions, FragmentSeedQuery,
+};
+pub use git_churn::{
+    FileChurnMetrics, GitChurnConfig, GitChurnReport, compute_and_apply_git_churn,
 };
 pub use graph_utils::{
     DEFAULT_TRAVERSAL_DEPTH, PetGraphView, TraversalConfig, edge_type_set,
@@ -191,6 +201,14 @@ pub use migration::{
     MIGRATION_GRAPH_SCHEMA_VERSION, MIGRATION_PLAN_SCHEMA_VERSION, MigrationCommunityEdge,
     MigrationCommunityNode, MigrationGraphPayload, MigrationOrderMode, MigrationPlanPayload,
     MigrationPlanStep, MigrationWeights, build_migration_graph, compute_migration_plan,
+};
+pub use mro::{
+    InheritanceGraph, MroIndex, MroPassStats, MroStrategy, annotate_call_edge, apply_mro_pass,
+    c3_linearize, c3_merge,
+};
+pub use scip_overlay::{
+    ScipOverlayStats, apply_scip_index, apply_scip_overlay, load_scip_index, normalize_path,
+    scip_display_name,
 };
 pub use node_lookup::NodeLookup;
 pub use pdg::{
@@ -261,7 +279,8 @@ pub use semantic_search::{
 pub use semantic_vocab::{
     DEFAULT_VOCAB_TOKEN_LIST, TokenSpaceAccumulator, VOCAB_ACCUMULATE_DISTILLED_ID,
     VOCAB_ACCUMULATE_MODEL_ID, VOCAB_NATIVE_DIMENSIONS, VocabAccumulateEmbedder,
-    distill_vocab_matrix, encode_rbvk, parse_vocab_token_list,
+    canonicalize_query_keywords, distill_vocab_matrix, encode_rbvk,
+    normalize_semantic_query_tokens, parse_vocab_token_list,
 };
 pub use slicing::{
     BackwardSlicer, CodeSlice, ForwardSlicer, SliceCriterion, SliceDirection, SliceOptions,

@@ -14,7 +14,8 @@ use crate::analysis::{
     AnalysisResults, AnalysisStorage, AstSkeletonArchive, BlastEngineSnapshot, BlastRadiusEngine,
     CentralityAnalyzer, CfgPdgArchive, CommunityDetector, ComplexityAnalyzer, DependencyAnalyzer,
     FIELD_WRITE_INDEX_VERSION, FieldWriteIndex, MacroCallIndex, MacroCallLookupDb, NodeLookup,
-    build_and_save_field_write_index, cfg_language_list, AST_SKELETON_VERSION,
+    NodeRole, build_and_save_field_write_index, cfg_language_list, classify_node_role,
+    AST_SKELETON_VERSION,
 };
 use crate::config::secret_detector::{DetectedSecret, SecretDetector};
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
@@ -39,6 +40,12 @@ pub(crate) struct AnalysisOptions<'a> {
     pub with_cfg: bool,
     pub with_taint: bool,
     pub taint_rules: Option<String>,
+    /// Optional SCIP index path (`.scip`) for compiler-exact Calls overlay.
+    pub scip: Option<String>,
+    /// Emit `CoChangesWith` + churn hotspot scores from git history.
+    pub with_git: bool,
+    /// Git `--since` window for `--with-git`.
+    pub git_since: String,
     pub with_dfg_loops: bool,
     pub with_ast_skeleton: bool,
     pub write_json_graph: bool,
@@ -88,6 +95,9 @@ pub(crate) fn run_full_analysis(
         with_cfg,
         with_taint,
         taint_rules,
+        scip,
+        with_git,
+        git_since,
         with_dfg_loops,
         with_ast_skeleton,
         write_json_graph,
@@ -195,6 +205,7 @@ pub(crate) fn run_full_analysis(
             discovery,
             show_progress: human_output,
             materialize_fields,
+            facts_cache: !force_reindex,
             thread_count: limits.as_ref().and_then(|l| l.threads),
             stream_channel_capacity: limits
                 .as_ref()
@@ -217,7 +228,7 @@ pub(crate) fn run_full_analysis(
     let index_start = Instant::now();
     let graph_from_snapshot = !force_reindex && file_changes.is_empty() && snapshot_path.is_file();
     let mut cold_reused: Option<crate::analysis::ColdMetadataDb> = None;
-    let (mut index_stats, graph_digest) = if graph_from_snapshot {
+    let (mut index_stats, mut graph_digest) = if graph_from_snapshot {
         let load_start = Instant::now();
         let cold = crate::analysis::ColdMetadataDb::open(&snapshot_path)?;
         let digest = cold.store().content_digest()?.to_string();
@@ -266,6 +277,78 @@ pub(crate) fn run_full_analysis(
     profile.nodes = index_stats.nodes_created;
     // Snapshot write is folded into index_graph_build (Lever 1: no separate backend rewrite).
     profile.save_snapshot.secs = 0.0;
+
+    // Optional SCIP overlay: hydrate → merge compiler-exact Calls → rewrite columnar.
+    // Opt-in only (`--scip`); default cold discover never pays this cost.
+    if let Some(ref scip_path) = scip {
+        let scip_start = Instant::now();
+        let scip_file = PathBuf::from(scip_path);
+        if !scip_file.is_file() {
+            return Err(anyhow::anyhow!(
+                "SCIP index not found: {}",
+                scip_file.display()
+            ));
+        }
+        // Drop reused cold mmap before rewrite.
+        cold_reused = None;
+        let mut graph = rgctl_graph::code_graph::CodeGraph::open_snapshot(&snapshot_path)?;
+        let stats = rgctl_analysis::apply_scip_overlay(graph.backend_mut(), &scip_file)
+            .map_err(|e| anyhow::anyhow!("SCIP overlay failed: {e}"))?;
+        if stats.calls_added > 0 {
+            graph_digest =
+                rgctl_graph::write_columnar_from_backend(graph.backend(), &snapshot_path)?;
+            index_stats.edges_created = graph.backend().edge_count();
+        }
+        if human_output || verbose {
+            info!(
+                documents = stats.documents,
+                definitions_mapped = stats.definitions_mapped,
+                calls_added = stats.calls_added,
+                duration_secs = %format!("{:.2}", scip_start.elapsed().as_secs_f64()),
+                "[✓] SCIP overlay applied ({} calls added)",
+                stats.calls_added
+            );
+        }
+        profile.save_snapshot.secs += secs(scip_start.elapsed());
+    }
+
+    // Optional git churn / co-change overlay (`--with-git`).
+    if with_git {
+        let git_start = Instant::now();
+        cold_reused = None;
+        let mut graph = rgctl_graph::code_graph::CodeGraph::open_snapshot(&snapshot_path)?;
+        let config = rgctl_analysis::GitChurnConfig {
+            since: git_since.clone(),
+            ..rgctl_analysis::GitChurnConfig::default()
+        };
+        let report = rgctl_analysis::compute_and_apply_git_churn(root, graph.backend_mut(), &config)
+            .map_err(|e| anyhow::anyhow!("git churn failed: {e}"))?;
+        if report.edges_emitted > 0 || report.commits_used > 0 {
+            graph_digest =
+                rgctl_graph::write_columnar_from_backend(graph.backend(), &snapshot_path)?;
+            index_stats.edges_created = graph.backend().edge_count();
+        }
+        let analysis_dir = store.join(".rgctl").join("analysis");
+        std::fs::create_dir_all(&analysis_dir)?;
+        let churn_path = analysis_dir.join("git_churn.json");
+        std::fs::write(
+            &churn_path,
+            serde_json::to_string_pretty(&report)
+                .map_err(|e| anyhow::anyhow!("serialize git_churn.json: {e}"))?,
+        )?;
+        if human_output || verbose {
+            info!(
+                commits_scanned = report.commits_scanned,
+                commits_used = report.commits_used,
+                edges_emitted = report.edges_emitted,
+                files = report.files.len(),
+                duration_secs = %format!("{:.2}", git_start.elapsed().as_secs_f64()),
+                "[✓] Git churn overlay ({} CoChangesWith edges)",
+                report.edges_emitted
+            );
+        }
+        profile.save_snapshot.secs += secs(git_start.elapsed());
+    }
 
     if materialize_fields {
         let _ = super::pipeline_status::write_digest_marker(
@@ -371,7 +454,7 @@ pub(crate) fn run_full_analysis(
         node_ids.sort_unstable();
         analysis_results = AnalysisResults::new(node_ids);
 
-        // Complexity from cold mmap payloads.
+        // Complexity from cold mmap payloads (single Function collect — reused below).
         let complexity_start = Instant::now();
         let complexity_report = ComplexityAnalyzer::analyze_lookup(&cold)?;
         analysis_results.fill_complexity(&complexity_report);
@@ -421,7 +504,12 @@ pub(crate) fn run_full_analysis(
         };
         profile.topology.secs = secs(topo_start.elapsed());
 
-        functions = cold.collect_nodes_by_type(NodeType::Function)?;
+        // Reuse Function nodes already materialized for complexity (avoid 2nd full scan).
+        functions = complexity_report
+            .functions
+            .into_iter()
+            .map(|fc| fc.node)
+            .collect();
         profile.functions = functions.len();
         // Seal ingest phase: absolute peak stays; analysis phase peak resets to current RSS.
         profile.ingest_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
@@ -441,7 +529,11 @@ pub(crate) fn run_full_analysis(
         analysis_results.fill_community(&community_result);
         profile.community.secs = secs(community_start.elapsed());
         if human_output {
-            let n_communities = community_result.communities.len();
+            let n_communities = analysis_results
+                .community
+                .as_ref()
+                .map(|c| c.num_communities)
+                .unwrap_or_else(|| community_result.communities.len());
             let n_nodes = view.node_count().max(1);
             let mut call_use_edges = 0usize;
             let _ = view.for_each_edge(|_, _, ty| {
@@ -497,31 +589,52 @@ pub(crate) fn run_full_analysis(
         let has_betweenness = centrality_summary.has_betweenness;
 
         if human_output {
-            if let Some((top_id, top_score)) = centrality_summary.top_pagerank.first() {
-                if let Ok(Some(node)) = cold.get_node(*top_id) {
-                    let short_name = node.name.split('/').next_back().unwrap_or(&node.name);
-                    let (in_degree, out_degree) = analysis_results
-                        .get_centrality(*top_id)
-                        .map(|m| (m.in_degree, m.out_degree))
-                        .unwrap_or((0, 0));
-
-                    if verbose {
-                        info!(
-                            hotspot = short_name,
-                            pagerank = %format!("{:.4}", top_score),
-                            betweenness_enabled = has_betweenness,
-                            in_degree,
-                            out_degree,
-                            "[*] Top hotspot: {} (PageRank: {:.4})",
-                            short_name,
-                            top_score
-                        );
+            let hotspot = centrality_summary
+                .top_pagerank
+                .iter()
+                .find_map(|(id, score)| {
+                    let node = cold.get_node(*id).ok().flatten()?;
+                    let stub = node.get_property("is_external_stub") == Some("true");
+                    let name = node
+                        .qualified_name
+                        .as_deref()
+                        .unwrap_or(node.name.as_str());
+                    if classify_node_role(name, node.file_path.as_deref(), stub)
+                        == NodeRole::Production
+                    {
+                        Some((*id, *score, node))
                     } else {
-                        info!(
-                            "[*] Top hotspot: {} (PageRank: {:.4})",
-                            short_name, top_score
-                        );
+                        None
                     }
+                })
+                .or_else(|| {
+                    let (id, score) = *centrality_summary.top_pagerank.first()?;
+                    let node = cold.get_node(id).ok().flatten()?;
+                    Some((id, score, node))
+                });
+            if let Some((top_id, top_score, node)) = hotspot {
+                let short_name = node.name.split('/').next_back().unwrap_or(&node.name);
+                let (in_degree, out_degree) = analysis_results
+                    .get_centrality(top_id)
+                    .map(|m| (m.in_degree, m.out_degree))
+                    .unwrap_or((0, 0));
+
+                if verbose {
+                    info!(
+                        hotspot = short_name,
+                        pagerank = %format!("{:.4}", top_score),
+                        betweenness_enabled = has_betweenness,
+                        in_degree,
+                        out_degree,
+                        "[*] Top hotspot: {} (PageRank: {:.4})",
+                        short_name,
+                        top_score
+                    );
+                } else {
+                    info!(
+                        "[*] Top hotspot: {} (PageRank: {:.4})",
+                        short_name, top_score
+                    );
                 }
             }
         }
@@ -535,18 +648,22 @@ pub(crate) fn run_full_analysis(
                 .as_ref()
                 .and_then(|c| c.infrastructure_community_id);
             let _ = rgctl_analysis::fill_community_labels(&mut analysis_results, infra, |uuid| {
-                cold.get_node(uuid).ok().flatten().map(|n| {
-                    (
-                        n.name.to_string(),
-                        n.file_path.as_ref().map(|s| s.to_string()),
-                    )
-                })
+                cold.node_name_and_path(uuid).ok().flatten()
             });
         }
 
-        // Dependency analysis
+        // Dependency analysis — full-graph Kosaraju is O(N+E) and duplicates work the
+        // blast-radius SCC engine does next; skip on huge corpora (linux ~2.7M nodes).
         let dependency_start = Instant::now();
-        let cycles = DependencyAnalyzer::find_circular_dependencies_with_lookup(&view, &cold)?;
+        let cycles = if view.node_count() >= 500_000 {
+            debug!(
+                nodes = view.node_count(),
+                "Skipping circular-dependency Kosaraju on large graph (blast SCC covers cycles)"
+            );
+            Vec::new()
+        } else {
+            DependencyAnalyzer::find_circular_dependencies_with_lookup(&view, &cold)?
+        };
         profile.dependency.secs = secs(dependency_start.elapsed());
         if !cycles.is_empty() && human_output {
             if verbose {
@@ -1201,7 +1318,7 @@ pub(crate) fn run_full_analysis(
         info!("[✓] Analysis complete");
     }
 
-    analysis_results.fill_structural_sketch_from_lookup(&cold)?;
+    analysis_results.fill_structural_sketch_from_nodes(&functions)?;
 
     // Save analysis results (columnar format - separate from graph!)
     let save_analysis_start = Instant::now();

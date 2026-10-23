@@ -294,6 +294,104 @@ impl SnapshotNodeStore {
             .unwrap_or_default()
     }
 
+    /// Collect nodes of `node_type` without deserializing cold_ext for non-matches.
+    ///
+    /// Columnar path: sequential scan of fixed-width hot rows, materialize only
+    /// when `row.node_type` matches (avoids N binary searches + N cold_ext decodes).
+    pub fn collect_nodes_by_type(&self, node_type: NodeType) -> Result<Vec<Node>> {
+        if let Some(col) = self.snapshot.columnar() {
+            let want = crate::columnar_snapshot::node_type_to_u16(node_type);
+            let mut out = Vec::new();
+            for idx in 0..col.node_count() {
+                let row = col.node_row_at(idx)?;
+                if row.node_type == want {
+                    out.push(col.materialize_node_at(idx)?);
+                }
+            }
+            return Ok(out);
+        }
+        let mut out = Vec::new();
+        for id in self.all_node_ids() {
+            if let Some(node) = self.get_node(id)? {
+                if node.node_type == node_type {
+                    out.push(node);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Count nodes of `node_type` from hot columns only (no cold_ext decode).
+    pub fn count_nodes_by_type(&self, node_type: NodeType) -> Result<usize> {
+        if let Some(col) = self.snapshot.columnar() {
+            let want = crate::columnar_snapshot::node_type_to_u16(node_type);
+            let mut n = 0usize;
+            for idx in 0..col.node_count() {
+                if col.node_row_at(idx)?.node_type == want {
+                    n += 1;
+                }
+            }
+            return Ok(n);
+        }
+        Ok(self.collect_nodes_by_type(node_type)?.len())
+    }
+
+    /// Visit nodes of `node_type` (materializes cold_ext only for matches).
+    pub fn for_each_node_of_type(
+        &self,
+        node_type: NodeType,
+        mut f: impl FnMut(&Node),
+    ) -> Result<()> {
+        if let Some(col) = self.snapshot.columnar() {
+            let want = crate::columnar_snapshot::node_type_to_u16(node_type);
+            for idx in 0..col.node_count() {
+                let row = col.node_row_at(idx)?;
+                if row.node_type == want {
+                    let node = col.materialize_node_at(idx)?;
+                    f(&node);
+                }
+            }
+            return Ok(());
+        }
+        for node in self.collect_nodes_by_type(node_type)? {
+            f(&node);
+        }
+        Ok(())
+    }
+
+    /// Hot-column `(name, file_path)` for a UUID (no cold_ext decode).
+    pub fn node_name_and_path(&self, id: Uuid) -> Result<Option<(String, Option<String>)>> {
+        if let Some(col) = self.snapshot.columnar() {
+            let Some(idx) = col.find_node_index(id) else {
+                return Ok(None);
+            };
+            return col.node_name_and_path_at(idx).map(Some);
+        }
+        Ok(self.get_node(id)?.map(|n| {
+            (
+                n.name.to_string(),
+                n.file_path.as_ref().map(|s| s.to_string()),
+            )
+        }))
+    }
+
+    /// Visit every node by sequential column index (columnar) or legacy id walk.
+    pub fn for_each_node_seq(&self, mut f: impl FnMut(&Node)) -> Result<()> {
+        if let Some(col) = self.snapshot.columnar() {
+            for idx in 0..col.node_count() {
+                let node = col.materialize_node_at(idx)?;
+                f(&node);
+            }
+            return Ok(());
+        }
+        for id in self.all_node_ids() {
+            if let Some(node) = self.get_node(id)? {
+                f(&node);
+            }
+        }
+        Ok(())
+    }
+
     /// Typed edge topology without hydrating a backend.
     pub fn edge_topology_typed(&self) -> Result<Vec<(Uuid, Uuid, EdgeType)>> {
         self.snapshot.edge_topology_typed()

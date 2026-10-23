@@ -309,6 +309,14 @@ pub enum EdgeType {
     Permits,
     /// Kantra rule violation on a code graph node
     Violates,
+    /// Subtype method overrides an ancestor method (`Child.m` → `Ancestor.m`)
+    Overrides,
+    /// Handler or controller exposes an HTTP/RPC route endpoint
+    ExposesRoute,
+    /// Class, constructor, field, or handler injects a dependency provider/type
+    Injects,
+    /// Temporal git co-change coupling (`File -> File`, emitted by `rgctl discover --with-git`)
+    CoChangesWith,
     /// Unknown or forward-compatible edge type; excluded from call-graph traversals.
     #[serde(other)]
     Unknown,
@@ -776,9 +784,13 @@ mod tests {
             EdgeType::AnnotatedWith,
             EdgeType::Permits,
             EdgeType::Violates,
+            EdgeType::Overrides,
+            EdgeType::ExposesRoute,
+            EdgeType::Injects,
+            EdgeType::CoChangesWith,
             EdgeType::Unknown,
         ];
-        assert_eq!(types.len(), 32);
+        assert_eq!(types.len(), 36);
     }
 
     #[test]

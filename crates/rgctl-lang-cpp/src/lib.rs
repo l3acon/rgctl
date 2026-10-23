@@ -8,14 +8,20 @@
 //!   argument-dependent lookup and overload sets are not modeled.
 //! - **Separate compilation:** symbols and relations are per translation unit; ODR
 //!   merge across `.cpp`/`.hpp` pairs is not performed.
-//! - **Friends / concepts:** not extracted as first-class graph semantics.
+//! - **Friends:** not extracted as first-class graph semantics.
+//! - **Macros:** `#define` / function-like macros are not indexed as graph `Macro`
+//!   nodes (same policy as C — avoids kernel-scale node explosion).
+//! - **Concepts:** `concept_definition` is a `TypeAlias`-like symbol (`metadata.kind`);
+//!   requires-expressions are not modeled as constraints edges.
 
 use rgctl_registry::LanguageRegistry;
 use std::sync::Arc;
 
 #[cfg(test)]
 mod ast_coverage;
+mod depth;
 mod plugin;
+mod single_pass;
 pub use plugin::CppPlugin;
 
 /// Register this language plugin.

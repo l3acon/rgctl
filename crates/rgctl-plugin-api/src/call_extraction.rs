@@ -1,6 +1,6 @@
 //! Shared helpers for extracting `Calls` relations from tree-sitter ASTs.
 
-use crate::{Relation, RelationType, SourceLocation, Symbol, SymbolType};
+use crate::{Relation, RelationType, ScopeStack, SourceLocation, Symbol, SymbolType};
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -102,6 +102,7 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
 /// Find the innermost function symbol containing `node`.
 ///
 /// `function_symbols` SHOULD already be filtered to [`SymbolType::Function`].
+/// Prefer [`containing_function_from_scope`] during single-pass extraction.
 pub fn containing_function<'a>(node: Node, function_symbols: &[&'a Symbol]) -> Option<&'a Symbol> {
     let line = node.start_position().row + 1;
     function_symbols
@@ -109,6 +110,29 @@ pub fn containing_function<'a>(node: Node, function_symbols: &[&'a Symbol]) -> O
         .copied()
         .filter(|s| line >= s.location.start_line && line <= s.location.end_line)
         .min_by_key(|s| s.location.end_line - s.location.start_line)
+}
+
+/// O(1) enclosing function via [`ScopeStack`] (single-pass AST engine).
+///
+/// Returns the `symbols[symbol_idx]` entry when the active function frame has
+/// recorded a `symbol_idx`; otherwise `None` (caller may fall back to
+/// [`containing_function`]).
+pub fn containing_function_from_scope<'a>(
+    stack: &ScopeStack,
+    symbols: &'a [Symbol],
+) -> Option<&'a Symbol> {
+    let frame = stack.current_function()?;
+    let idx = frame.symbol_idx?;
+    let sym = symbols.get(idx)?;
+    // Methods may be `SymbolType::Method` (Rust impl) or still `Function` elsewhere.
+    if matches!(
+        sym.symbol_type,
+        SymbolType::Function | SymbolType::Method
+    ) {
+        Some(sym)
+    } else {
+        None
+    }
 }
 
 /// Best-effort callee name from a call expression subtree (iterative; bounded depth).
@@ -141,6 +165,17 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
                     stack.push((n, depth + 1));
                 }
             }
+            // C++ `obj.template meth<T>()` wraps the method in `dependent_name`.
+            "dependent_name" => {
+                let mut c = node.walk();
+                for ch in node.children(&mut c) {
+                    if matches!(ch.kind(), "template_method" | "template_function" | "field_identifier" | "identifier")
+                    {
+                        stack.push((ch, depth + 1));
+                        break;
+                    }
+                }
+            }
             "scoped_identifier" | "qualified_type" | "qualified_identifier" => {
                 if let Some(n) = last_named_child_by_field(node, "name") {
                     stack.push((n, depth + 1));
@@ -148,6 +183,12 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
             }
             "template_function" | "template_method" => {
                 if let Some(n) = node.child_by_field_name("name") {
+                    stack.push((n, depth + 1));
+                }
+            }
+            // Rust turbofish: `foo::<T>()` / `Widget::new::<T>()` / `obj.method::<T>()`
+            "generic_function" => {
+                if let Some(n) = node.child_by_field_name("function") {
                     stack.push((n, depth + 1));
                 }
             }
@@ -190,6 +231,9 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
 }
 
 /// Push a `Calls` relation when `node` is a recognized call site.
+///
+/// Resolves the enclosing function via an `O(F)` line scan. Prefer
+/// [`push_call_relation_scoped`] during single-pass extraction.
 #[allow(clippy::too_many_arguments)]
 pub fn push_call_relation(
     node: Node,
@@ -204,7 +248,48 @@ pub fn push_call_relation(
     if !call_kinds.contains(&node.kind()) {
         return;
     }
+    let Some(from_fn) = containing_function(node, function_symbols) else {
+        return;
+    };
+    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+}
 
+/// Push a `Calls` relation using [`ScopeStack`] for `O(1)` enclosing-function lookup.
+///
+/// Call sites visited before later same-file callees are extracted still resolve
+/// correctly because `symbols` is the in-progress vec and local-target matching
+/// runs at emission time — defer emission until the pass finishes if forward
+/// references must see the full symbol list (see Rust single-pass flush).
+#[allow(clippy::too_many_arguments)]
+pub fn push_call_relation_scoped(
+    node: Node,
+    source: &[u8],
+    file_path: &Path,
+    symbols: &[Symbol],
+    scopes: &ScopeStack,
+    call_kinds: &[&str],
+    language: &str,
+    relations: &mut Vec<Relation>,
+) {
+    if !call_kinds.contains(&node.kind()) {
+        return;
+    }
+    let Some(from_fn) = containing_function_from_scope(scopes, symbols) else {
+        return;
+    };
+    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+}
+
+/// Emit a `Calls` relation with a known enclosing function symbol.
+pub fn push_call_relation_from(
+    node: Node,
+    source: &[u8],
+    file_path: &Path,
+    symbols: &[Symbol],
+    from_fn: &Symbol,
+    language: &str,
+    relations: &mut Vec<Relation>,
+) {
     let callee = if language == "ruby" && node.kind() == "call" {
         ruby_call_callee(node, source)
     } else if language == "kotlin" && node.kind() == "call_expression" {
@@ -226,10 +311,6 @@ pub fn push_call_relation(
     if callee.is_empty() {
         return;
     }
-
-    let Some(from_fn) = containing_function(node, function_symbols) else {
-        return;
-    };
 
     let from = from_fn
         .qualified_name
@@ -537,16 +618,29 @@ fn go_call_type_hint(
     None
 }
 
-/// Best-effort Rust type for `receiver.field.method()` and param-typed calls.
+/// Best-effort Rust type for scoped / turbofish / method calls.
+///
+/// Handles:
+/// - `Widget::new()` / `crate::mod::f()` via `scoped_identifier`
+/// - `Self::helper()` via enclosing impl type from `from_fn.qualified_name`
+/// - `foo::<T>()` / `Widget::new::<T>()` via `generic_function` unwrap
+/// - `receiver.field.method()` and param-typed receivers via `field_expression`
 fn rust_call_type_hint(
     call: Node,
     source: &[u8],
     symbols: &[Symbol],
     from_fn: &Symbol,
 ) -> Option<String> {
-    let func = call
+    let mut func = call
         .child_by_field_name("function")
         .or_else(|| call.child_by_field_name("macro"))?;
+    // Unwrap turbofish wrappers so scoped / field receivers stay visible.
+    while func.kind() == "generic_function" {
+        func = func.child_by_field_name("function")?;
+    }
+    if func.kind() == "scoped_identifier" || func.kind() == "scoped_type_identifier" {
+        return rust_scoped_path_type_hint(func, source, from_fn);
+    }
     if func.kind() == "field_expression" {
         let value = func.child_by_field_name("value")?;
         let field = func.child_by_field_name("field")?;
@@ -614,11 +708,23 @@ fn rust_call_type_hint(
 }
 
 fn rust_call_unresolved(call: Node, source: &[u8]) -> Option<bool> {
-    let func = call
+    let mut func = call
         .child_by_field_name("function")
         .or_else(|| call.child_by_field_name("macro"))?;
     if call.kind() == "macro_invocation" {
         return Some(true);
+    }
+    while func.kind() == "generic_function" {
+        match func.child_by_field_name("function") {
+            Some(inner) => func = inner,
+            None => return Some(true),
+        }
+    }
+    if matches!(
+        func.kind(),
+        "scoped_identifier" | "scoped_type_identifier" | "identifier"
+    ) {
+        return Some(false);
     }
     if func.kind() == "field_expression" {
         let value = func.child_by_field_name("value")?;
@@ -626,12 +732,48 @@ fn rust_call_unresolved(call: Node, source: &[u8]) -> Option<bool> {
         {
             return Some(true);
         }
+        return Some(false);
     }
     if func.kind() == "parenthesized_expression" {
         return Some(true);
     }
     let _ = source;
     None
+}
+
+/// `Widget::new` / `Self::helper` / `crate::mod::f` → receiver / path type hint.
+fn rust_scoped_path_type_hint(func: Node, source: &[u8], from_fn: &Symbol) -> Option<String> {
+    let path = func.child_by_field_name("path")?;
+    let path_text = path.utf8_text(source).ok()?.trim();
+    if path_text == "Self" || path_text.ends_with("::Self") {
+        return rust_enclosing_impl_type(from_fn);
+    }
+    // `crate::foo::Bar` / `super::Bar` / `Bar` — take the rightmost path segment.
+    Some(rust_simple_type_name(path_text))
+}
+
+/// Inherent / trait-impl methods store `Type::method` or `Type::<init>` in `qualified_name`.
+///
+/// Only [`SymbolType::Method`] resolves `Self` — free functions whose QN is
+/// `module::path::fn` must not treat the last path segment as an impl type.
+fn rust_enclosing_impl_type(from_fn: &Symbol) -> Option<String> {
+    if from_fn.symbol_type != SymbolType::Method {
+        return None;
+    }
+    let qn = from_fn.qualified_name.as_deref()?;
+    let (owner, _) = qn.rsplit_once("::")?;
+    let simple = owner
+        .rsplit("::")
+        .next()
+        .unwrap_or(owner)
+        .split('<')
+        .next()
+        .unwrap_or(owner)
+        .trim();
+    if simple.is_empty() || simple == "Self" {
+        return None;
+    }
+    Some(simple.to_string())
 }
 
 /// Best-effort: function-pointer / indirect C calls.

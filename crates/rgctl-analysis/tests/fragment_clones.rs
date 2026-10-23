@@ -74,6 +74,7 @@ fn test_stage1_bitwise_bloom_pruning() {
         None,
         None,
         Some("for item in items { if item.valid() { process(item); } }"),
+        None,
     );
     node1.token_bloom = Some(bloom1);
 
@@ -86,6 +87,7 @@ fn test_stage1_bitwise_bloom_pruning() {
         None,
         None,
         Some("let html = div + span; return html;"),
+        None,
     );
     node2.token_bloom = Some(bloom2);
 
@@ -107,7 +109,7 @@ fn test_stage1_bitwise_bloom_pruning() {
 
     // Query for tokens in payment fragment
     let seed_text = "for item in items { process(item); }";
-    let seed_bloom = build_token_bloom("", None, None, Some(seed_text));
+    let seed_bloom = build_token_bloom("", None, None, Some(seed_text), None);
 
     let filters = FragmentCloneFilters::default();
     let candidates = stage1_filter_functions(&store, &seed_bloom, &filters).unwrap();
@@ -153,13 +155,13 @@ fn service_b(items: &[i32], flag: bool) -> i32 {
         .with_file_path("src/a.rs")
         .with_location(2, 11);
     let mut node_a = node_a;
-    node_a.token_bloom = Some(build_token_bloom("service_a", None, None, Some(src1)));
+    node_a.token_bloom = Some(build_token_bloom("service_a", None, None, Some(src1), None));
 
     let node_b = Node::new(NodeType::Function, "service_b")
         .with_file_path("src/b.rs")
         .with_location(2, 12);
     let mut node_b = node_b;
-    node_b.token_bloom = Some(build_token_bloom("service_b", None, None, Some(src2)));
+    node_b.token_bloom = Some(build_token_bloom("service_b", None, None, Some(src2), None));
 
     let mut backend = MemoryBackend::new();
     backend.insert_node(node_a.clone()).unwrap();
@@ -230,13 +232,13 @@ fn func_beta(items: &[i32], verbose: bool) -> i32 {
         .with_file_path("src/a.rs")
         .with_location(2, 11);
     let mut node_a = node_a;
-    node_a.token_bloom = Some(build_token_bloom("func_alpha", None, None, Some(src1)));
+    node_a.token_bloom = Some(build_token_bloom("func_alpha", None, None, Some(src1), None));
 
     let node_b = Node::new(NodeType::Function, "func_beta")
         .with_file_path("src/b.rs")
         .with_location(2, 12);
     let mut node_b = node_b;
-    node_b.token_bloom = Some(build_token_bloom("func_beta", None, None, Some(src2)));
+    node_b.token_bloom = Some(build_token_bloom("func_beta", None, None, Some(src2), None));
 
     let mut backend = MemoryBackend::new();
     backend.insert_node(node_a).unwrap();

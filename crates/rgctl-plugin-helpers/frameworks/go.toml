@@ -1,0 +1,34 @@
+language = "go"
+
+[[rules]]
+id = "gin.echo.chi.route_call"
+framework = "gin"
+kind = "RouteCall"
+router_callees = [
+  { name = "GET", method = "GET" },
+  { name = "POST", method = "POST" },
+  { name = "PUT", method = "PUT" },
+  { name = "DELETE", method = "DELETE" },
+  { name = "PATCH", method = "PATCH" },
+  { name = "HandleFunc", method = "ANY" },
+  { name = "Handle", method = "ANY" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http gin echo chi handler"
+
+[[rules]]
+id = "uber.fx.wire.di"
+framework = "fx"
+kind = "ParamCallInject"
+provider_calls = ["Invoke", "Provide", "Build"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection provide invoke wire fx uber"
+target_vocab = "dependency injection provider service injectable"
+
+[[rules]]
+id = "go.reflection"
+framework = "go"
+kind = "ConceptTagger"
+call_callees = ["TypeOf", "ValueOf", "Indirect", "MethodByName"]
+tags = ["role:reflection"]
+vocab = "reflection reflect typeof valueof dynamic go"

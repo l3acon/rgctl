@@ -20,11 +20,16 @@ pub struct ReachingDefs {
     pub catalog: DefCatalog,
 }
 
+/// Interned variable id for dense reaching-def indexes.
+pub type VarId = u32;
+
 /// A definition of a variable at a specific statement.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Definition {
     /// Variable name.
     pub variable: String,
+    /// Interned [`VarId`] for `variable` (stable within one analysis run).
+    pub var_id: VarId,
     /// Block containing the definition.
     pub block: BlockId,
     /// Index of the defining statement within the block.
@@ -38,16 +43,42 @@ pub struct Definition {
 pub struct DefCatalog {
     /// All definitions in stable index order.
     pub defs: Vec<Definition>,
-    by_var: FxHashMap<String, Vec<usize>>,
+    /// Variable name → interned id.
+    var_ids: FxHashMap<String, VarId>,
+    /// `VarId` → definition bit indexes.
+    by_var_id: Vec<Vec<usize>>,
 }
 
 impl DefCatalog {
-    fn push(&mut self, def: Definition) -> usize {
+    /// Intern `name` to a dense [`VarId`].
+    pub fn intern_var(&mut self, name: &str) -> VarId {
+        if let Some(&id) = self.var_ids.get(name) {
+            return id;
+        }
+        let id = self.by_var_id.len() as VarId;
+        self.var_ids.insert(name.to_string(), id);
+        self.by_var_id.push(Vec::new());
+        id
+    }
+
+    /// Look up interned id when already present.
+    pub fn var_id_of(&self, name: &str) -> Option<VarId> {
+        self.var_ids.get(name).copied()
+    }
+
+    /// Definition indexes for an interned variable.
+    pub fn defs_for_var_id(&self, var_id: VarId) -> &[usize] {
+        self.by_var_id
+            .get(var_id as usize)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    fn push(&mut self, mut def: Definition) -> usize {
+        let var_id = self.intern_var(&def.variable);
+        def.var_id = var_id;
         let idx = self.defs.len();
-        self.by_var
-            .entry(def.variable.clone())
-            .or_default()
-            .push(idx);
+        self.by_var_id[var_id as usize].push(idx);
         self.defs.push(def);
         idx
     }
@@ -63,6 +94,22 @@ impl ReachingDefs {
             .get(&block)
             .into_iter()
             .flat_map(|bits| bits.iter().map(|idx| &self.catalog.defs[idx]))
+    }
+
+    /// Iterate definitions of `var` reaching the entry of `block` (VarId-indexed).
+    pub fn in_definitions_for_var<'a>(
+        &'a self,
+        block: BlockId,
+        var: &str,
+    ) -> impl Iterator<Item = &'a Definition> + 'a {
+        let var_id = self.catalog.var_id_of(var);
+        let in_bits = self.in_set.get(&block);
+        let catalog = &self.catalog;
+        var_id
+            .into_iter()
+            .flat_map(move |vid| catalog.defs_for_var_id(vid).iter().copied())
+            .filter(move |&idx| in_bits.is_some_and(|b| b.contains(idx)))
+            .map(move |idx| &catalog.defs[idx])
     }
 
     /// Iterate definitions reaching the exit of `block`.
@@ -118,8 +165,8 @@ pub fn compute_reaching_definitions(
 
         let mut kill_b = BitSet::new();
         for var in &defined_vars {
-            if let Some(all_defs_of_var) = catalog.by_var.get(var) {
-                for &def_idx in all_defs_of_var {
+            if let Some(vid) = catalog.var_id_of(var) {
+                for &def_idx in catalog.defs_for_var_id(vid) {
                     if !gen_b.contains(def_idx) {
                         kill_b.insert(def_idx);
                     }
@@ -149,12 +196,10 @@ pub fn compute_reaching_definitions(
         let gen_b = &gen_sets[&block_id];
         let kill_b = &kill_sets[&block_id];
 
-        let mut out_b = gen_b.clone();
-        for def_idx in in_b.iter() {
-            if !kill_b.contains(def_idx) {
-                out_b.insert(def_idx);
-            }
-        }
+        // OUT = gen ∪ (IN − kill) via word-level BitSet ops.
+        let mut out_b = in_b.clone();
+        out_b.difference_with(kill_b);
+        out_b.union_with(gen_b);
 
         if out_set_bits.get(&block_id) != Some(&out_b) {
             out_set_bits.insert(block_id, out_b);
@@ -183,6 +228,7 @@ fn collect_block_definitions(block: &BasicBlock, pdg: &ProgramDependenceGraph) -
             for var in &pdg_node.defined_vars {
                 defs.push(Definition {
                     variable: var.clone(),
+                    var_id: 0, // filled by DefCatalog::push
                     block: block.id,
                     statement_index: idx,
                     pdg_node: pdg_node.id,

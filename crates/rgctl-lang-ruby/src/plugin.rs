@@ -1,17 +1,18 @@
 //! Ruby `LanguagePlugin` — symbols, relations, complexity.
 
+use crate::single_pass::{extract_all_single_pass, ruby_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, ruby_call_callee, walk_calls,
-    ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin, Parameter, Relation,
-    RelationType, Result, RUBY_CALL_KINDS, SourceLocation, Symbol, SymbolType,
+    callee_name, containing_function, complexity_from_metadata, parse_with_pool, ruby_call_callee,
+    walk_calls, AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin,
+    Parameter, Relation, RelationType, Result, RUBY_CALL_KINDS, SourceLocation, Symbol, SymbolType,
 };
 use rgctl_plugin_helpers::ComplexityCalculator;
 use std::path::Path;
 use tree_sitter::{Node, Parser, Tree};
 
-const RUBY_FUNCTION_KINDS: &[&str] = &["method", "singleton_method"];
+pub(crate) const RUBY_FUNCTION_KINDS: &[&str] = &["method", "singleton_method"];
 
-const RUBY_COMPLEXITY_BRANCH_KINDS: &[&str] = &[
+pub(crate) const RUBY_COMPLEXITY_BRANCH_KINDS: &[&str] = &[
     "if",
     "unless",
     "while",
@@ -36,19 +37,17 @@ impl RubyPlugin {
         Ok(Self { _parser: parser })
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_ruby::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Ruby grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Ruby source".to_string(),
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
+        parse_with_pool("ruby", tree_sitter_ruby::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
-    fn loc(node: Node, file_path: &str) -> SourceLocation {
+    pub(crate) fn loc(node: Node, file_path: &str) -> SourceLocation {
         SourceLocation {
             file: file_path.to_string(),
             start_line: node.start_position().row + 1,
@@ -58,7 +57,7 @@ impl RubyPlugin {
         }
     }
 
-    fn constant_text(node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn constant_text(node: Node, source: &[u8]) -> Option<String> {
         match node.kind() {
             "constant" | "identifier" | "simple_symbol" => node
                 .utf8_text(source)
@@ -84,7 +83,7 @@ impl RubyPlugin {
         }
     }
 
-    fn method_name(node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn method_name(node: Node, source: &[u8]) -> Option<String> {
         node.child_by_field_name("name")
             .and_then(|n| Self::constant_text(n, source))
             .or_else(|| {
@@ -98,7 +97,7 @@ impl RubyPlugin {
             })
     }
 
-    fn join_qn(prefix: &[String], name: &str) -> String {
+    pub(crate) fn join_qn(prefix: &[String], name: &str) -> String {
         if prefix.is_empty() {
             name.to_string()
         } else {
@@ -147,7 +146,7 @@ impl RubyPlugin {
         Ok(out)
     }
 
-    fn extract_method(
+    pub(crate) fn extract_method(
         &self,
         node: Node,
         source: &[u8],
@@ -223,7 +222,7 @@ impl RubyPlugin {
         })
     }
 
-    fn extract_class_or_module(
+    pub(crate) fn extract_class_or_module(
         &self,
         node: Node,
         source: &[u8],
@@ -561,7 +560,7 @@ impl RubyPlugin {
         Ok(())
     }
 
-    fn require_path_arg(&self, call: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn require_path_arg(&self, call: Node, source: &[u8]) -> Option<String> {
         let mut c = call.walk();
         for child in call.children(&mut c) {
             if child.kind() == "argument_list" || child.kind() == "string" {
@@ -600,7 +599,7 @@ impl RubyPlugin {
         Ok(relations)
     }
 
-    fn extract_mixin_and_new_edges(
+    pub(crate) fn extract_mixin_and_new_edges(
         &self,
         root: Node,
         source: &[u8],
@@ -804,11 +803,11 @@ impl LanguagePlugin for RubyPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(ruby_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -818,6 +817,9 @@ impl LanguagePlugin for RubyPlugin {
     ) -> Result<Option<ComplexityMetrics>> {
         if symbol.symbol_type != SymbolType::Function {
             return Ok(None);
+        }
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
         }
         let tree = self.parse(Path::new(&symbol.location.file), source)?;
         let target_line = symbol.location.start_line.saturating_sub(1);

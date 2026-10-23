@@ -2,8 +2,8 @@
 
 use rgctl::analysis::{
     BetweennessCentrality, BlastRadiusEngine, CentralityAnalyzer, CentralityScores, FastPageRank,
-    FlatGraphIndex, PAGERANK_TOLERANCE, PetGraphView, PolicyRegistry, PolicyViolation,
-    check_policies, default_behavioral_edges,
+    FlatGraphIndex, NodeRole, PAGERANK_TOLERANCE, PetGraphView, PolicyRegistry, PolicyViolation,
+    check_policies, classify_node_role, default_behavioral_edges, filter_scores_by_role,
 };
 use rgctl::graph::CodeGraph;
 use rgctl::graph::backend::GraphBackend;
@@ -326,4 +326,64 @@ fn build_monorepo_mock(nodes: usize, edges: usize) -> CodeGraph {
         }
     }
     graph
+}
+
+/// Production-aware PageRank hotspots demote test helpers and stdlib intrinsics.
+#[test]
+fn production_hotspots_exclude_tests_and_intrinsics() {
+    let mut graph = CodeGraph::new();
+    let backend = graph.backend_mut();
+
+    let prod = Node::new(NodeType::Function, "checkout")
+        .with_qualified_name("app::checkout".to_string())
+        .with_file_path("src/checkout.rs".to_string());
+    let test_helper = Node::new(NodeType::Function, "assert_helper")
+        .with_qualified_name("app::tests::assert_helper".to_string())
+        .with_file_path("src/lib.rs".to_string());
+    let intrinsic = Node::new(NodeType::Function, "println!")
+        .with_qualified_name("println!".to_string())
+        .with_property("is_external_stub".to_string(), "true".to_string());
+
+    let id_prod = prod.id;
+    let id_test = test_helper.id;
+    let id_intr = intrinsic.id;
+    backend.insert_node(prod).unwrap();
+    backend.insert_node(test_helper).unwrap();
+    backend.insert_node(intrinsic).unwrap();
+
+    // Hub edges into test/intrinsic so raw PageRank would prefer them.
+    for _ in 0..20 {
+        insert_call(backend, id_prod, id_test);
+        insert_call(backend, id_prod, id_intr);
+    }
+    insert_call(backend, id_test, id_prod);
+
+    let view = PetGraphView::from_backend(backend).unwrap();
+    let (scores, _) = FastPageRank::new(40, 0.85).compute(&view, &[EdgeType::Calls]);
+
+    let role_of = |id: Uuid| {
+        let n = backend.get_node(id).ok().flatten().unwrap();
+        let stub = n.get_property("is_external_stub") == Some("true");
+        let name = n.qualified_name.as_deref().unwrap_or(n.name.as_str());
+        classify_node_role(name, n.file_path.as_deref(), stub)
+    };
+    assert_eq!(role_of(id_prod), NodeRole::Production);
+    assert_eq!(role_of(id_test), NodeRole::Test);
+    assert_eq!(role_of(id_intr), NodeRole::ExternalIntrinsic);
+
+    let filtered = filter_scores_by_role(&scores, false, role_of);
+    assert!(
+        filtered.iter().any(|(id, _)| *id == id_prod),
+        "production checkout must remain"
+    );
+    assert!(
+        filtered.iter().all(|(id, _)| *id != id_test && *id != id_intr),
+        "test/intrinsic must be excluded by default"
+    );
+
+    let with_tests = filter_scores_by_role(&scores, true, role_of);
+    assert!(
+        with_tests.len() >= filtered.len(),
+        "include_tests should keep more (or equal) candidates"
+    );
 }

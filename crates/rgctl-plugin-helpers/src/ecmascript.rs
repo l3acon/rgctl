@@ -377,7 +377,10 @@ pub fn find_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
 
 /// True for arrow / anonymous function expressions (not declarations or methods).
 pub fn is_function_expression_kind(kind: &str) -> bool {
-    matches!(kind, "arrow_function" | "function_expression")
+    matches!(
+        kind,
+        "arrow_function" | "function_expression" | "generator_function"
+    )
 }
 
 /// True when `node` is a real JS/TS callable CST node (not the anonymous
@@ -768,6 +771,41 @@ mod tests {
         assert_eq!(
             ecmascript_function_symbol_name(arrow, source.as_bytes()).as_deref(),
             Some("uniqueOne")
+        );
+    }
+
+    #[test]
+    fn ts_method_preceding_sibling_decorators() {
+        let source = r#"
+@Controller('users')
+export class UsersController {
+  constructor(private readonly svc: UserService) {}
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return id;
+  }
+}
+"#;
+        let tree = parse_ts(source);
+        let body = find_kind(tree.root_node(), "class_body").expect("class_body");
+        let mut methods = Vec::new();
+        let mut c = body.walk();
+        for child in body.children(&mut c) {
+            if child.kind() == "method_definition" {
+                methods.push(child);
+            }
+        }
+        assert!(methods.len() >= 2, "need constructor + findOne");
+        let find_one = methods[1];
+        // Simulate single-pass: hold a TreeCursor while resolving decorators.
+        let hold = tree.root_node().walk();
+        let _ = hold.node();
+        let decs = crate::decorators_for_node(find_one, source.as_bytes());
+        assert!(
+            decs.iter()
+                .any(|(n, a)| n == "Get" && a.as_ref().is_some_and(|s| s.contains(":id"))),
+            "expected Get(':id') from preceding siblings, got {decs:?}"
         );
     }
 }

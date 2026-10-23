@@ -1,0 +1,313 @@
+//! Single-pass AST extraction for Bash (`ScopeStack` + `KindDispatchTable`).
+
+use crate::plugin::Plugin;
+use rgctl_plugin_api::*;
+use rgctl_plugin_api::{Error, Result};
+use rgctl_plugin_helpers::{extract_name_from_node, node_to_location};
+use std::path::Path;
+use std::sync::OnceLock;
+use tree_sitter::Node;
+
+const MANIFEST_JSON: &str = include_str!("../bash-ast-coverage.json");
+
+/// Plugin-handled AST kinds (source of truth for declared_ast_handlers).
+const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
+    ("case_statement", HandlerMask::CFG_STMT),
+    ("command", HandlerMask::RELATION),
+    ("for_statement", HandlerMask::CFG_STMT),
+    ("function_definition", HandlerMask::SYMBOL),
+    ("if_statement", HandlerMask::CFG_STMT),
+    ("pipeline", HandlerMask::CFG_STMT),
+    ("while_statement", HandlerMask::CFG_STMT),
+];
+
+const AST_MAX_DEPTH: usize = 2048;
+
+static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
+static DISPATCH: OnceLock<KindDispatchTable> = OnceLock::new();
+
+fn grammar() -> tree_sitter::Language {
+    tree_sitter_bash::LANGUAGE.into()
+}
+
+/// Process-wide AST handler table (coverage sync + introspection).
+pub fn ast_handlers() -> &'static AstHandlerTable {
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&grammar(), HANDLED_KINDS))
+}
+
+fn dispatch() -> &'static KindDispatchTable {
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&grammar(), MANIFEST_JSON))
+}
+
+struct PendingCall<'a> {
+    node: Node<'a>,
+    from_symbol_idx: usize,
+    callee: String,
+}
+
+enum Visit<'a> {
+    Pre(Node<'a>, usize),
+    LeaveScope,
+    LeaveGuard,
+}
+
+/// Bash `command` name is `command_name` → `word` (not `identifier`).
+fn bash_command_word(node: Node, source: &[u8]) -> Option<String> {
+    let name_node = node.child_by_field_name("name").or_else(|| {
+        let mut c = node.walk();
+        node.children(&mut c).find(|ch| ch.kind() == "command_name")
+    })?;
+    if name_node.kind() == "word" {
+        return name_node.utf8_text(source).ok().map(|s| s.to_string());
+    }
+    let mut c = name_node.walk();
+    for ch in name_node.children(&mut c) {
+        if ch.kind() == "word" {
+            return ch.utf8_text(source).ok().map(|s| s.to_string());
+        }
+    }
+    name_node.utf8_text(source).ok().map(|s| s.to_string())
+}
+
+fn flush_bash_call(
+    pending: &PendingCall<'_>,
+    symbols: &[Symbol],
+    file_path: &Path,
+    relations: &mut Vec<Relation>,
+) {
+    let Some(from_fn) = symbols.get(pending.from_symbol_idx) else {
+        return;
+    };
+    let from = from_fn
+        .qualified_name
+        .clone()
+        .unwrap_or_else(|| from_fn.name.clone());
+    let same_file_matches: Vec<_> = symbols
+        .iter()
+        .filter(|s| {
+            s.name == pending.callee
+                && s.symbol_type == SymbolType::Function
+                && s.location.file == file_path.to_string_lossy()
+        })
+        .collect();
+    let local_target = match same_file_matches.as_slice() {
+        [only] => only
+            .qualified_name
+            .clone()
+            .unwrap_or_else(|| pending.callee.clone()),
+        _ => pending.callee.clone(),
+    };
+    relations.push(Relation {
+        from,
+        to: local_target,
+        relation_type: RelationType::Calls,
+        location: node_to_location(pending.node, &file_path.to_string_lossy()),
+        metadata: serde_json::json!({ "language": "bash" }),
+        to_qualified_hint: None,
+        to_type_hint: None,
+    });
+}
+
+/// Single iterative DFS: function symbols + command Calls + complexity.
+pub fn extract_all_single_pass(
+    _plugin: &Plugin,
+    file_path: &Path,
+    source: &[u8],
+) -> Result<ExtractAllResult> {
+    let tree = parse_with_pool("bash", grammar(), source).map_err(|e| Error::ParseError {
+        file: file_path.to_path_buf(),
+        line: 0,
+        message: e,
+    })?;
+    let root = tree.root_node();
+    let file_path_str = file_path.to_string_lossy();
+    let dispatch = dispatch();
+
+    let mut ctx = SinglePassCtx::new(dispatch);
+    let mut relations = Vec::new();
+    let mut pending_calls: Vec<PendingCall<'_>> = Vec::new();
+    let mut depth_warned = false;
+
+    let mut stack = vec![Visit::Pre(root, 0)];
+
+    while let Some(visit) = stack.pop() {
+        match visit {
+            Visit::LeaveScope => {
+                if let Some(frame) = ctx.leave_scope() {
+                    ctx.harvest_function_complexity(&frame);
+                }
+            }
+            Visit::LeaveGuard => {
+                ctx.scopes.leave_branch();
+                let _ = ctx.leave_scope();
+            }
+            Visit::Pre(node, depth) => {
+                if depth > AST_MAX_DEPTH {
+                    if !depth_warned {
+                        tracing::warn!(
+                            file = %file_path.display(),
+                            depth = AST_MAX_DEPTH,
+                            "AST depth limit exceeded during single-pass extract; skipping deep branches"
+                        );
+                        depth_warned = true;
+                    }
+                    continue;
+                }
+
+                let mask = rgctl_plugin_api::dispatch_lookup_tracked(dispatch, node.kind_id());
+                let _ = mask;
+                let kind = node.kind();
+                let mut pushed_scope = false;
+
+                if kind == "function_definition" {
+                    if let Some(name) = extract_name_from_node(node, source)
+                        .ok()
+                        .flatten()
+                        .or_else(|| {
+                            node.child_by_field_name("name")
+                                .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string()))
+                        })
+                    {
+                        let loc =
+                            ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                        let qn = name.clone();
+                        ctx.symbols.push(Symbol {
+                            name: name.clone(),
+                            symbol_type: SymbolType::Function,
+                            qualified_name: Some(qn.clone()),
+                            location: node_to_location(node, &file_path_str),
+                            signature: None,
+                            return_type: None,
+                            parameters: vec![],
+                            fields: vec![],
+                            modifiers: vec![],
+                            documentation: None,
+                            metadata: serde_json::json!({ "language": "bash" }),
+                        });
+                        ctx.enter_scope(
+                            ScopeKind::Function,
+                            Some(name),
+                            qn,
+                            node.start_byte(),
+                            node.end_byte(),
+                            true,
+                        );
+                        if let Some(f) = ctx.scopes.current_function_mut() {
+                            f.complexity.cyclomatic = 1;
+                            f.complexity.loc = loc;
+                        }
+                        pushed_scope = true;
+                    }
+                }
+
+                if kind == "command" {
+                    if let Some(word) = bash_command_word(node, source) {
+                        if matches!(word.as_str(), "return" | "exit") {
+                            if ctx.scopes.current_function().is_some() {
+                                ctx.scopes.note_return();
+                            }
+                        } else if let Some(frame) = ctx.scopes.current_function() {
+                            if let Some(idx) = frame.symbol_idx {
+                                pending_calls.push(PendingCall {
+                                    node,
+                                    from_symbol_idx: idx,
+                                    callee: word,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if ctx.scopes.current_function().is_some() {
+                    match kind {
+                        "if_statement"
+                        | "while_statement"
+                        | "for_statement"
+                        | "case_statement"
+                        | "pipeline" => {
+                            let delta = 1 + ctx
+                                .scopes
+                                .current_function()
+                                .map(|f| f.complexity.cognitive_nesting)
+                                .unwrap_or(0);
+                            ctx.scopes.note_branch(delta);
+                            ctx.scopes.enter_branch();
+                            let scope_depth = ctx.scopes.depth();
+                            ctx.scopes.push(ScopeFrame::new(
+                                ScopeKind::GuardBlock,
+                                None,
+                                String::new(),
+                                node.start_byte(),
+                                node.end_byte(),
+                                scope_depth,
+                            ));
+                            stack.push(Visit::LeaveGuard);
+                        }
+                        _ => {}
+                    }
+                }
+
+                if pushed_scope {
+                    stack.push(Visit::LeaveScope);
+                }
+                for i in (0..node.child_count()).rev() {
+                    if let Some(child) = node.child(i) {
+                        stack.push(Visit::Pre(child, depth + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    for pending in pending_calls {
+        flush_bash_call(&pending, &ctx.symbols, file_path, &mut relations);
+    }
+
+    Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn bash_extracts_function_call_and_complexity() {
+        let src = r#"
+foo() {
+  if true; then
+    bar
+    return 1
+  fi
+}
+"#;
+        let plugin = Plugin::new().unwrap();
+        let path = PathBuf::from("t.sh");
+        let result = extract_all_single_pass(&plugin, &path, src.as_bytes()).unwrap();
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function && s.name == "foo"),
+            "expected function foo"
+        );
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to == "bar"
+            }),
+            "expected Calls to bar, got {:?}",
+            result.relations
+        );
+        let foo = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "foo")
+            .expect("foo");
+        let metrics = complexity_from_metadata(foo).expect("rgctl_complexity");
+        assert!(
+            metrics.cyclomatic >= 2,
+            "expected cyclomatic >= 2, got {}",
+            metrics.cyclomatic
+        );
+    }
+}

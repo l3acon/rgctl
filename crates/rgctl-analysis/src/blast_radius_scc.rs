@@ -113,14 +113,14 @@ impl BlastRadiusEngine {
             "SCC decomposition complete"
         );
 
-        // Step 2: Build node → SCC mapping
-        let mut node_to_scc_idx: HashMap<NodeIndex, usize> = HashMap::new();
+        // Step 2: Dense node → SCC mapping (index == NodeIndex).
+        let mut node_to_scc_idx = vec![usize::MAX; node_count];
         let mut scc_members: Vec<Vec<Uuid>> = vec![Vec::new(); scc_count];
 
         for (scc_id, component) in sccs.iter().enumerate() {
             for &node_u32 in component {
                 let node_idx = NodeIndex::new(node_u32 as usize);
-                node_to_scc_idx.insert(node_idx, scc_id);
+                node_to_scc_idx[node_u32 as usize] = scc_id;
                 if let Some(uuid) = view.get_uuid(node_idx) {
                     scc_members[scc_id].push(uuid);
                 }
@@ -181,8 +181,11 @@ impl BlastRadiusEngine {
             if ty != EdgeType::Calls {
                 return;
             }
-            let from_scc = node_to_scc_idx[&src];
-            let to_scc = node_to_scc_idx[&dst];
+            let from_scc = node_to_scc_idx[src.index()];
+            let to_scc = node_to_scc_idx[dst.index()];
+            if from_scc == usize::MAX || to_scc == usize::MAX {
+                return;
+            }
 
             if from_scc != to_scc {
                 let edge_key = (from_scc, to_scc);

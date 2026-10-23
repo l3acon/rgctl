@@ -167,17 +167,124 @@ impl TokenSpaceAccumulator {
 
     /// Tokenize text (identifier-like) and accumulate, optionally resized to `out_dims`.
     pub fn accumulate_text(&self, text: &str, out_dims: usize) -> Vec<f32> {
-        let mut tokens = HashSet::new();
-        rgctl_graph::tokenize_string_into(text, &mut tokens);
-        // Also accept simple alphanumeric splits for query strings.
-        for piece in text.split(|c: char| !c.is_alphanumeric() && c != '_') {
-            if piece.len() >= rgctl_graph::MIN_TOKEN_LEN {
-                tokens.insert(piece.to_ascii_lowercase());
-            }
-        }
+        let tokens = normalize_semantic_query_tokens(text);
         let native = self.accumulate_tokens(&tokens);
         resize_dense(&native, out_dims)
     }
+}
+
+const QUERY_FILLER: &[&str] = &[
+    "hey", "give", "please", "show", "find", "list", "tell", "get", "all", "the", "what",
+    "where", "which", "who", "are", "our", "for", "with", "that", "this", "have", "has",
+    "from", "into", "classes", "class", "functions", "function", "methods", "method",
+    "files", "file", "symbols", "symbol", "types", "type",
+];
+
+/// Normalize a natural-language semantic query into domain tokens.
+///
+/// Expands endpoint/controller/… synonyms, filters conversational filler, and
+/// rewrites `"end points"`-style phrases before tokenizing.
+pub fn normalize_semantic_query_tokens(text: &str) -> HashSet<String> {
+    let mut lowered = text.to_ascii_lowercase();
+    for phrase in ["end points", "end-points", "end_points", "end point"] {
+        if lowered.contains(phrase) {
+            lowered = lowered.replace(phrase, "endpoint endpoints");
+        }
+    }
+
+    let mut raw = HashSet::new();
+    rgctl_graph::tokenize_string_into(&lowered, &mut raw);
+    for piece in lowered.split(|c: char| !c.is_alphanumeric() && c != '_') {
+        if piece.len() >= rgctl_graph::MIN_TOKEN_LEN {
+            raw.insert(piece.to_ascii_lowercase());
+        }
+    }
+
+    let filtered: HashSet<String> = raw
+        .iter()
+        .filter(|t| !QUERY_FILLER.contains(&t.as_str()))
+        .cloned()
+        .collect();
+    let mut tokens = if filtered.is_empty() { raw } else { filtered };
+
+    expand_domain_synonyms(&mut tokens);
+    tokens
+}
+
+fn expand_domain_synonyms(tokens: &mut HashSet<String>) {
+    let snapshot: Vec<String> = tokens.iter().cloned().collect();
+    for t in snapshot {
+        match t.as_str() {
+            "endpoint" | "endpoints" => {
+                tokens.insert("endpoint".into());
+                tokens.insert("endpoints".into());
+                tokens.insert("route".into());
+            }
+            "route" | "routes" => {
+                tokens.insert("route".into());
+                tokens.insert("routes".into());
+                tokens.insert("endpoint".into());
+            }
+            "controller" | "controllers" => {
+                tokens.insert("controller".into());
+                tokens.insert("controllers".into());
+            }
+            "service" | "services" => {
+                tokens.insert("service".into());
+                tokens.insert("services".into());
+            }
+            "handler" | "handlers" => {
+                tokens.insert("handler".into());
+                tokens.insert("handlers".into());
+            }
+            "repository" | "repositories" => {
+                tokens.insert("repository".into());
+                tokens.insert("repositories".into());
+            }
+            "provider" | "providers" => {
+                tokens.insert("provider".into());
+                tokens.insert("providers".into());
+            }
+            "reflection" | "reflections" | "reflective" | "reflect" => {
+                tokens.insert("reflection".into());
+                tokens.insert("reflect".into());
+                tokens.insert("reflective".into());
+            }
+            "inject" | "injected" | "injection" | "injections" | "injectable" | "di" => {
+                tokens.insert("inject".into());
+                tokens.insert("injected".into());
+                tokens.insert("injection".into());
+                tokens.insert("dependency".into());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Collapse synonym groups to one canonical token for `--keyword-and` queries.
+pub fn canonicalize_query_keywords(tokens: HashSet<String>) -> Vec<String> {
+    const GROUPS: &[&[&str]] = &[
+        &["endpoint", "endpoints", "route", "routes"],
+        &["controller", "controllers"],
+        &["service", "services"],
+        &["handler", "handlers"],
+        &["repository", "repositories"],
+        &["provider", "providers"],
+        &["reflection", "reflections", "reflective", "reflect"],
+        &["inject", "injected", "injection", "injections", "injectable", "di", "dependency"],
+    ];
+    let mut out = tokens;
+    for group in GROUPS {
+        if group.iter().any(|t| out.contains(*t)) {
+            for t in *group {
+                out.remove(*t);
+            }
+            out.insert(group[0].to_string());
+        }
+    }
+    let mut list: Vec<String> = out.into_iter().collect();
+    list.sort_unstable();
+    list
 }
 
 /// Parse `assets/vocab_tokens.txt` (one token per line, `#` comments).
@@ -410,5 +517,23 @@ mod tests {
         let floats = emb.embed("checkout order").unwrap();
         assert_eq!(floats.len(), 64);
         assert_eq!(emb.embed_binary("checkout order").unwrap().len(), 8);
+    }
+
+    #[test]
+    fn normalize_expands_endpoints_and_drops_filler() {
+        let tokens = normalize_semantic_query_tokens("hey give me all my end points");
+        assert!(tokens.contains("endpoint"));
+        assert!(tokens.contains("endpoints"));
+        assert!(tokens.contains("route"));
+        assert!(!tokens.contains("hey"));
+        assert!(!tokens.contains("give"));
+        let keywords = canonicalize_query_keywords(tokens);
+        assert_eq!(keywords, vec!["endpoint".to_string()]);
+    }
+
+    #[test]
+    fn normalize_keeps_literal_class_when_only_filler_left() {
+        let tokens = normalize_semantic_query_tokens("class");
+        assert!(tokens.contains("class"));
     }
 }

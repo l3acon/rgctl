@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 rgctl-registry = { workspace = true }
 rgctl-config-formats = { workspace = true }
+rgctl-ast-coverage = { workspace = true }
 rgctl-lang-rust = { workspace = true }
 rgctl-lang-python = { workspace = true }
 rgctl-lang-javascript = { workspace = true }
@@ -25,6 +26,58 @@ rgctl-lang-puppet = { workspace = true }
 rgctl-lang-erb = { workspace = true }
 rgctl-lang-kotlin = { workspace = true }
 rgctl-lang-groovy = { workspace = true }
+rgctl-lang-swift = { workspace = true }
+rgctl-lang-scala = { workspace = true }
+rgctl-lang-dart = { workspace = true }
+rgctl-lang-elixir = { workspace = true }
+rgctl-lang-lua = { workspace = true }
+rgctl-lang-bash = { workspace = true }
+rgctl-lang-sql = { workspace = true }
+rgctl-lang-hcl = { workspace = true }
+rgctl-lang-zig = { workspace = true }
+rgctl-lang-nix = { workspace = true }
+rgctl-lang-proto = { workspace = true }
+rgctl-lang-solidity = { workspace = true }
+rgctl-lang-ocaml = { workspace = true }
+rgctl-lang-elisp = { workspace = true }
+rgctl-lang-powershell = { workspace = true }
+rgctl-lang-starlark = { workspace = true }
+rgctl-lang-make = { workspace = true }
+rgctl-lang-cmake = { workspace = true }
+rgctl-lang-vhdl = { workspace = true }
+rgctl-lang-glsl = { workspace = true }
+rgctl-lang-cuda = { workspace = true }
+rgctl-lang-odin = { workspace = true }
+rgctl-lang-d = { workspace = true }
+rgctl-lang-scheme = { workspace = true }
+rgctl-lang-racket = { workspace = true }
+rgctl-lang-fsharp = { workspace = true }
+rgctl-lang-gleam = { workspace = true }
+rgctl-lang-erlang = { workspace = true }
+rgctl-lang-elm = { workspace = true }
+rgctl-lang-prisma = { workspace = true }
+rgctl-lang-graphql = { workspace = true }
+rgctl-lang-svelte = { workspace = true }
+rgctl-lang-css = { workspace = true }
+rgctl-lang-html = { workspace = true }
+rgctl-lang-clojure = { workspace = true }
+rgctl-lang-objc = { workspace = true }
+rgctl-lang-verilog = { workspace = true }
+rgctl-lang-fortran = { workspace = true }
+rgctl-lang-gdscript = { workspace = true }
+rgctl-lang-haskell = { workspace = true }
+rgctl-lang-r = { workspace = true }
+rgctl-lang-julia = { workspace = true }
+# JSON/YAML: optional Tier-2 query crates exist but are not dual-registered
+# (config-format plugins own `.json` / `.yaml` ingest).
 
 [build-dependencies]
 rgctl-ast-coverage = { workspace = true }
+
+[[bench]]
+name = "single_pass_vs_baseline"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rgctl-plugin-api = { workspace = true }

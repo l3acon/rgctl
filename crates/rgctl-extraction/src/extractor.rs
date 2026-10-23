@@ -1,11 +1,11 @@
 //! Symbol and relationship extraction
 
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
-use crate::graph_builder::GraphBuilder;
+use crate::facts_cache::{FactsCache, facts_key_for_hash};
+use crate::graph_builder::{GraphBuilder, is_inheritance_relation};
 use crate::usage_detector::{ConfigUsage, ConfigUsageDetector};
 use rgctl_error::{Error, Result};
 use rgctl_graph::code_index::hash_code;
-use rgctl_graph::content_store::hash_bytes;
 use rgctl_graph::structural_sketch::{TokenBloom, build_token_bloom};
 use rgctl_plugin_api::{ConfigKey, Relation, Symbol, SymbolType};
 use rgctl_registry::LanguageRegistry;
@@ -15,8 +15,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Extracts symbols and relationships from a single file.
+#[derive(Clone)]
 pub struct Extractor {
     registry: Arc<LanguageRegistry>,
+    /// Optional content-addressed FileFacts cache (warm discover / update).
+    facts: Option<Arc<FactsCache>>,
 }
 
 /// Precomputed pass-1 work for one symbol (filled on extract workers).
@@ -77,7 +80,21 @@ struct Pass2Profile {
 impl Extractor {
     /// Create a new extractor backed by the given registry.
     pub fn new(registry: Arc<LanguageRegistry>) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            facts: None,
+        }
+    }
+
+    /// Attach a shared FileFacts cache used to skip Tree-Sitter on cache hits.
+    pub fn with_facts_cache(mut self, facts: Arc<FactsCache>) -> Self {
+        self.facts = Some(facts);
+        self
+    }
+
+    /// Shared facts cache, if configured.
+    pub fn facts_cache(&self) -> Option<&Arc<FactsCache>> {
+        self.facts.as_ref()
     }
 
     /// Discover and extract all processable files under `root`.
@@ -110,9 +127,23 @@ impl Extractor {
     /// recorded on the returned symbols and relations, but it does not have to
     /// exist on disk.
     pub fn extract_file_with_source(&self, path: &Path, source: Vec<u8>) -> Result<FileExtraction> {
-        let file_hash = Some(hash_bytes(&source));
+        // Single BLAKE3: hex for FileTracker, raw bytes for FactsKey.
+        let digest = blake3::hash(&source);
+        let file_hash = Some(digest.to_hex().to_string());
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
-            let extracted = plugin.extract_all(path, &source)?;
+            let extracted = if let Some(facts) = &self.facts {
+                let key = facts_key_for_hash(plugin.as_ref(), *digest.as_bytes());
+                if let Some(cached) = facts.get(&key) {
+                    cached
+                } else {
+                    let fresh = plugin.extract_all(path, &source)?;
+                    // Encode once into Arc<[u8]> — do not retain decoded trees in the cache.
+                    facts.put(key, &fresh);
+                    fresh
+                }
+            } else {
+                plugin.extract_all(path, &source)?
+            };
             let config_usages = ConfigUsageDetector::detect(plugin.language_id(), &source, path);
             let symbol_preps = prepare_symbol_pass1(&source, &extracted.symbols);
             return Ok(FileExtraction {
@@ -262,11 +293,26 @@ impl Extractor {
         ordered.sort_by(|a, b| a.path.cmp(&b.path));
 
         let mut profile = Pass2Profile::default();
-        for tail in ordered {
+        // Inheritance first so MRO resolve can see Extends/Implements before Calls.
+        for tail in &ordered {
+            if tail.relations.is_empty() {
+                continue;
+            }
+            let relation_start = Instant::now();
+            for relation in &tail.relations {
+                if is_inheritance_relation(relation.relation_type) {
+                    builder.add_relation(relation)?;
+                }
+            }
+            profile.relation_resolution += relation_start.elapsed();
+        }
+        for tail in &ordered {
             if !tail.relations.is_empty() {
                 let relation_start = Instant::now();
                 for relation in &tail.relations {
-                    builder.add_relation(relation)?;
+                    if !is_inheritance_relation(relation.relation_type) {
+                        builder.add_relation(relation)?;
+                    }
                 }
                 profile.relation_resolution += relation_start.elapsed();
             }
@@ -284,6 +330,7 @@ impl Extractor {
                 profile.config_usage_resolution += config_usage_start.elapsed();
             }
         }
+        builder.emit_mro_overrides();
         Ok(profile)
     }
 
@@ -393,17 +440,38 @@ fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Pre
     let offsets = line_start_offsets(source);
     let mut preps = Vec::with_capacity(symbols.len());
     for symbol in symbols {
-        let body = symbol_body_from_source(source, &offsets, symbol);
-        let code_hash = body.map(hash_code);
-        let token_bloom = if matches!(symbol.symbol_type, SymbolType::Function) {
-            Some(build_token_bloom(
+        let semantic_tags = symbol
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let is_callable = matches!(
+            symbol.symbol_type,
+            SymbolType::Function | SymbolType::Method
+        );
+        let is_tagged_type = matches!(
+            symbol.symbol_type,
+            SymbolType::Class | SymbolType::Struct | SymbolType::Interface
+        ) && semantic_tags.is_some();
+        // Hash + bloom for callables; also bloom tagged Class/Struct/Interface so
+        // framework vocab participates in keyword sketches (no body hash for types).
+        let (code_hash, token_bloom) = if is_callable || is_tagged_type {
+            let body = if is_callable {
+                symbol_body_from_source(source, &offsets, symbol)
+            } else {
+                None
+            };
+            let code_hash = body.map(hash_code);
+            let token_bloom = Some(build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),
                 symbol.signature.as_deref(),
                 body,
-            ))
+                semantic_tags,
+            ));
+            (code_hash, token_bloom)
         } else {
-            None
+            (None, None)
         };
         preps.push(SymbolPass1Prep {
             code_hash,

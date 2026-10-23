@@ -1,0 +1,42 @@
+language = "php"
+
+[[rules]]
+id = "laravel.symfony.route_call"
+framework = "laravel"
+kind = "RouteCall"
+router_callees = [
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "delete", method = "DELETE" },
+  { name = "patch", method = "PATCH" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http laravel symfony"
+
+[[rules]]
+id = "laravel.symfony.route_decorator"
+framework = "symfony"
+kind = "RouteDecorator"
+method_annotations = [
+  { name = "Route", method_arg = "methods", default_method = "GET" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http laravel symfony attribute"
+
+[[rules]]
+id = "php.ctor_di"
+framework = "php"
+kind = "CtorOrStereotypeInject"
+annotations = ["Inject", "Autowired", "Required"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection constructor inject php"
+target_vocab = "dependency injection provider service injectable"
+
+[[rules]]
+id = "php.reflection"
+framework = "php"
+kind = "ConceptTagger"
+call_callees = ["ReflectionClass", "ReflectionMethod"]
+tags = ["role:reflection"]
+vocab = "reflection reflect ReflectionClass ReflectionMethod php"

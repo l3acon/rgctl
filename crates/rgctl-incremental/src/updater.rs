@@ -11,7 +11,7 @@ use rgctl_analysis::{
 };
 use rgctl_error::Result;
 use rgctl_extraction::discovery::{DiscoveryConfig, FileDiscoverer};
-use rgctl_extraction::{Extractor, GraphBuilder};
+use rgctl_extraction::{Extractor, FactsCache, GraphBuilder};
 use rgctl_graph::code_graph::CodeGraph;
 use rgctl_graph::schema::EdgeType;
 use rgctl_graph::{
@@ -201,7 +201,9 @@ impl IncrementalUpdater {
             .map(|rel| resolve_path(repo_root, rel))
             .collect();
 
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let facts = Arc::new(FactsCache::load(repo_root));
+        let extractor =
+            Extractor::new(Arc::clone(&self.registry)).with_facts_cache(Arc::clone(&facts));
         let spill_dir = work_root.join("spill_delta");
         if spill_dir.exists() {
             std::fs::remove_dir_all(&spill_dir)?;
@@ -242,6 +244,8 @@ impl IncrementalUpdater {
         if relation_edges > 0 {
             let _ = write_columnar_from_backend(graph.backend(), output_snapshot)?;
         }
+
+        let _ = facts.save(repo_root);
 
         result.duration = start.elapsed();
         Ok(result)
@@ -393,7 +397,9 @@ impl IncrementalUpdater {
             .map(|rel| resolve_path(repo_root, rel))
             .collect();
 
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let facts = Arc::new(FactsCache::load(repo_root));
+        let extractor =
+            Extractor::new(Arc::clone(&self.registry)).with_facts_cache(Arc::clone(&facts));
         let spill_dir = repo_root.join(".rgctl").join("spill_delta");
         if spill_dir.exists() {
             std::fs::remove_dir_all(&spill_dir)?;
@@ -440,6 +446,10 @@ impl IncrementalUpdater {
             // Keep columnar digest rules (topology-only edges), not PreparedGraphSnapshot hash.
             let _ = write_columnar_from_backend(graph.backend(), snapshot_path)?;
             *graph = CodeGraph::open_snapshot(snapshot_path)?;
+        }
+
+        if let Err(err) = facts.save(repo_root) {
+            eprintln!("warning: failed to persist facts.bin after update: {err}");
         }
 
         // Sidecars key off graph_digest — drop them so next discover/blast rebuilds cleanly.
@@ -525,7 +535,9 @@ impl IncrementalUpdater {
             pb.finish_with_message("rebuilding relations");
         }
 
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let facts = Arc::new(FactsCache::load(repo_root));
+        let extractor =
+            Extractor::new(Arc::clone(&self.registry)).with_facts_cache(Arc::clone(&facts));
         let mut builder = GraphBuilder::new();
         let (stream_stats, tails) = stream_into_graph(
             self.config.thread_count,
@@ -560,6 +572,7 @@ impl IncrementalUpdater {
         graph.save_to_repo(repo_root)?;
         // Persist columnar snapshot so subsequent updates can use the compact path.
         let _ = graph.save_snapshot(repo_root);
+        let _ = facts.save(repo_root);
 
         result.duration = start.elapsed();
         Ok(result)
@@ -600,7 +613,9 @@ impl IncrementalUpdater {
             return Ok(0);
         }
 
-        let extractor = Extractor::new(Arc::clone(&self.registry));
+        let facts = Arc::new(FactsCache::load(repo_root));
+        let extractor =
+            Extractor::new(Arc::clone(&self.registry)).with_facts_cache(Arc::clone(&facts));
         let symbol_index = graph.backend().build_symbol_index();
         let repo_root = repo_root.to_path_buf();
 
@@ -642,6 +657,8 @@ impl IncrementalUpdater {
             backend.insert_edges_batch(new_edges)?;
             graph.backend_mut().prune_orphan_edges()?;
         }
+
+        let _ = facts.save(&repo_root);
 
         Ok(added)
     }
@@ -705,12 +722,15 @@ fn relation_type_to_edge(relation_type: rgctl_plugin_api::RelationType) -> EdgeT
         RelationType::InheritsClass => EdgeType::InheritsClass,
         RelationType::RequiresResource => EdgeType::RequiresResource,
         RelationType::UsesFact => EdgeType::UsesFact,
+        RelationType::ExposesRoute => EdgeType::ExposesRoute,
+        RelationType::Injects => EdgeType::Injects,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::facts_key_for;
     use rgctl_graph::schema::NodeType;
     use std::fs;
     use tempfile::TempDir;
@@ -846,6 +866,170 @@ mod tests {
                 .backend()
                 .has_edge(main_id, authenticate_id, EdgeType::Calls),
             "cascade should re-extract main.rs and rebuild main→authenticate"
+        );
+    }
+
+    #[test]
+    fn facts_cache_warm_hit_skips_reparse() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        let path = root.join("src/lib.rs");
+        fs::write(&path, "pub fn alpha() {}\n").unwrap();
+        let source = fs::read(&path).unwrap();
+
+        let registry = Arc::new(rgctl_languages::default_registry());
+        let facts = Arc::new(FactsCache::new());
+        let extractor =
+            Extractor::new(Arc::clone(&registry)).with_facts_cache(Arc::clone(&facts));
+
+        let first = extractor.extract_file_with_source(&path, source.clone()).unwrap();
+        assert_eq!(facts.miss_count(), 1);
+        assert_eq!(facts.hit_count(), 0);
+        assert!(!first.symbols.is_empty());
+
+        facts.save(root).unwrap();
+        assert!(FactsCache::path_for(root).is_file());
+
+        let reloaded = Arc::new(FactsCache::load(root));
+        let extractor2 =
+            Extractor::new(Arc::clone(&registry)).with_facts_cache(Arc::clone(&reloaded));
+        let second = extractor2
+            .extract_file_with_source(&path, source)
+            .unwrap();
+        assert_eq!(reloaded.hit_count(), 1);
+        assert_eq!(reloaded.miss_count(), 0);
+        assert_eq!(first.symbols.len(), second.symbols.len());
+        assert_eq!(first.symbols[0].name, second.symbols[0].name);
+
+        let plugin = registry.get_plugin_for_file(&path).unwrap();
+        let key = facts_key_for(plugin.as_ref(), fs::read(&path).unwrap().as_slice());
+        assert!(reloaded.get(&key).is_some());
+    }
+
+    #[test]
+    fn compact_leaves_prior_snapshot_when_tmp_orphan() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+
+        let registry = Arc::new(rgctl_languages::default_registry());
+        let pipeline = ProcessingPipeline::new(Arc::clone(&registry));
+        let (graph, _) = pipeline.process_repository(root).unwrap();
+        let mut tracker = FileTracker::new(root);
+        tracker
+            .index_files(&[root.join("src/main.rs")], &graph)
+            .unwrap();
+        tracker.save().unwrap();
+        graph.save_to_repo(root).unwrap();
+        graph.save_snapshot(root).unwrap();
+
+        let snapshot = MmappedGraphSnapshot::default_path(root);
+        let before = fs::read(&snapshot).unwrap();
+        let nodes_before = graph.node_count();
+
+        // Simulate crash mid-compact: orphan .tmp without replacing the live snapshot.
+        let tmp = snapshot.with_extension("bin.tmp");
+        fs::write(&tmp, b"truncated-compact").unwrap();
+        assert_eq!(fs::read(&snapshot).unwrap(), before);
+        assert_eq!(
+            CodeGraph::open_snapshot(&snapshot).unwrap().node_count(),
+            nodes_before,
+            "live snapshot must remain readable after orphan tmp"
+        );
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn single_file_edit_cleans_stale_call_edge() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("src/main.rs"),
+            "mod util;\nfn main() { util::old_helper(); }\n",
+        )
+        .unwrap();
+        fs::write(root.join("src/util.rs"), "pub fn old_helper() {}\n").unwrap();
+
+        let registry = Arc::new(rgctl_languages::default_registry());
+        let pipeline = ProcessingPipeline::new(Arc::clone(&registry));
+        let (mut graph, _) = pipeline.process_repository(root).unwrap();
+        let mut tracker = FileTracker::new(root);
+        tracker
+            .index_files(
+                &[root.join("src/main.rs"), root.join("src/util.rs")],
+                &graph,
+            )
+            .unwrap();
+        tracker.save().unwrap();
+        graph.save_to_repo(root).unwrap();
+        graph.save_snapshot(root).unwrap();
+
+        let functions_before = graph.find_by_type(NodeType::Function).unwrap();
+        let old_id = functions_before
+            .iter()
+            .find(|n| &*n.name == "old_helper")
+            .map(|n| n.id)
+            .expect("old_helper before edit");
+        let main_id = functions_before
+            .iter()
+            .find(|n| &*n.name == "main")
+            .map(|n| n.id)
+            .expect("main");
+        assert!(
+            graph
+                .backend()
+                .has_edge(main_id, old_id, EdgeType::Calls),
+            "precondition: main→old_helper"
+        );
+
+        fs::write(root.join("src/util.rs"), "pub fn new_helper() {}\n").unwrap();
+        fs::write(
+            root.join("src/main.rs"),
+            "mod util;\nfn main() { util::new_helper(); }\n",
+        )
+        .unwrap();
+
+        let updater = IncrementalUpdater::with_options(
+            Arc::clone(&registry),
+            UpdateOptions {
+                cascade_depth: 1,
+                show_progress: false,
+                ..Default::default()
+            },
+        );
+        updater
+            .update_files(
+                &mut graph,
+                root,
+                &["src/util.rs".into(), "src/main.rs".into()],
+            )
+            .unwrap();
+
+        let functions = graph.find_by_type(NodeType::Function).unwrap();
+        assert!(
+            functions.iter().any(|n| &*n.name == "new_helper"),
+            "expected new_helper"
+        );
+        let main_id = functions.iter().find(|n| &*n.name == "main").unwrap().id;
+        let new_id = functions
+            .iter()
+            .find(|n| &*n.name == "new_helper")
+            .unwrap()
+            .id;
+        assert!(
+            graph
+                .backend()
+                .has_edge(main_id, new_id, EdgeType::Calls),
+            "main→new_helper call edge required after edit"
+        );
+        assert!(
+            !graph
+                .backend()
+                .has_edge(main_id, old_id, EdgeType::Calls),
+            "stale main→old_helper edge must be cleaned up"
         );
     }
 

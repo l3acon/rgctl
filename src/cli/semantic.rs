@@ -467,6 +467,7 @@ impl BlastSummaryProvider for EngineBlastProvider<'_> {
                 code_hash: node.code_hash.as_ref().map(|s| s.to_string()),
                 node_type: None,
                 kind: None,
+                semantic_tags: None,
             },
             result.direct_caller_ids.len(),
             result.impact_zone_ids.len(),

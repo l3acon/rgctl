@@ -8,6 +8,7 @@ use std::sync::Arc;
 #[cfg(test)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::GroovyPlugin;
 
 /// Register the Groovy language plugin.

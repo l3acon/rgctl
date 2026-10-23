@@ -20,6 +20,51 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_erb::register(registry);
     rgctl_lang_kotlin::register(registry);
     rgctl_lang_groovy::register(registry);
+    rgctl_lang_swift::register(registry);
+    rgctl_lang_scala::register(registry);
+    rgctl_lang_dart::register(registry);
+    rgctl_lang_elixir::register(registry);
+    rgctl_lang_lua::register(registry);
+    rgctl_lang_bash::register(registry);
+    rgctl_lang_sql::register(registry);
+    rgctl_lang_hcl::register(registry);
+    // Tier-2 (`handler = "queries"`)
+    rgctl_lang_zig::register(registry);
+    rgctl_lang_nix::register(registry);
+    rgctl_lang_proto::register(registry);
+    rgctl_lang_solidity::register(registry);
+    // JSON/YAML stay on config-format plugins (`rgctl-config-formats`); Tier-2
+    // query crates exist for standalone use but are not dual-registered here.
+    rgctl_lang_julia::register(registry);
+    rgctl_lang_r::register(registry);
+    rgctl_lang_haskell::register(registry);
+    rgctl_lang_gdscript::register(registry);
+    rgctl_lang_fortran::register(registry);
+    rgctl_lang_verilog::register(registry);
+    rgctl_lang_objc::register(registry);
+    rgctl_lang_clojure::register(registry);
+    rgctl_lang_ocaml::register(registry);
+    rgctl_lang_elisp::register(registry);
+    rgctl_lang_html::register(registry);
+    rgctl_lang_css::register(registry);
+    rgctl_lang_svelte::register(registry);
+    rgctl_lang_graphql::register(registry);
+    rgctl_lang_prisma::register(registry);
+    rgctl_lang_elm::register(registry);
+    rgctl_lang_erlang::register(registry);
+    rgctl_lang_gleam::register(registry);
+    rgctl_lang_fsharp::register(registry);
+    rgctl_lang_racket::register(registry);
+    rgctl_lang_scheme::register(registry);
+    rgctl_lang_d::register(registry);
+    rgctl_lang_odin::register(registry);
+    rgctl_lang_cuda::register(registry);
+    rgctl_lang_glsl::register(registry);
+    rgctl_lang_vhdl::register(registry);
+    rgctl_lang_cmake::register(registry);
+    rgctl_lang_make::register(registry);
+    rgctl_lang_starlark::register(registry);
+    rgctl_lang_powershell::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -123,12 +168,144 @@ mod tests {
     }
 
     #[test]
+    fn default_registry_can_process_tier2_query_languages() {
+        let registry = default_registry();
+        for (path, id) in [
+            ("src/main.zig", "zig"),
+            ("flake.nix", "nix"),
+            ("api/v1.proto", "proto"),
+            ("contracts/Token.sol", "solidity"),
+            ("math.jl", "julia"),
+            ("math.R", "r"),
+            ("Math.hs", "haskell"),
+            ("math.gd", "gdscript"),
+            ("math.f90", "fortran"),
+            ("adder.v", "verilog"),
+            ("Foo.m", "objc"),
+            ("math.clj", "clojure"),
+            ("math.ml", "ocaml"),
+            ("math.el", "elisp"),
+            ("index.html", "html"),
+            ("app.css", "css"),
+            ("App.svelte", "svelte"),
+            ("schema.graphql", "graphql"),
+            ("schema.prisma", "prisma"),
+            ("Math.elm", "elm"),
+            ("math.erl", "erlang"),
+            ("math.gleam", "gleam"),
+            ("Math.fs", "fsharp"),
+            ("math.rkt", "racket"),
+            ("math.scm", "scheme"),
+            ("math.d", "d"),
+            ("math.odin", "odin"),
+            ("kernel.cu", "cuda"),
+            ("main.vert", "glsl"),
+            ("adder.vhd", "vhdl"),
+            ("CMakeLists.cmake", "cmake"),
+            ("build.mk", "make"),
+            ("defs.bzl", "starlark"),
+            ("Math.ps1", "powershell"),
+        ] {
+            assert!(
+                registry.can_process_file(Path::new(path)),
+                "expected can_process {path}"
+            );
+            let plugin = registry
+                .get_plugin_for_file(Path::new(path))
+                .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
+            assert_eq!(plugin.language_id(), id);
+        }
+    }
+
+    #[test]
+    fn default_registry_can_process_new_tier1_languages() {
+        let registry = default_registry();
+        for (path, id) in [
+            ("Sources/App/Main.swift", "swift"),
+            ("src/main/scala/App.scala", "scala"),
+            ("scripts/Job.sc", "scala"),
+            ("lib/main.dart", "dart"),
+            ("lib/app.ex", "elixir"),
+            ("test/app_test.exs", "elixir"),
+            ("src/util.lua", "lua"),
+            ("scripts/setup.sh", "bash"),
+            ("scripts/run.bash", "bash"),
+            ("db/schema.sql", "sql"),
+            ("infra/main.tf", "hcl"),
+            ("infra/vars.tfvars", "hcl"),
+            ("config/app.hcl", "hcl"),
+        ] {
+            assert!(
+                registry.can_process_file(Path::new(path)),
+                "expected can_process {path}"
+            );
+            let plugin = registry
+                .get_plugin_for_file(Path::new(path))
+                .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
+            assert_eq!(plugin.language_id(), id, "path {path}");
+        }
+    }
+
+    #[test]
     fn markdown_not_treated_as_yaml_config() {
         let registry = default_registry();
         assert!(
             registry
                 .get_config_plugin_for_file(Path::new("readme.md"))
                 .is_err()
+        );
+    }
+
+    /// Bi-directional sync: each Tier-1 plugin's `declared_ast_handlers()` vs
+    /// `{lang}-ast-coverage.json` (non-tautological — handlers come from plugin code).
+    #[test]
+    fn tier1_declared_ast_handlers_sync_with_coverage_manifests() {
+        let registry = default_registry();
+        let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut failures = Vec::new();
+
+        for spec in rgctl_ast_coverage::bundled_specs() {
+            if spec.id == "markdown" {
+                // Markdown stays on the legacy multi-pass path (not CST jump-table).
+                continue;
+            }
+            let Some(plugin) = registry.get_language_plugin(spec.id) else {
+                failures.push(format!("{}: not in default_registry()", spec.id));
+                continue;
+            };
+            let Some(table) = plugin.declared_ast_handlers() else {
+                failures.push(format!(
+                    "{}: declared_ast_handlers() returned None",
+                    spec.id
+                ));
+                continue;
+            };
+            let manifest_path = crates_dir
+                .join(spec.crate_dir)
+                .join(spec.manifest_file);
+            let manifest_json = match std::fs::read_to_string(&manifest_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    failures.push(format!("{}: read {}: {e}", spec.id, manifest_path.display()));
+                    continue;
+                }
+            };
+            let lang = (spec.language)();
+            let issues = rgctl_ast_coverage::check_plugin_manifest_sync(
+                spec.id,
+                &manifest_json,
+                table,
+                &lang,
+            );
+            for issue in issues {
+                failures.push(format!("{}: {}", spec.id, issue.message));
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "plugin ↔ ast-coverage sync failures:\n{}",
+            failures.join("\n")
         );
     }
 }

@@ -277,10 +277,18 @@ pub fn extract_trait_symbols(
 
     let mut stack = vec![node];
     while let Some(n) = stack.pop() {
-        if n.kind() == "function_signature_item" || n.kind() == "function_item" {
-            if let Some(method) = extract_trait_method(n, source, file_path, &trait_name, &qn) {
-                out.push(method);
+        match n.kind() {
+            "function_signature_item" | "function_item" => {
+                if let Some(method) = extract_trait_method(n, source, file_path, &trait_name, &qn) {
+                    out.push(method);
+                }
             }
+            "associated_type" => {
+                if let Some(at) = extract_associated_type(n, source, file_path, Some(&qn)) {
+                    out.push(at);
+                }
+            }
+            _ => {}
         }
         let mut c = n.walk();
         for ch in n.children(&mut c) {
@@ -288,6 +296,171 @@ pub fn extract_trait_symbols(
         }
     }
     out
+}
+
+/// `type Foo = Bar;` → [`SymbolType::TypeAlias`].
+pub fn extract_type_item(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let aliased = node
+        .child_by_field_name("type")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(|s| s.trim().to_string());
+    let module_prefix = module_prefix_from_path(Path::new(file_path));
+    let qn = qualify_with_module(module_prefix.as_deref(), &name);
+    let mut meta = serde_json::json!({ "language": "rust", "kind": "type_item" });
+    if let Some(ref ty) = aliased {
+        meta["aliased_type"] = serde_json::Value::String(ty.clone());
+    }
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::TypeAlias,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: aliased,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: meta,
+    })
+}
+
+/// `macro_rules! name { ... }` → [`SymbolType::Macro`].
+pub fn extract_macro_definition(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let module_prefix = module_prefix_from_path(Path::new(file_path));
+    let qn = qualify_with_module(module_prefix.as_deref(), &name);
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::Macro,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: Some("macro_rules!".to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({ "language": "rust", "kind": "macro_definition" }),
+    })
+}
+
+/// `extern crate foo;` / `extern crate foo as bar;` → Import symbol.
+pub fn extract_extern_crate(node: Node, source: &[u8], file_path: &str) -> Option<Symbol> {
+    if node.kind() != "extern_crate_declaration" {
+        return None;
+    }
+    let name = node
+        .child_by_field_name("name")
+        .or_else(|| {
+            let mut c = node.walk();
+            node.children(&mut c)
+                .find(|ch| matches!(ch.kind(), "identifier" | "crate"))
+        })
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let alias = node
+        .child_by_field_name("alias")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string);
+    let binding = alias.clone().unwrap_or_else(|| name.clone());
+    let mut meta = serde_json::json!({
+        "language": "rust",
+        "kind": "extern_crate_declaration",
+        "module_path": name,
+    });
+    if let Some(a) = alias {
+        meta["alias"] = serde_json::Value::String(a);
+    }
+    Some(Symbol {
+        name: binding.clone(),
+        symbol_type: SymbolType::Import,
+        qualified_name: Some(binding),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: meta,
+    })
+}
+
+/// Trait / impl associated type (`type Item;`).
+pub fn extract_associated_type(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    owner_qn: Option<&str>,
+) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    let qn = match owner_qn {
+        Some(owner) => format!("{owner}::{name}"),
+        None => {
+            let module_prefix = module_prefix_from_path(Path::new(file_path));
+            qualify_with_module(module_prefix.as_deref(), &name)
+        }
+    };
+    Some(Symbol {
+        name,
+        symbol_type: SymbolType::TypeAlias,
+        qualified_name: Some(qn),
+        location: loc(node, file_path),
+        signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+        return_type: None,
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({
+            "language": "rust",
+            "kind": "associated_type",
+            "associated": true,
+        }),
+    })
+}
+
+/// Standalone enum variant symbol (`Status::Active`).
+pub fn extract_enum_variant_symbol(
+    node: Node,
+    source: &[u8],
+    file_path: &str,
+    enum_name: &str,
+    enum_qn: &str,
+) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source).ok())
+        .map(str::to_string)?;
+    Some(Symbol {
+        name: name.clone(),
+        symbol_type: SymbolType::Variable,
+        qualified_name: Some(format!("{enum_qn}::{name}")),
+        location: loc(node, file_path),
+        signature: None,
+        return_type: Some(enum_name.to_string()),
+        parameters: vec![],
+        fields: vec![],
+        modifiers: vec![],
+        documentation: None,
+        metadata: serde_json::json!({
+            "language": "rust",
+            "kind": "enum_variant",
+            "enum": enum_name,
+            "is_enum_variant": true,
+        }),
+    })
 }
 
 fn extract_trait_method(
@@ -485,6 +658,90 @@ fn attribute_args_text(attr_item: Node, source: &[u8]) -> Option<String> {
     Some(inner.to_string())
 }
 
+/// Emit depth relations for one CST node.
+///
+/// When `from_fn` is `Some`, it is used for Instantiates/References (single-pass
+/// `ScopeStack` path). When `None`, falls back to a line-range scan of `symbols`.
+pub fn visit_depth_relation_node(
+    node: Node,
+    source: &[u8],
+    file: &str,
+    symbols: &[Symbol],
+    from_fn: Option<&str>,
+    relations: &mut Vec<Relation>,
+) {
+    if node.kind() == "impl_item" {
+        emit_impl_relations(node, source, file, symbols, relations);
+    }
+
+    if matches!(
+        node.kind(),
+        "struct_item" | "enum_item" | "function_item" | "impl_item" | "trait_item"
+    ) {
+        if let Some(owner) = item_owner_name(node, source, symbols) {
+            emit_item_attributes(node, &owner, source, file, relations);
+        }
+    }
+
+    let from = from_fn
+        .map(str::to_string)
+        .or_else(|| enclosing_function_name(node, symbols));
+
+    match node.kind() {
+        "struct_expression" => {
+            if let Some(ref from) = from {
+                if let Some(ty) = node
+                    .child_by_field_name("name")
+                    .and_then(|n| rust_type_name(n, source))
+                {
+                    push_relation(
+                        relations,
+                        from,
+                        &ty,
+                        RelationType::Instantiates,
+                        loc(node, file),
+                        serde_json::json!({ "language": "rust" }),
+                    );
+                }
+            }
+        }
+        "call_expression" | "macro_invocation" => {
+            if let Some(ref from) = from {
+                if let Some(ty) = instantiates_from_call(node, source) {
+                    push_relation(
+                        relations,
+                        from,
+                        &ty,
+                        RelationType::Instantiates,
+                        loc(node, file),
+                        serde_json::json!({ "language": "rust" }),
+                    );
+                }
+            }
+        }
+        "field_expression" => {
+            if !is_assignment_lhs(node) {
+                if let Some(ref from) = from {
+                    if let Some(field) = node
+                        .child_by_field_name("field")
+                        .and_then(|n| n.utf8_text(source).ok())
+                    {
+                        push_relation(
+                            relations,
+                            from,
+                            field,
+                            RelationType::References,
+                            loc(node, file),
+                            serde_json::json!({ "language": "rust" }),
+                        );
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn walk_depth_relations(
     root: Node,
     source: &[u8],
@@ -509,73 +766,7 @@ pub fn walk_depth_relations(
             continue;
         }
 
-        if node.kind() == "impl_item" {
-            emit_impl_relations(node, source, &file, symbols, relations);
-        }
-
-        if matches!(
-            node.kind(),
-            "struct_item" | "enum_item" | "function_item" | "impl_item" | "trait_item"
-        ) {
-            if let Some(owner) = item_owner_name(node, source, symbols) {
-                emit_item_attributes(node, &owner, source, &file, relations);
-            }
-        }
-
-        match node.kind() {
-            "struct_expression" => {
-                if let Some(from) = enclosing_function_name(node, symbols) {
-                    if let Some(ty) = node
-                        .child_by_field_name("name")
-                        .and_then(|n| rust_type_name(n, source))
-                    {
-                        push_relation(
-                            relations,
-                            &from,
-                            &ty,
-                            RelationType::Instantiates,
-                            loc(node, &file),
-                            serde_json::json!({ "language": "rust" }),
-                        );
-                    }
-                }
-            }
-            "call_expression" | "macro_invocation" => {
-                if let Some(from) = enclosing_function_name(node, symbols) {
-                    if let Some(ty) = instantiates_from_call(node, source) {
-                        push_relation(
-                            relations,
-                            &from,
-                            &ty,
-                            RelationType::Instantiates,
-                            loc(node, &file),
-                            serde_json::json!({ "language": "rust" }),
-                        );
-                    }
-                }
-            }
-            "field_expression" => {
-                if !is_assignment_lhs(node) {
-                    if let Some(from) = enclosing_function_name(node, symbols) {
-                        if let Some(field) = node
-                            .child_by_field_name("field")
-                            .and_then(|n| n.utf8_text(source).ok())
-                        {
-                            push_relation(
-                                relations,
-                                &from,
-                                field,
-                                RelationType::References,
-                                loc(node, &file),
-                                serde_json::json!({ "language": "rust" }),
-                            );
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-
+        visit_depth_relation_node(node, source, &file, symbols, None, relations);
         push_children(&mut stack, node, depth);
     }
 }

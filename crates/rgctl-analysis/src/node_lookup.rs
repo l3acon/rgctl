@@ -12,6 +12,16 @@ pub trait NodeLookup {
     /// Lookup a node by UUID.
     fn get_node(&self, id: Uuid) -> Result<Option<Node>>;
 
+    /// Hot `(name, file_path)` when the backend can avoid cold_ext decode.
+    fn node_name_and_path_opt(&self, id: Uuid) -> Result<Option<(String, Option<String>)>> {
+        Ok(self.get_node(id)?.map(|n| {
+            (
+                n.name.to_string(),
+                n.file_path.as_ref().map(|s| s.to_string()),
+            )
+        }))
+    }
+
     /// Total node count.
     fn node_count(&self) -> usize;
 
@@ -60,6 +70,10 @@ impl NodeLookup for ColdMetadataDb {
         ColdMetadataDb::get_node(self, id)
     }
 
+    fn node_name_and_path_opt(&self, id: Uuid) -> Result<Option<(String, Option<String>)>> {
+        ColdMetadataDb::node_name_and_path(self, id)
+    }
+
     fn node_count(&self) -> usize {
         ColdMetadataDb::node_count(self)
     }
@@ -69,12 +83,7 @@ impl NodeLookup for ColdMetadataDb {
     }
 
     fn for_each_node(&self, f: &mut dyn FnMut(&Node)) -> Result<()> {
-        for id in self.store().all_node_ids() {
-            if let Some(node) = ColdMetadataDb::get_node(self, id)? {
-                f(&node);
-            }
-        }
-        Ok(())
+        ColdMetadataDb::for_each_node_seq(self, f)
     }
 
     fn collect_nodes_by_type(&self, node_type: NodeType) -> Result<Vec<Node>> {

@@ -35,6 +35,7 @@ actions
 activate
 active
 activedescendant
+actix
 actually
 adb5bd
 add
@@ -169,12 +170,14 @@ autocomplete
 autocorrect
 automatically
 automation
+autowired
 available
 average
 avg
 await
 aware
 awz
+axum
 azqqo
 azure
 azyz
@@ -223,6 +226,8 @@ bc8f8f
 bcx
 bdb76b
 bdf
+bean
+beans
 because
 been
 before
@@ -1036,6 +1041,7 @@ contextual
 continue
 control
 controller
+controllers
 controls
 convert
 cookie
@@ -1257,6 +1263,7 @@ diu
 div
 diving
 divisor
+django
 dllw
 dma
 dma_addr
@@ -1380,6 +1387,7 @@ end
 ended
 endif
 endpoint
+endpoints
 ends
 enforce
 engine
@@ -1448,6 +1456,7 @@ export
 export2
 exported
 exports
+express
 expression
 extend
 extended
@@ -1501,6 +1510,7 @@ false
 family
 far
 fast
+fastapi
 fatal
 fb98
 fbc8f
@@ -1578,6 +1588,7 @@ fixed
 fixture
 flag
 flags
+flask
 flat
 flatten
 flex
@@ -3383,6 +3394,10 @@ initialised
 initialization
 initialized
 initializer
+inject
+injectable
+injected
+injection
 inline
 inner
 inp
@@ -3419,6 +3434,7 @@ intersecting
 intersection
 interval
 into
+introspection
 inv
 invalid
 inventory
@@ -4697,6 +4713,7 @@ metrics
 microservice
 microtask
 middle
+middleware
 midnightblue
 might
 migrate
@@ -5293,6 +5310,7 @@ neighborhood
 neighborhoods
 neighbors
 nesting
+nestjs
 netdev
 network
 new
@@ -7223,6 +7241,8 @@ protobuf
 prototype
 provide
 provided
+provider
+providers
 provides
 prune
 pso
@@ -7879,7 +7899,6 @@ rawzr9jrs
 rawzrs3ts
 rawzwx
 rawzyz
-rgctl
 rcu
 reach
 reachable
@@ -7921,6 +7940,8 @@ reference
 referential
 referrer
 reflect
+reflection
+reflective
 refresh
 reg
 regenerate
@@ -7957,6 +7978,7 @@ repo
 reporting
 reports
 repos
+repositories
 repository
 representation
 reproduce
@@ -7995,6 +8017,7 @@ review
 reviews
 revoke
 rgba
+rgctl
 right
 risk
 rma
@@ -8007,6 +8030,8 @@ rotate
 rotation
 round
 rounded
+route
+routes
 row
 rows
 royalblue
@@ -8112,6 +8137,7 @@ serif
 serve
 server
 service
+services
 session
 set
 set1g0
@@ -8720,6 +8746,7 @@ splice
 split
 spot
 spread
+spring
 springgreen
 sql
 sqpo
@@ -10161,6 +10188,7 @@ weak
 web
 webgl
 webgl2
+webhook
 webkit
 websocket
 weight

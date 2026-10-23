@@ -304,6 +304,19 @@ pub fn decorators_for_node(node: Node, source: &[u8]) -> Vec<(String, Option<Str
         if parent.kind() == "decorated_definition" {
             return collect_decorator_children(parent, source);
         }
+        // TypeScript/JavaScript: method/property decorators are often preceding
+        // siblings inside `class_body` / `export_statement`, not children of the
+        // method node itself.
+        let sibling_decs = collect_preceding_sibling_decorators(node, parent, source);
+        if !sibling_decs.is_empty() {
+            let mut child_decs = collect_decorator_children(node, source);
+            if child_decs.is_empty() {
+                return sibling_decs;
+            }
+            let mut out = sibling_decs;
+            out.extend(child_decs.drain(..));
+            return out;
+        }
     }
     collect_decorator_children(node, source)
 }
@@ -316,6 +329,43 @@ fn collect_decorator_children(node: Node, source: &[u8]) -> Vec<(String, Option<
             if let Some(parsed) = decorator_name_and_args(child, source) {
                 out.push(parsed);
             }
+        }
+    }
+    out
+}
+
+fn collect_preceding_sibling_decorators(
+    node: Node,
+    parent: Node,
+    source: &[u8],
+) -> Vec<(String, Option<String>)> {
+    let mut out = Vec::new();
+    let mut pending: Vec<(String, Option<String>)> = Vec::new();
+    // Index-based walk — safe when the caller already holds a TreeCursor.
+    let target_start = node.start_byte();
+    let target_end = node.end_byte();
+    for i in 0..parent.child_count() {
+        let Some(child) = parent.child(i) else {
+            continue;
+        };
+        // Match by byte range — more stable than `Node::id()` under concurrent cursors.
+        if child.start_byte() == target_start
+            && child.end_byte() == target_end
+            && child.kind() == node.kind()
+        {
+            out.append(&mut pending);
+            break;
+        }
+        if child.kind() == "decorator" {
+            if let Some(parsed) = decorator_name_and_args(child, source) {
+                pending.push(parsed);
+            }
+        } else if !child.is_extra()
+            && child.kind() != "comment"
+            && child.kind() != ";"
+            && child.is_named()
+        {
+            pending.clear();
         }
     }
     out
@@ -392,7 +442,8 @@ pub fn decorator_name_and_args(decorator: Node, source: &[u8]) -> Option<(String
         "identifier" | "attribute" | "dotted_name" => {
             Some((python_simple_type_name(inner, source)?, None))
         }
-        "call" => {
+        // Python uses `call`; TypeScript/JavaScript use `call_expression`.
+        "call" | "call_expression" => {
             let name = inner
                 .child_by_field_name("function")
                 .and_then(|f| decorator_callee_name(f, source))?;

@@ -1,0 +1,65 @@
+language = "java"
+
+[[rules]]
+id = "spring.controller.stereotype"
+framework = "spring"
+kind = "ConceptTagger"
+annotations = ["RestController", "Controller", "GrpcService"]
+tags = ["role:controller"]
+vocab = "controller controllers rest api endpoint endpoints spring grpc"
+
+[[rules]]
+id = "spring.service.stereotype"
+framework = "spring"
+kind = "ConceptTagger"
+annotations = ["Service", "Component", "Repository", "Configuration"]
+tags = ["role:service"]
+vocab = "service services component repository bean spring"
+
+[[rules]]
+id = "spring.jaxrs.http.routes"
+framework = "spring"
+kind = "RouteDecorator"
+class_prefix_annotations = ["RequestMapping", "Path"]
+method_annotations = [
+  { name = "GetMapping", method = "GET" },
+  { name = "PostMapping", method = "POST" },
+  { name = "PutMapping", method = "PUT" },
+  { name = "DeleteMapping", method = "DELETE" },
+  { name = "PatchMapping", method = "PATCH" },
+  { name = "RequestMapping", method_arg = "method", default_method = "GET" },
+  { name = "GET", method = "GET" },
+  { name = "POST", method = "POST" },
+  { name = "PUT", method = "PUT" },
+  { name = "DELETE", method = "DELETE" },
+  { name = "PATCH", method = "PATCH" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rest api handler spring jaxrs"
+
+[[rules]]
+id = "spring.jakarta.field_di"
+framework = "spring"
+kind = "FieldAnnotationInject"
+annotations = ["Autowired", "Inject", "Resource", "Value"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection inject autowired bean field spring jakarta"
+target_vocab = "dependency injection provider service injectable bean"
+
+[[rules]]
+id = "spring.jakarta.ctor_di"
+framework = "spring"
+kind = "CtorOrStereotypeInject"
+annotations = ["Autowired", "Inject", "RestController", "Controller", "Service", "Component", "Repository", "Configuration"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection inject constructor bean spring jakarta"
+target_vocab = "dependency injection provider service injectable bean"
+
+[[rules]]
+id = "jvm.reflection"
+framework = "jvm-reflect"
+kind = "ConceptTagger"
+annotations = ["ReflectiveAccess", "RegisterForReflection"]
+call_callees = ["forName", "getDeclaredMethod", "getDeclaredField", "getMethod", "getField", "newInstance", "invoke"]
+tags = ["role:reflection"]
+vocab = "reflection reflect dynamic class introspection invoke jvm"

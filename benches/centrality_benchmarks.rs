@@ -3,13 +3,17 @@
 //! Run: `cargo bench --bench centrality_benchmarks`
 //! Large gate: `cargo test --release --test centrality_audit -- --ignored`
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
-use rgctl::analysis::{FastPageRank, FlatGraphIndex, PetGraphView};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
+use rgctl::analysis::{
+    FastPageRank, FlatGraphIndex, PetGraphView, SEMANTIC_INDEX_SCHEMA_VERSION, SIGN_HASH_MODEL_ID,
+    SampledBetweenness, SemanticEntry, SemanticIndex, hamming_top_k,
+};
 use rgctl::graph::CodeGraph;
 use rgctl::graph::backend::GraphBackend;
 use rgctl::graph::schema::{Edge, EdgeType, Node, NodeType};
 use std::path::Path;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 fn build_monorepo_mock(nodes: usize, edges: usize) -> CodeGraph {
     let mut graph = CodeGraph::new();
@@ -61,6 +65,65 @@ fn bench_petgraph_view_centrality_large(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_sampled_betweenness(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sampled_betweenness");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    let graph = build_monorepo_mock(20_000, 80_000);
+    let view = PetGraphView::from_backend(graph.backend()).unwrap();
+    let index = FlatGraphIndex::from_view(&view, &[EdgeType::Calls]);
+
+    group.throughput(Throughput::Elements(index.node_count as u64));
+    group.bench_function("sampled_betweenness_20k_64pivots", |b| {
+        b.iter(|| {
+            black_box(SampledBetweenness::compute_flat(&index, 64, 42));
+        });
+    });
+    group.finish();
+}
+
+fn bench_hamming_top_k(c: &mut Criterion) {
+    let mut group = c.benchmark_group("hamming_top_k");
+    group.sample_size(20);
+
+    let dims = 256;
+    let rows = 50_000;
+    let stride = dims / 8;
+    let mut binary = vec![0u8; rows * stride];
+    for (i, byte) in binary.iter_mut().enumerate() {
+        *byte = (i % 251) as u8;
+    }
+    let index = SemanticIndex {
+        schema_version: SEMANTIC_INDEX_SCHEMA_VERSION,
+        model_id: SIGN_HASH_MODEL_ID.into(),
+        dimensions: dims,
+        graph_digest: None,
+        model_path: None,
+        tokenizer_path: None,
+        entries: (0..rows)
+            .map(|i| SemanticEntry {
+                node_id: Uuid::from_u128(i as u128 + 1),
+                name: format!("f{i}"),
+                qualified_name: None,
+                file_path: None,
+                code_hash: None,
+                node_type: None,
+                kind: None,
+                semantic_tags: None,
+            })
+            .collect(),
+        binary_embeddings: binary,
+    };
+    let query = vec![0u8; stride];
+
+    group.throughput(Throughput::Elements(rows as u64));
+    group.bench_function("hamming_top_k_50k_k10", |b| {
+        b.iter(|| black_box(hamming_top_k(&index, &query, 10)));
+    });
+    group.finish();
+}
+
 fn bench_kafka_centrality_optional(c: &mut Criterion) {
     let kafka_path = Path::new("example/kafka");
     if !kafka_path.exists() {
@@ -93,6 +156,8 @@ fn bench_kafka_centrality_optional(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_petgraph_view_centrality_large,
+    bench_sampled_betweenness,
+    bench_hamming_top_k,
     bench_kafka_centrality_optional,
 );
 criterion_main!(benches);

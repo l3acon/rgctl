@@ -1,0 +1,50 @@
+language = "python"
+
+[[rules]]
+id = "fastapi.flask.route_decorator"
+framework = "fastapi"
+kind = "RouteDecorator"
+class_prefix_annotations = ["APIRouter", "Blueprint"]
+method_annotations = [
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "delete", method = "DELETE" },
+  { name = "patch", method = "PATCH" },
+  { name = "options", method = "OPTIONS" },
+  { name = "head", method = "HEAD" },
+  { name = "api_route", method_arg = "methods", default_method = "GET" },
+  { name = "route", method_arg = "methods", default_method = "GET" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rest api handler fastapi flask"
+
+[[rules]]
+id = "django.flask.route_call"
+framework = "django"
+kind = "RouteCall"
+router_callees = [
+  { name = "path", method = "ANY" },
+  { name = "re_path", method = "ANY" },
+  { name = "url", method = "ANY" },
+  { name = "add_url_rule", method_arg = "methods", default_method = "GET" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http django flask urlpattern"
+
+[[rules]]
+id = "fastapi.depends_di"
+framework = "fastapi"
+kind = "ParamCallInject"
+provider_calls = ["Depends", "Security"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection provider inject depends security fastapi"
+target_vocab = "dependency injection provider service injectable"
+
+[[rules]]
+id = "python.reflection"
+framework = "python"
+kind = "ConceptTagger"
+call_callees = ["getattr", "setattr", "delattr", "import_module", "__subclasses__"]
+tags = ["role:reflection"]
+vocab = "reflection reflect dynamic introspection getattr import_module"

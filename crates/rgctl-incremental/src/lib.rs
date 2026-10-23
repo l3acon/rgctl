@@ -13,6 +13,9 @@ pub use file_tracker::{
     ChangeSet, FileTracker, changes_for_paths, group_sorted_node_paths, merge_change_sets,
     normalize_path_str,
 };
+pub use rgctl_extraction::{
+    FACTS_CACHE_REL, FactsCache, FactsKey, facts_key_for, facts_key_for_hash,
+};
 pub use synthesize_head::{
     HeadSynthesisOptions, default_synth_head_dir, out_root_clobbers_live_session,
     synthesize_head_snapshot, synthesize_head_snapshot_at, synthesize_worktree_head_snapshot,

@@ -149,6 +149,8 @@ pub struct MetricsArgs {
     pub betweenness: bool,
     /// Include community summary.
     pub communities: bool,
+    /// Include test / intrinsic nodes in PageRank hotspots.
+    pub include_tests: bool,
 }
 
 /// Hybrid CPG / inspect / slice.

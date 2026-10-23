@@ -30,6 +30,7 @@ use std::sync::Arc;
 #[cfg(test)]
 mod ast_coverage;
 mod plugin;
+mod single_pass;
 pub use plugin::ErbPlugin;
 
 /// Register the ERB language plugin.

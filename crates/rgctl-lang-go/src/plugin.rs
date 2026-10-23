@@ -3,10 +3,11 @@
 //! Extracts symbols, relationships, and complexity metrics from Go source code
 //! using TreeSitter.
 
+use crate::single_pass::{extract_all_single_pass, go_ast_handlers};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 /// Go language plugin
 pub struct GoPlugin;
@@ -17,7 +18,12 @@ impl GoPlugin {
         Ok(Self)
     }
 
-    fn extract_function(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_function(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut name = None;
         let mut parameters = Vec::new();
         let mut return_type = None;
@@ -211,7 +217,12 @@ impl GoPlugin {
         Ok(parameters)
     }
 
-    fn extract_struct(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_struct(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -315,7 +326,12 @@ impl GoPlugin {
         Ok(fields)
     }
 
-    fn extract_interface(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_interface(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
 
@@ -356,7 +372,7 @@ impl GoPlugin {
 
     /// Interface method elements → Function symbols with `Iface.Method` FQN.
     /// Also promotes methods from embedded interfaces (LF-04 / CRI RuntimeService pattern).
-    fn extract_interface_methods(
+    pub(crate) fn extract_interface_methods(
         &self,
         interface_type: Node,
         iface_name: &str,
@@ -555,12 +571,12 @@ impl GoPlugin {
         count
     }
 
-    fn type_params_of(&self, node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn type_params_of(&self, node: Node, source: &[u8]) -> Option<String> {
         let tp = node.child_by_field_name("type_parameters")?;
         tp.utf8_text(source).ok().map(|s| s.to_string())
     }
 
-    fn extract_type_alias(
+    pub(crate) fn extract_type_alias(
         &self,
         type_spec: Node,
         source: &[u8],
@@ -598,7 +614,7 @@ impl GoPlugin {
         }))
     }
 
-    fn extract_imports(
+    pub(crate) fn extract_imports(
         &self,
         import_decl: Node,
         source: &[u8],
@@ -669,7 +685,7 @@ impl GoPlugin {
         Ok(out)
     }
 
-    fn extract_consts(
+    pub(crate) fn extract_consts(
         &self,
         const_decl: Node,
         source: &[u8],
@@ -732,8 +748,71 @@ impl GoPlugin {
         Ok(out)
     }
 
+    pub(crate) fn extract_vars(
+        &self,
+        var_decl: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Vec<Symbol>> {
+        let mut out = Vec::new();
+        let mut stack = vec![var_decl];
+        while let Some(node) = stack.pop() {
+            if node.kind() == "var_spec" {
+                let mut names = Vec::new();
+                if let Some(n) = node.child_by_field_name("name") {
+                    if let Ok(s) = n.utf8_text(source) {
+                        names.push(s.to_string());
+                    }
+                }
+                let mut c = node.walk();
+                for ch in node.children(&mut c) {
+                    if ch.kind() == "identifier" {
+                        if let Ok(s) = ch.utf8_text(source) {
+                            if !names.iter().any(|n| n == s) {
+                                names.push(s.to_string());
+                            }
+                        }
+                    }
+                }
+                let ty = node
+                    .child_by_field_name("type")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(str::to_string);
+                for name in names {
+                    out.push(Symbol {
+                        name: name.clone(),
+                        symbol_type: SymbolType::Variable,
+                        qualified_name: Some(name),
+                        location: SourceLocation {
+                            file: file_path.to_string(),
+                            start_line: node.start_position().row + 1,
+                            end_line: node.end_position().row + 1,
+                            start_column: node.start_position().column,
+                            end_column: node.end_position().column,
+                        },
+                        signature: ty.clone(),
+                        return_type: ty.clone(),
+                        parameters: vec![],
+                        fields: vec![],
+                        modifiers: vec![],
+                        documentation: None,
+                        metadata: serde_json::json!({
+                            "language": "go",
+                            "kind": "var_spec",
+                        }),
+                    });
+                }
+            }
+            let mut c = node.walk();
+            for ch in node.children(&mut c) {
+                stack.push(ch);
+            }
+        }
+        Ok(out)
+    }
+
     /// Best-effort method-set satisfaction → `Implements`, and embed → `Extends`.
-    fn emit_implements_and_embeds(
+    pub(crate) fn emit_implements_and_embeds(
         &self,
         symbols: &[Symbol],
         file_path: &Path,
@@ -834,14 +913,12 @@ impl GoPlugin {
     }
 
     fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_go::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Go grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
-            file: file_path.to_path_buf(),
-            line: 0,
-            message: "Failed to parse Go source".to_string(),
+        parse_with_pool("go", tree_sitter_go::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message: e,
+            }
         })
     }
 
@@ -890,45 +967,57 @@ fn go_traverse_for_symbols(
         "type_declaration" => {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                if child.kind() != "type_spec" {
-                    continue;
-                }
-                let mut handled = false;
-                let mut spec_cursor = child.walk();
-                for spec_child in child.children(&mut spec_cursor) {
-                    match spec_child.kind() {
-                        "struct_type" => {
-                            let mut st = plugin.extract_struct(child, source, file_path)?;
-                            if let Some(tp) = plugin.type_params_of(child, source) {
-                                st.metadata["type_params"] = serde_json::Value::String(tp);
+                match child.kind() {
+                    "type_alias" => {
+                        if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
+                            symbols.push(alias);
+                        }
+                    }
+                    "type_spec" => {
+                        let mut handled = false;
+                        let mut spec_cursor = child.walk();
+                        for spec_child in child.children(&mut spec_cursor) {
+                            match spec_child.kind() {
+                                "struct_type" => {
+                                    let mut st =
+                                        plugin.extract_struct(child, source, file_path)?;
+                                    if let Some(tp) = plugin.type_params_of(child, source) {
+                                        st.metadata["type_params"] =
+                                            serde_json::Value::String(tp);
+                                    }
+                                    symbols.push(st);
+                                    handled = true;
+                                    break;
+                                }
+                                "interface_type" => {
+                                    let iface =
+                                        plugin.extract_interface(child, source, file_path)?;
+                                    let iface_name = iface.name.clone();
+                                    symbols.push(iface);
+                                    let methods = plugin.extract_interface_methods(
+                                        spec_child,
+                                        &iface_name,
+                                        source,
+                                        file_path,
+                                        symbols,
+                                    )?;
+                                    symbols.extend(methods);
+                                    handled = true;
+                                    break;
+                                }
+                                _ => {}
                             }
-                            symbols.push(st);
-                            handled = true;
-                            break;
                         }
-                        "interface_type" => {
-                            let iface = plugin.extract_interface(child, source, file_path)?;
-                            let iface_name = iface.name.clone();
-                            symbols.push(iface);
-                            let methods = plugin.extract_interface_methods(
-                                spec_child,
-                                &iface_name,
-                                source,
-                                file_path,
-                                symbols,
-                            )?;
-                            symbols.extend(methods);
-                            handled = true;
-                            break;
+                        if !handled {
+                            // Defined type (LF-10): `type UserID string`
+                            if let Some(alias) =
+                                plugin.extract_type_alias(child, source, file_path)?
+                            {
+                                symbols.push(alias);
+                            }
                         }
-                        _ => {}
                     }
-                }
-                if !handled {
-                    // type alias / defined type (LF-10): `type UserID string`
-                    if let Some(alias) = plugin.extract_type_alias(child, source, file_path)? {
-                        symbols.push(alias);
-                    }
+                    _ => {}
                 }
             }
         }
@@ -987,15 +1076,25 @@ impl LanguagePlugin for GoPlugin {
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
         let tree = self.parse(file_path, source)?;
-        self.relations_from_tree(tree.root_node(), source, file_path, symbols)
+        let root = tree.root_node();
+        let mut relations = self.relations_from_tree(root, source, file_path, symbols)?;
+        let mut sym_copy = symbols.to_vec();
+        rgctl_plugin_helpers::apply_framework_catalog(
+            "go",
+            source,
+            Some(root),
+            &mut sym_copy,
+            &mut relations,
+        );
+        Ok(relations)
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(go_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -1007,18 +1106,17 @@ impl LanguagePlugin for GoPlugin {
             return Ok(None);
         }
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_go::LANGUAGE.into())
-            .map_err(|e| Error::PluginError(format!("Failed to set Go grammar: {}", e)))?;
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
+        }
 
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
+        let tree = parse_with_pool("go", tree_sitter_go::LANGUAGE.into(), source).map_err(|e| {
+            Error::ParseError {
                 file: symbol.location.file.clone().into(),
                 line: symbol.location.start_line,
-                message: "Failed to parse source for complexity analysis".to_string(),
-            })?;
+                message: e,
+            }
+        })?;
 
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1;
@@ -1216,6 +1314,43 @@ func (o *Orch) Run() int {
     }
 
     #[test]
+    fn test_extract_all_single_pass_forward_calls_and_complexity() {
+        let source = br#"
+package demo
+
+func caller() {
+	helper()
+	if true {
+		return
+	}
+}
+
+func helper() {}
+"#;
+        let plugin = GoPlugin::new().unwrap();
+        let path = Path::new("test.go");
+        let result = plugin.extract_all(path, source).unwrap();
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Calls && r.to.contains("helper")
+            }),
+            "forward Calls -> helper: {:?}",
+            result.relations
+        );
+        let caller = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "caller")
+            .expect("caller");
+        let from_meta =
+            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        assert_eq!(from_meta.cyclomatic, 2);
+        assert_eq!(from_meta.returns, 1);
+        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        assert_eq!(via_api, from_meta);
+    }
+
+    #[test]
     fn test_extract_relations_calls() {
         let source = br#"
 package demo
@@ -1375,10 +1510,14 @@ mod cri_promote {
     use super::*;
     #[test]
     fn runtime_service_promotes_runpodsandbox() {
-        let path = Path::new(
-            "/Users/sshaaf/git/rust/rgctl/example/kubernetes/staging/src/k8s.io/cri-api/pkg/apis/services.go",
-        );
-        let src = std::fs::read(path).unwrap();
+        let path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../example/kubernetes/staging/src/k8s.io/cri-api/pkg/apis/services.go"
+        ));
+        let Ok(src) = std::fs::read(path) else {
+            eprintln!("skipping: kubernetes corpus not present at {}", path.display());
+            return;
+        };
         let plugin = GoPlugin::new().unwrap();
         let symbols = plugin.extract_symbols(path, &src).unwrap();
         let qns: Vec<_> = symbols

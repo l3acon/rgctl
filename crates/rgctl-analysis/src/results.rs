@@ -338,13 +338,22 @@ impl AnalysisResults {
         let uuid_to_compact = &self.uuid_to_compact;
         let table = self.community.as_mut().unwrap();
         table.modularity = result.modularity;
-        table.num_communities = result.communities.len();
         table.infrastructure_community_id = result.infrastructure_community_id;
+        let mut max_cid = 0usize;
         for (node_id, community_id) in &result.assignments {
             if let Some(&compact_id) = uuid_to_compact.get(node_id) {
                 table.assignments[compact_id as usize] = *community_id;
+                max_cid = max_cid.max(*community_id);
             }
         }
+        // Derive total community count from dense assignment ids when `result.communities`
+        // omits singleton isolates on large graphs (>200k nodes).
+        let dense_count = if result.assignments.is_empty() {
+            0
+        } else {
+            max_cid + 1
+        };
+        table.num_communities = result.communities.len().max(dense_count);
     }
 
     /// Initialize complexity table.
@@ -439,6 +448,30 @@ impl AnalysisResults {
                 }
             }
         })?;
+        let table = self.init_structural_sketch();
+        for (compact_id, bloom) in rows {
+            table.set_bloom(compact_id, bloom);
+        }
+        Ok(())
+    }
+
+    /// Fill structural sketch blooms from an already-loaded function node slice.
+    ///
+    /// Prefer this over [`Self::fill_structural_sketch_from_lookup`] on cold discover
+    /// — only Function/Method nodes carry `token_bloom`, and a full-graph cold_ext
+    /// scan is wasteful once `functions` is in memory.
+    pub fn fill_structural_sketch_from_nodes(
+        &mut self,
+        nodes: &[rgctl_graph::schema::Node],
+    ) -> rgctl_error::Result<()> {
+        let mut rows = Vec::new();
+        for node in nodes {
+            if let Some(bloom) = node.token_bloom {
+                if let Some(compact_id) = self.get_compact_id(node.id) {
+                    rows.push((compact_id, bloom));
+                }
+            }
+        }
         let table = self.init_structural_sketch();
         for (compact_id, bloom) in rows {
             table.set_bloom(compact_id, bloom);

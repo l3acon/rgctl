@@ -2,8 +2,10 @@
 //!
 //! ## Honesty limits
 //!
-//! - **Macros:** `#define` function-like macros and macro-expanded call sites are not
-//!   indexed; only tree-sitter-visible `call_expression` nodes produce `Calls` edges.
+//! - **Macros:** `#define` / function-like macros are **not** indexed as graph
+//!   `Macro` nodes (kernel-scale `#define` counts explode node count); helpers in
+//!   `depth` remain for opt-in tooling. Macro-expanded call sites are not rewritten —
+//!   only tree-sitter-visible `call_expression` nodes produce `Calls` edges.
 //! - **Function pointers:** indirect calls through variables/parameters are emitted with
 //!   `metadata.unresolved` when the callee cannot be resolved statically.
 //! - **Header / `.c` pairs:** symbols in `foo.h` and `foo.c` share the same
@@ -15,7 +17,9 @@ use std::sync::Arc;
 
 #[cfg(test)]
 mod ast_coverage;
+mod depth;
 mod plugin;
+mod single_pass;
 pub use plugin::CPlugin;
 
 /// Register this language plugin.

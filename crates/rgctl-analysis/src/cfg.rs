@@ -55,10 +55,13 @@ impl DefVar {
         }
     }
 
-    /// True when this definition matches `name` (exact `name()` equality).
+    /// True when this definition matches `name`.
+    ///
+    /// Locals also match scoped shadow ids (`x#1` when querying `x`) so slice
+    /// criteria can use the bare source name.
     pub fn defines_name(&self, name: &str) -> bool {
         match self {
-            Self::Local(s) => s == name,
+            Self::Local(s) => scoped_var_matches(s, name),
             Self::Field { receiver, member } => name
                 .strip_prefix(receiver)
                 .and_then(|rest| rest.strip_prefix('.'))
@@ -73,6 +76,14 @@ impl DefVar {
             _ => None,
         }
     }
+}
+
+/// Exact match, or `stored` is a lexical shadow of `query` (`x#1` vs `x`).
+fn scoped_var_matches(stored: &str, query: &str) -> bool {
+    stored == query
+        || stored
+            .strip_prefix(query)
+            .is_some_and(|rest| rest.starts_with('#'))
 }
 
 fn def_var_from_wire(s: String) -> DefVar {

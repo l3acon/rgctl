@@ -1,6 +1,9 @@
 //! PHP language plugin using Tree-sitter.
 
-use rgctl_plugin_api::{callee_name, containing_function, PHP_CALL_KINDS, *};
+use crate::single_pass::{extract_all_single_pass, php_ast_handlers};
+use rgctl_plugin_api::{
+    callee_name, complexity_from_metadata, containing_function, parse_with_pool, PHP_CALL_KINDS, *,
+};
 use rgctl_plugin_helpers::ComplexityCalculator;
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,7 +16,7 @@ pub const PHP_FUNCTION_KINDS: &[&str] = &[
     "anonymous_function",
 ];
 
-const PHP_COMPLEXITY_BRANCH_KINDS: &[&str] = &[
+pub(crate) const PHP_COMPLEXITY_BRANCH_KINDS: &[&str] = &[
     "if_statement",
     "else_if_clause",
     "while_statement",
@@ -29,7 +32,7 @@ pub struct PhpPlugin {
     _parser: Parser,
 }
 
-fn php_grammar() -> tree_sitter::Language {
+pub(crate) fn php_grammar() -> tree_sitter::Language {
     if std::env::var("RGCTL_PHP_ONLY").is_ok() {
         tree_sitter_php::LANGUAGE_PHP_ONLY.into()
     } else {
@@ -47,15 +50,11 @@ impl PhpPlugin {
         Ok(Self { _parser: parser })
     }
 
-    fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&php_grammar())
-            .map_err(|e| Error::PluginError(format!("Failed to set PHP grammar: {e}")))?;
-        parser.parse(source, None).ok_or_else(|| Error::ParseError {
+    pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
+        parse_with_pool("php", php_grammar(), source).map_err(|e| Error::ParseError {
             file: file_path.to_path_buf(),
             line: 0,
-            message: "Failed to parse PHP source".to_string(),
+            message: e,
         })
     }
 
@@ -182,7 +181,7 @@ impl PhpPlugin {
         Ok(())
     }
 
-    fn extract_function(
+    pub(crate) fn extract_function(
         &self,
         node: Node,
         source: &[u8],
@@ -216,7 +215,7 @@ impl PhpPlugin {
         }))
     }
 
-    fn extract_method(
+    pub(crate) fn extract_method(
         &self,
         node: Node,
         source: &[u8],
@@ -272,7 +271,7 @@ impl PhpPlugin {
         }))
     }
 
-    fn extract_anonymous_function(
+    pub(crate) fn extract_anonymous_function(
         &self,
         node: Node,
         source: &[u8],
@@ -305,7 +304,7 @@ impl PhpPlugin {
         }))
     }
 
-    fn extract_class(
+    pub(crate) fn extract_class(
         &self,
         node: Node,
         source: &[u8],
@@ -333,7 +332,7 @@ impl PhpPlugin {
         })
     }
 
-    fn extract_interface(
+    pub(crate) fn extract_interface(
         &self,
         node: Node,
         source: &[u8],
@@ -360,7 +359,7 @@ impl PhpPlugin {
         })
     }
 
-    fn extract_trait(
+    pub(crate) fn extract_trait(
         &self,
         node: Node,
         source: &[u8],
@@ -387,7 +386,7 @@ impl PhpPlugin {
         })
     }
 
-    fn extract_enum(
+    pub(crate) fn extract_enum(
         &self,
         node: Node,
         source: &[u8],
@@ -572,7 +571,7 @@ impl PhpPlugin {
         Ok(parameters)
     }
 
-    fn find_enclosing_class_name(&self, node: Node, source: &[u8]) -> Option<String> {
+    pub(crate) fn find_enclosing_class_name(&self, node: Node, source: &[u8]) -> Option<String> {
         let mut current = node;
         while let Some(parent) = current.parent() {
             if parent.kind() == "class_declaration" {
@@ -604,7 +603,7 @@ impl PhpPlugin {
         Ok(relations)
     }
 
-    fn extract_inheritance(
+    pub(crate) fn extract_inheritance(
         &self,
         node: Node,
         source: &[u8],
@@ -681,7 +680,90 @@ impl PhpPlugin {
         Ok(())
     }
 
-    fn extract_namespace_imports(
+    /// Top-level / class `const FOO = 1;` → Variable symbols (top-level) or Field names.
+    pub(crate) fn extract_const_elements(
+        &self,
+        node: Node,
+        source: &[u8],
+    ) -> Result<Vec<(String, Option<String>)>> {
+        if node.kind() != "const_declaration" {
+            return Ok(Vec::new());
+        }
+        let visibility = visibility_modifiers(node, source).join(" ");
+        let vis = if visibility.is_empty() {
+            Some("const".to_string())
+        } else {
+            Some(format!("{visibility} const"))
+        };
+        let mut out = Vec::new();
+        let mut cursor = node.walk();
+        for elem in node.children(&mut cursor) {
+            if elem.kind() != "const_element" {
+                continue;
+            }
+            if let Some(name_node) = elem
+                .children(&mut elem.walk())
+                .find(|c| c.kind() == "name")
+            {
+                let name = name_node.utf8_text(source)?.to_string();
+                out.push((name, vis.clone()));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Emit top-level `const` as Variable symbols.
+    pub(crate) fn extract_const(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+        namespace: Option<&str>,
+    ) -> Result<Vec<Symbol>> {
+        let mut symbols = Vec::new();
+        for (name, _) in self.extract_const_elements(node, source)? {
+            let qn = qualify(namespace, &name);
+            symbols.push(Symbol {
+                name: name.clone(),
+                symbol_type: SymbolType::Variable,
+                qualified_name: Some(qn),
+                location: source_location(node, file_path),
+                signature: node.utf8_text(source).ok().map(|s| s.trim().to_string()),
+                return_type: None,
+                parameters: vec![],
+                fields: vec![],
+                modifiers: visibility_modifiers(node, source),
+                documentation: None,
+                metadata: serde_json::json!({
+                    "language": "php",
+                    "kind": "const_declaration",
+                }),
+            });
+        }
+        Ok(symbols)
+    }
+
+    /// Append class-constant fields onto an existing class/interface/trait/enum symbol.
+    pub(crate) fn append_const_fields(
+        &self,
+        node: Node,
+        source: &[u8],
+        class_sym: &mut Symbol,
+    ) -> Result<()> {
+        for (name, vis) in self.extract_const_elements(node, source)? {
+            if class_sym.fields.iter().any(|f| f.name == name) {
+                continue;
+            }
+            class_sym.fields.push(Field {
+                name,
+                field_type: None,
+                visibility: vis,
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn extract_namespace_imports(
         &self,
         node: Node,
         source: &[u8],
@@ -710,7 +792,7 @@ impl PhpPlugin {
         Ok(())
     }
 
-    fn extract_embedded_symbols(
+    pub(crate) fn extract_embedded_symbols(
         &self,
         node: Node,
         source: &[u8],
@@ -759,11 +841,11 @@ impl LanguagePlugin for PhpPlugin {
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
-        let tree = self.parse(file_path, source)?;
-        let root = tree.root_node();
-        let symbols = self.symbols_from_tree(root, source, file_path)?;
-        let relations = self.relations_from_tree(root, source, file_path, &symbols)?;
-        Ok(ExtractAllResult::from_parts(symbols, relations))
+        extract_all_single_pass(self, file_path, source)
+    }
+
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        Some(php_ast_handlers())
     }
 
     fn calculate_complexity(
@@ -773,6 +855,10 @@ impl LanguagePlugin for PhpPlugin {
     ) -> Result<Option<ComplexityMetrics>> {
         if symbol.symbol_type != SymbolType::Function {
             return Ok(None);
+        }
+
+        if let Some(metrics) = complexity_from_metadata(symbol) {
+            return Ok(Some(metrics));
         }
 
         let tree = self.parse(Path::new(&symbol.location.file), source)?;
@@ -817,7 +903,7 @@ fn qualify(namespace: Option<&str>, name: &str) -> String {
     }
 }
 
-fn normalize_namespace(node: Node, source: &[u8]) -> Option<String> {
+pub(crate) fn normalize_namespace(node: Node, source: &[u8]) -> Option<String> {
     let text = node.utf8_text(source).ok()?;
     Some(text.trim().trim_start_matches('\\').to_string())
 }
@@ -978,7 +1064,7 @@ fn push_attribute_text(attr: Node, source: &[u8], attrs: &mut Vec<String>) {
     }
 }
 
-fn import_map_from_symbols(symbols: &[Symbol]) -> HashMap<String, String> {
+pub(crate) fn import_map_from_symbols(symbols: &[Symbol]) -> HashMap<String, String> {
     symbols
         .iter()
         .filter(|s| s.symbol_type == SymbolType::Import)
@@ -1186,7 +1272,7 @@ fn walk_php_calls(
     }
 }
 
-fn push_php_call_relation(
+pub(crate) fn push_php_call_relation(
     node: Node,
     source: &[u8],
     file_path: &Path,

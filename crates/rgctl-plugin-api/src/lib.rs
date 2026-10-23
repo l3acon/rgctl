@@ -3,16 +3,32 @@
 //! This module defines the core plugin system for language and configuration format support.
 //! Plugins enable extraction of symbols, relationships, and complexity metrics from source code.
 
+mod ast_handlers;
 mod call_extraction;
 mod error;
+mod kind_dispatch;
+mod parser_pool;
 mod registrar;
+mod scope_stack;
+mod single_pass;
+
+pub use ast_handlers::{AstHandlerTable, HandlerMask};
+pub use kind_dispatch::{KindDispatchOnce, KindDispatchTable, MAX_KIND_ID};
+pub use parser_pool::{parse_with_pool, with_thread_local_parser};
+pub use scope_stack::{ScopeComplexity, ScopeFrame, ScopeKind, ScopeStack};
+pub use single_pass::{
+    ast_coverage_track_enabled, attach_complexity, complexity_from_metadata,
+    coverage_handler_entries, coverage_tables_from_manifest, dispatch_lookup_tracked,
+    dispatch_table_from_manifest, handler_table_from_kinds, set_ast_coverage_hit_fn,
+    track_ast_kind, SinglePassCtx, COMPLEXITY_META_KEY,
+};
 
 pub use call_extraction::{
     infer_python_method_target, ruby_call_callee, ruby_call_unresolved, C_CALL_KINDS,
     CPP_CALL_KINDS, CSHARP_CALL_KINDS, GO_CALL_KINDS, JS_CALL_KINDS, KOTLIN_CALL_KINDS,
     PHP_CALL_KINDS, PYTHON_CALL_KINDS, RUBY_CALL_KINDS, RUST_CALL_KINDS, TS_CALL_KINDS,
-    callee_name, kotlin_call_callee,
-    containing_function, push_call_relation, walk_calls,
+    callee_name, containing_function, containing_function_from_scope, kotlin_call_callee,
+    push_call_relation, push_call_relation_from, push_call_relation_scoped, walk_calls,
 };
 
 pub use error::{Error, Result};
@@ -63,6 +79,8 @@ pub struct Symbol {
 pub enum SymbolType {
     /// Function or method
     Function,
+    /// Inherent / instance method (distinct from free `Function` for `Self` resolution).
+    Method,
     /// Class or struct
     Class,
     /// Struct (languages without classes)
@@ -211,7 +229,7 @@ pub struct Relation {
 }
 
 /// Combined output from [`LanguagePlugin::extract_all`].
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExtractAllResult {
     /// Extracted symbols.
     pub symbols: Vec<Symbol>,
@@ -293,6 +311,10 @@ pub enum RelationType {
     RequiresResource,
     /// Puppet class or resource uses a fact
     UsesFact,
+    /// Handler or controller exposes an HTTP/RPC route endpoint
+    ExposesRoute,
+    /// Class, constructor, field, or handler injects a dependency provider/type
+    Injects,
 }
 
 /// Code complexity metrics
@@ -370,6 +392,20 @@ pub trait LanguagePlugin: Send + Sync {
     /// Plugin capabilities
     fn capabilities(&self) -> LanguageCapabilities {
         LanguageCapabilities::default()
+    }
+
+    /// Optional AST handler table for bi-directional `*-ast-coverage.json` sync.
+    ///
+    /// Maps grammar `kind_id` → [`HandlerMask`]. Default returns `None` (opt-in);
+    /// language plugins SHOULD override once their single-pass jump table is wired.
+    fn declared_ast_handlers(&self) -> Option<&AstHandlerTable> {
+        None
+    }
+
+    /// Optional extra fingerprint bytes (e.g. Tier-2 `tags.scm` source) mixed into
+    /// the [`FactsCache`] manifest hash so query edits invalidate cached extractions.
+    fn cache_fingerprint(&self) -> Option<&[u8]> {
+        None
     }
 
     /// Extract symbols from source code
@@ -738,6 +774,7 @@ mod tests {
     fn test_symbol_type_variants() {
         let types = vec![
             SymbolType::Function,
+            SymbolType::Method,
             SymbolType::Class,
             SymbolType::Struct,
             SymbolType::Enum,
@@ -753,7 +790,7 @@ mod tests {
             SymbolType::Job,
             SymbolType::BuildStep,
         ];
-        assert_eq!(types.len(), 15);
+        assert_eq!(types.len(), 16);
     }
 
     #[test]
@@ -770,8 +807,10 @@ mod tests {
             RelationType::Instantiates,
             RelationType::Modifies,
             RelationType::DependsOn,
+            RelationType::ExposesRoute,
+            RelationType::Injects,
         ];
-        assert_eq!(types.len(), 11);
+        assert_eq!(types.len(), 13);
     }
 
     #[test]
