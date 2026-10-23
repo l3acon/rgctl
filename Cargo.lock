@@ -2801,6 +2801,7 @@ dependencies = [
 name = "rgctl-lang-c"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-extraction",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
@@ -2839,6 +2840,7 @@ dependencies = [
 name = "rgctl-lang-cpp"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -2852,6 +2854,7 @@ dependencies = [
 name = "rgctl-lang-csharp"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3037,6 +3040,7 @@ dependencies = [
 name = "rgctl-lang-go"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3112,6 +3116,7 @@ dependencies = [
 name = "rgctl-lang-java"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3124,6 +3129,7 @@ dependencies = [
 name = "rgctl-lang-javascript"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3162,6 +3168,7 @@ dependencies = [
 name = "rgctl-lang-kotlin"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-languages",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
@@ -3263,6 +3270,7 @@ dependencies = [
 name = "rgctl-lang-php"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3326,6 +3334,7 @@ dependencies = [
 name = "rgctl-lang-python"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3364,6 +3373,7 @@ dependencies = [
 name = "rgctl-lang-ruby"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3392,6 +3402,7 @@ name = "rgctl-lang-rust"
 version = "0.4.20"
 dependencies = [
  "criterion",
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",
@@ -3504,6 +3515,7 @@ dependencies = [
 name = "rgctl-lang-typescript"
 version = "0.4.20"
 dependencies = [
+ "rgctl-ast-coverage",
  "rgctl-plugin-api",
  "rgctl-plugin-helpers",
  "rgctl-registry",

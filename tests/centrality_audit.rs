@@ -246,6 +246,117 @@ fn default_analyzer_skips_structural_edges() {
     assert!(!default_behavioral_edges().contains(&EdgeType::Contains));
 }
 
+/// Production PageRank hotspots exclude test helpers and stdlib intrinsics by default.
+#[test]
+fn pagerank_excludes_test_and_intrinsic_nodes_by_default() {
+    let mut graph = CodeGraph::new();
+    let backend = graph.backend_mut();
+
+    let prod = Node::new(NodeType::Function, "process_order")
+        .with_qualified_name("src/order.rs::process_order")
+        .with_file_path("src/order.rs");
+    let id_prod = prod.id;
+
+    let test_helper = Node::new(NodeType::Function, "setup_mock_db")
+        .with_qualified_name("tests/test_utils.rs::setup_mock_db")
+        .with_file_path("tests/test_utils.rs");
+    let id_test = test_helper.id;
+
+    let cfg_test = Node::new(NodeType::Function, "assert_valid")
+        .with_qualified_name("src/order.rs::tests::assert_valid")
+        .with_file_path("src/order.rs");
+    let id_cfg_test = cfg_test.id;
+
+    let println_n = Node::new(NodeType::Function, "println!")
+        .with_qualified_name("<external>::println!");
+    let id_println = println_n.id;
+
+    let drop_n = Node::new(NodeType::Function, "drop")
+        .with_qualified_name("std::mem::drop")
+        .with_property("is_external_stub".into(), "true".into());
+    let id_drop = drop_n.id;
+
+    backend.insert_node(prod).unwrap();
+    backend.insert_node(test_helper).unwrap();
+    backend.insert_node(cfg_test).unwrap();
+    backend.insert_node(println_n).unwrap();
+    backend.insert_node(drop_n).unwrap();
+
+    // Star into production so it ranks highest among production nodes.
+    insert_call(backend, id_test, id_prod);
+    insert_call(backend, id_cfg_test, id_prod);
+    insert_call(backend, id_println, id_prod);
+    insert_call(backend, id_drop, id_prod);
+    insert_call(backend, id_prod, id_prod);
+
+    assert_eq!(
+        classify_node_role(
+            "src/order.rs::process_order",
+            Some("src/order.rs"),
+            false
+        ),
+        NodeRole::Production
+    );
+    assert_eq!(
+        classify_node_role(
+            "tests/test_utils.rs::setup_mock_db",
+            Some("tests/test_utils.rs"),
+            false
+        ),
+        NodeRole::Test
+    );
+    assert_eq!(
+        classify_node_role(
+            "src/order.rs::tests::assert_valid",
+            Some("src/order.rs"),
+            false
+        ),
+        NodeRole::Test
+    );
+    assert_eq!(
+        classify_node_role("<external>::println!", None, false),
+        NodeRole::ExternalIntrinsic
+    );
+    assert_eq!(
+        classify_node_role("std::mem::drop", None, true),
+        NodeRole::ExternalIntrinsic
+    );
+
+    let mut scores = HashMap::new();
+    scores.insert(id_prod, 0.4);
+    scores.insert(id_test, 0.9);
+    scores.insert(id_cfg_test, 0.85);
+    scores.insert(id_println, 0.8);
+    scores.insert(id_drop, 0.7);
+
+    let role_of = |id: Uuid| {
+        let n = backend.get_node(id).unwrap().unwrap();
+        let stub = n.get_property("is_external_stub") == Some("true");
+        let name = n
+            .qualified_name
+            .as_deref()
+            .unwrap_or(n.name.as_str());
+        classify_node_role(name, n.file_path.as_deref(), stub)
+    };
+
+    let default_top = filter_scores_by_role(&scores, false, role_of);
+    assert_eq!(
+        default_top.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        vec![id_prod],
+        "default filter must keep only Production"
+    );
+
+    let with_tests = filter_scores_by_role(&scores, true, role_of);
+    let with_ids: Vec<_> = with_tests.iter().map(|(id, _)| *id).collect();
+    assert!(with_ids.contains(&id_prod));
+    assert!(with_ids.contains(&id_test));
+    assert!(with_ids.contains(&id_cfg_test));
+    assert!(
+        !with_ids.contains(&id_println) && !with_ids.contains(&id_drop),
+        "ExternalIntrinsic must stay excluded when include_tests=true; got {with_ids:?}"
+    );
+}
+
 /// Large mock monorepo PageRank must stay under 20 ms (release builds).
 #[test]
 #[ignore = "performance gate: run with `cargo test --release --test centrality_audit -- --ignored`"]

@@ -16,6 +16,18 @@ pub fn rgctl() -> PathBuf {
     if let Ok(p) = std::env::var("CARGO_BIN_EXE_rgctl") {
         return PathBuf::from(p);
     }
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let order = if cfg!(debug_assertions) {
+        ["target/debug/rgctl", "target/release/rgctl"]
+    } else {
+        ["target/release/rgctl", "target/debug/rgctl"]
+    };
+    for rel in order {
+        let p = manifest.join(rel);
+        if p.is_file() {
+            return p;
+        }
+    }
     if let Ok(out) = Command::new("sh")
         .args(["-c", "command -v rgctl"])
         .output()
@@ -23,13 +35,6 @@ pub fn rgctl() -> PathBuf {
         let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if out.status.success() && !p.is_empty() && Path::new(&p).is_file() {
             return PathBuf::from(p);
-        }
-    }
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for rel in ["target/release/rgctl", "target/debug/rgctl"] {
-        let p = manifest.join(rel);
-        if p.is_file() {
-            return p;
         }
     }
     manifest.join("target/debug/rgctl")

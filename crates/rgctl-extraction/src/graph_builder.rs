@@ -966,7 +966,12 @@ impl GraphBuilder {
                             "interface" | "trait" | "module" | "annotation"
                         )
                     });
-                self.record_inheritance(child, parent, is_iface);
+                let prepend_front = relation
+                    .metadata
+                    .get("mixin")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|m| matches!(m, "include" | "prepend"));
+                self.record_inheritance(child, parent, is_iface, prepend_front);
             }
             if relation.relation_type == RelationType::AnnotatedWith
                 && let Some(args) = relation
@@ -1071,13 +1076,23 @@ impl GraphBuilder {
         node.token_bloom = Some(cur);
     }
 
-    fn record_inheritance(&mut self, child: &str, parent: &str, is_interface: bool) {
+    fn record_inheritance(
+        &mut self,
+        child: &str,
+        parent: &str,
+        is_interface: bool,
+        prepend_front: bool,
+    ) {
         if child.is_empty() || parent.is_empty() || child == parent {
             return;
         }
         let entry = self.inheritance_bases.entry(child.to_string()).or_default();
         if !entry.iter().any(|(p, _)| p == parent) {
-            entry.push((parent.to_string(), is_interface));
+            if prepend_front {
+                entry.insert(0, (parent.to_string(), is_interface));
+            } else {
+                entry.push((parent.to_string(), is_interface));
+            }
             self.mro_cache.clear();
         }
     }
@@ -1506,9 +1521,15 @@ impl GraphBuilder {
             return *id;
         }
 
-        let node = Node::new(NodeType::Variable, key.to_string())
+        let mut node = Node::new(NodeType::Variable, key.to_string())
             .with_label("env".to_string())
             .with_property("env_var".to_string(), key.to_string());
+        node.id = rgctl_graph::stable_key::deterministic_node_id(
+            Some("<env>"),
+            key,
+            NodeType::Variable,
+            Some(&format!("env::{key}")),
+        );
 
         let id = node.id;
         self.env_nodes.insert(key.to_string(), id);
@@ -2270,6 +2291,12 @@ fn compute_mro_chain(
     bases: &HashMap<String, Vec<(String, bool)>>,
 ) -> Vec<String> {
     let key = type_simple_name(type_name);
+    let mut visiting = std::collections::HashSet::new();
+    let mut memo: HashMap<String, Vec<String>> = HashMap::new();
+    if let Some(c3) = compute_c3_mro(key, bases, &mut visiting, &mut memo) {
+        return c3;
+    }
+
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     fn walk(
@@ -2293,6 +2320,77 @@ fn compute_mro_chain(
     }
     walk(key, bases, &mut out, &mut seen);
     out
+}
+
+fn compute_c3_mro(
+    name: &str,
+    bases: &HashMap<String, Vec<(String, bool)>>,
+    visiting: &mut std::collections::HashSet<String>,
+    memo: &mut HashMap<String, Vec<String>>,
+) -> Option<Vec<String>> {
+    if let Some(cached) = memo.get(name) {
+        return Some(cached.clone());
+    }
+    if !visiting.insert(name.to_string()) {
+        return None;
+    }
+    let Some(direct) = bases.get(name) else {
+        visiting.remove(name);
+        let single = vec![name.to_string()];
+        memo.insert(name.to_string(), single.clone());
+        return Some(single);
+    };
+    let (classes, ifaces): (Vec<_>, Vec<_>) =
+        direct.iter().cloned().partition(|(_, iface)| !*iface);
+    let ordered_parents: Vec<String> = classes
+        .into_iter()
+        .chain(ifaces)
+        .map(|(p, _)| p)
+        .collect();
+    if ordered_parents.is_empty() {
+        visiting.remove(name);
+        let single = vec![name.to_string()];
+        memo.insert(name.to_string(), single.clone());
+        return Some(single);
+    }
+
+    let mut sequences: Vec<std::collections::VecDeque<String>> =
+        Vec::with_capacity(ordered_parents.len() + 1);
+    for parent in &ordered_parents {
+        let parent_mro = compute_c3_mro(parent, bases, visiting, memo)?;
+        sequences.push(parent_mro.into_iter().collect());
+    }
+    sequences.push(ordered_parents.into_iter().collect());
+
+    let mut result = vec![name.to_string()];
+    loop {
+        sequences.retain(|seq| !seq.is_empty());
+        if sequences.is_empty() {
+            break;
+        }
+        let mut chosen: Option<String> = None;
+        for seq in &sequences {
+            let candidate = &seq[0];
+            let in_any_tail = sequences
+                .iter()
+                .any(|other| other.iter().skip(1).any(|item| item == candidate));
+            if !in_any_tail {
+                chosen = Some(candidate.clone());
+                break;
+            }
+        }
+        let head = chosen?;
+        result.push(head.clone());
+        for seq in &mut sequences {
+            if seq.front() == Some(&head) {
+                seq.pop_front();
+            }
+        }
+    }
+
+    visiting.remove(name);
+    memo.insert(name.to_string(), result.clone());
+    Some(result)
 }
 
 /// Rightmost type segment: `com.foo.Child` → `Child`, `pkg::Child` → `Child`.

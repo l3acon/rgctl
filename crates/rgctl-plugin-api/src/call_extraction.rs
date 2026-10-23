@@ -337,6 +337,8 @@ pub fn push_call_relation_from(
             let qh = ty.as_ref().map(|t| format!("{t}.{callee}"));
             (ty, qh)
         }
+        "java" => java_call_type_hint(node, source, symbols, from_fn, &callee),
+        "ruby" => ruby_call_type_hint(node, source, from_fn, &callee),
         _ => (None, None),
     };
 
@@ -865,11 +867,22 @@ fn python_call_type_hint(
             let owner = containing_python_class_name(from_fn)?;
             (field_name, owner)
         }
-        "identifier" if object.utf8_text(source).ok()? == "self" => {
+        "identifier" if matches!(object.utf8_text(source).ok()?, "self" | "cls") => {
             let field = func.child_by_field_name("attribute")?;
             let field_name = field.utf8_text(source).ok()?.to_string();
             let owner = containing_python_class_name(from_fn)?;
-            (field_name, owner)
+            if let Some(class_sym) = symbols
+                .iter()
+                .find(|s| s.symbol_type == SymbolType::Class && s.name == owner)
+                && let Some(ft) = class_sym
+                    .fields
+                    .iter()
+                    .find(|f| f.name == field_name)
+                    .and_then(|f| f.field_type.as_deref())
+            {
+                return Some(python_simple_type_name_str(ft));
+            }
+            return Some(owner);
         }
         _ => return None,
     };
@@ -883,6 +896,136 @@ fn python_call_type_hint(
         .find(|f| f.name == field_name)
         .and_then(|f| f.field_type.as_deref())
         .map(python_simple_type_name_str)
+}
+
+fn java_call_type_hint(
+    call: Node,
+    source: &[u8],
+    symbols: &[Symbol],
+    from_fn: &Symbol,
+    callee: &str,
+) -> (Option<String>, Option<String>) {
+    if call.kind() != "method_invocation" {
+        return (None, None);
+    }
+    let owner = from_fn
+        .qualified_name
+        .as_deref()
+        .and_then(|qn| qn.rsplit_once('.').map(|(o, _)| o.to_string()));
+    let Some(object) = call.child_by_field_name("object") else {
+        let qh = owner.as_ref().map(|o| format!("{o}.{callee}"));
+        return (owner, qh);
+    };
+    let Ok(obj_text) = object.utf8_text(source).map(str::trim) else {
+        return (None, None);
+    };
+    if object.kind() == "this" || obj_text == "this" {
+        let qh = owner.as_ref().map(|o| format!("{o}.{callee}"));
+        return (owner, qh);
+    }
+    if object.kind() == "super" || obj_text == "super" {
+        return (owner, Some(format!("super.{callee}")));
+    }
+    if object.kind() == "identifier" {
+        if let Some(param_ty) = from_fn
+            .parameters
+            .iter()
+            .find(|p| p.name == obj_text)
+            .and_then(|p| p.param_type.as_deref())
+        {
+            let simple = java_simple_type_name_str(param_ty);
+            let qh = Some(format!("{simple}.{callee}"));
+            return (Some(simple), qh);
+        }
+        if let Some(ref owner_name) = owner {
+            let owner_simple = java_simple_type_name_str(owner_name);
+            if let Some(class_sym) = symbols.iter().find(|s| {
+                matches!(s.symbol_type, SymbolType::Class | SymbolType::Interface)
+                    && (s.name == owner_simple
+                        || s.qualified_name.as_deref() == Some(owner_name.as_str()))
+            }) && let Some(ft) = class_sym
+                .fields
+                .iter()
+                .find(|f| f.name == obj_text)
+                .and_then(|f| f.field_type.as_deref())
+            {
+                let simple = java_simple_type_name_str(ft);
+                let qh = Some(format!("{simple}.{callee}"));
+                return (Some(simple), qh);
+            }
+        }
+    }
+    (None, None)
+}
+
+fn java_simple_type_name_str(ty: &str) -> String {
+    ty.trim()
+        .split('<')
+        .next()
+        .unwrap_or(ty)
+        .trim_end_matches("[]")
+        .trim_end_matches("...")
+        .rsplit('.')
+        .next()
+        .unwrap_or(ty)
+        .trim()
+        .to_string()
+}
+
+fn ruby_call_type_hint(
+    call: Node,
+    source: &[u8],
+    from_fn: &Symbol,
+    callee: &str,
+) -> (Option<String>, Option<String>) {
+    if call.kind() != "call" {
+        return (None, None);
+    }
+    if matches!(
+        callee,
+        "require"
+            | "require_relative"
+            | "include"
+            | "prepend"
+            | "extend"
+            | "attr_reader"
+            | "attr_writer"
+            | "attr_accessor"
+            | "private"
+            | "protected"
+            | "public"
+            | "raise"
+            | "puts"
+            | "print"
+    ) {
+        return (None, None);
+    }
+    let owner = from_fn.qualified_name.as_deref().and_then(|qn| {
+        qn.rsplit_once('#')
+            .or_else(|| qn.rsplit_once('.'))
+            .map(|(o, _)| o.to_string())
+    });
+    match call.child_by_field_name("receiver") {
+        None => {
+            let qh = owner.as_ref().map(|o| format!("{o}#{callee}"));
+            (owner, qh)
+        }
+        Some(recv) if recv.kind() == "self" || recv.utf8_text(source).ok() == Some("self") => {
+            let qh = owner.as_ref().map(|o| format!("{o}#{callee}"));
+            (owner, qh)
+        }
+        Some(recv) if matches!(recv.kind(), "constant" | "scope_resolution") => {
+            let Ok(txt) = recv.utf8_text(source).map(str::trim) else {
+                return (None, None);
+            };
+            if txt.is_empty() {
+                (None, None)
+            } else {
+                (Some(txt.to_string()), Some(format!("{txt}.{callee}")))
+            }
+        }
+        _ => (None, None),
+    }
 }
 
 fn containing_python_class_name(from_fn: &Symbol) -> Option<String> {

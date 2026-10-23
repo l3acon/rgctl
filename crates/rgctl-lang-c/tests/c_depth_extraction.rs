@@ -53,3 +53,70 @@ struct Point { int x; int y; };
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn ast_coverage_all_declared_handlers_exercised() {
+    if std::env::var_os("RGCTL_AST_COVERAGE_TRACK").is_none() {
+        return;
+    }
+    const MANIFEST: &str = include_str!("../c-ast-coverage.json");
+    let lang: tree_sitter::Language = tree_sitter_c::LANGUAGE.into();
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
+        "c",
+        MANIFEST,
+        &lang,
+    )
+    .expect("tracker from manifest");
+    assert!(
+        tracker.expected_len() > 0,
+        "manifest should declare active handlers"
+    );
+    rgctl_ast_coverage::install_hit_callback(tracker);
+
+    let sources: &[(&str, &[u8])] = &[(
+        "ast_coverage_corpus.c",
+        br#"
+#include <stdio.h>
+enum Color { Red, Green = 2 };
+union U { int i; float f; };
+struct Point { int x; int y; };
+typedef int Id;
+void foo(void) {
+  int x = 0;
+  x = 1;
+  if (x) {} else {}
+  for (;;) { break; }
+  while (0) { continue; }
+  do { break; } while (0);
+  switch (x) { case 0: break; }
+  goto end;
+end:
+  return;
+}
+"#,
+    )];
+
+    let mut present = std::collections::HashSet::new();
+    let plugin = CPlugin::new().expect("plugin");
+    for (path, src) in sources {
+        present.extend(rgctl_ast_coverage::named_kind_ids_in_source(&lang, src));
+        plugin
+            .extract_all(std::path::Path::new(path), src)
+            .expect("extract_all");
+    }
+
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::global().expect("tracker installed");
+    match tracker.assert_all_exercised() {
+        Ok(msg) => eprintln!("{msg}"),
+        Err(full) => {
+            tracker
+                .assert_present_kinds_exercised(present.iter().copied())
+                .unwrap_or_else(|e| panic!("{e}\n(full gaps: {full})"));
+            assert!(
+                tracker.total_hits() > 0,
+                "RGCTL_AST_COVERAGE_TRACK=1 but no dispatch hits recorded"
+            );
+            eprintln!("soft-gate (full assert not met): {full}");
+        }
+    }
+}

@@ -1076,6 +1076,52 @@ fn build_filtered_neighbor_lists(
     view.topo.undirected_filtered_neighbors(allowed_types)
 }
 
+/// Assert every non-infrastructure community with `|C| > 1` induces a single
+/// connected component on the filtered undirected projection.
+pub fn verify_community_connectedness(
+    view: &PetGraphView,
+    result: &CommunityResult,
+    allowed_types: &[EdgeType],
+) -> Result<()> {
+    let neighbors = build_filtered_neighbor_lists(view, allowed_types);
+    let infra = result.infrastructure_community_id;
+    for community in &result.communities {
+        if community.members.len() <= 1 {
+            continue;
+        }
+        if infra == Some(community.id) {
+            continue;
+        }
+        let idxs: HashSet<usize> = community
+            .members
+            .iter()
+            .filter_map(|id| view.uuid_to_index.get(id).map(|n| n.index()))
+            .collect();
+        if idxs.is_empty() {
+            continue;
+        }
+        let start = *idxs.iter().next().expect("non-empty idxs");
+        let mut seen = HashSet::from([start]);
+        let mut stack = vec![start];
+        while let Some(u) = stack.pop() {
+            for &v in &neighbors[u] {
+                if idxs.contains(&v) && seen.insert(v) {
+                    stack.push(v);
+                }
+            }
+        }
+        if seen.len() != idxs.len() {
+            return Err(rgctl_error::Error::Other(format!(
+                "community {} induces {} connected components (size {})",
+                community.id,
+                idxs.len().saturating_sub(seen.len()) + 1,
+                community.members.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Community neighbor projection: behavioral edges plus scoped `Contains`.
 pub fn build_community_neighbor_lists(
     view: &PetGraphView,
