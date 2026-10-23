@@ -311,6 +311,10 @@ pub enum RelationType {
     RequiresResource,
     /// Puppet class or resource uses a fact
     UsesFact,
+    /// Handler or controller exposes an HTTP/RPC route endpoint
+    ExposesRoute,
+    /// Class, constructor, field, or handler injects a dependency provider/type
+    Injects,
 }
 
 /// Code complexity metrics
@@ -803,8 +807,10 @@ mod tests {
             RelationType::Instantiates,
             RelationType::Modifies,
             RelationType::DependsOn,
+            RelationType::ExposesRoute,
+            RelationType::Injects,
         ];
-        assert_eq!(types.len(), 11);
+        assert_eq!(types.len(), 13);
     }
 
     #[test]

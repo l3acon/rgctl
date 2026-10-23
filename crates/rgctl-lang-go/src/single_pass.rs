@@ -337,5 +337,13 @@ pub fn extract_all_single_pass(
 
     plugin.emit_implements_and_embeds(&ctx.symbols, file_path, &mut relations);
 
+    rgctl_plugin_helpers::apply_framework_catalog(
+        "go",
+        source,
+        Some(root),
+        &mut ctx.symbols,
+        &mut relations,
+    );
+
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
 }

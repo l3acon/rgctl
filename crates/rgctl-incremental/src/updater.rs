@@ -722,6 +722,8 @@ fn relation_type_to_edge(relation_type: rgctl_plugin_api::RelationType) -> EdgeT
         RelationType::InheritsClass => EdgeType::InheritsClass,
         RelationType::RequiresResource => EdgeType::RequiresResource,
         RelationType::UsesFact => EdgeType::UsesFact,
+        RelationType::ExposesRoute => EdgeType::ExposesRoute,
+        RelationType::Injects => EdgeType::Injects,
     }
 }
 

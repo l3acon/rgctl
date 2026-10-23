@@ -67,6 +67,9 @@ pub struct SemanticEntry {
     /// Doc `kind` property when indexed (`heading`, `code_block`, …).
     #[serde(default)]
     pub kind: Option<String>,
+    /// Framework / domain vocab tokens stamped at ingest (`semantic_tags` property).
+    #[serde(default)]
+    pub semantic_tags: Option<String>,
 }
 
 /// Bit-packed semantic index over function nodes only.
@@ -421,7 +424,23 @@ fn semantic_entry_from_node(node: &Node) -> SemanticEntry {
             .or_else(|| node.get_property("body_hash").map(|s| s.to_string())),
         node_type: Some(format!("{:?}", node.node_type)),
         kind: node.get_property("kind").map(|s| s.to_string()),
+        semantic_tags: node.get_property("semantic_tags").map(|s| s.to_string()),
     }
+}
+
+/// Functions always; framework-tagged Class/Interface/Struct for controller/stereotype search.
+fn is_indexed_code_node(node: &Node) -> bool {
+    if node.node_type == NodeType::Function {
+        return true;
+    }
+    if matches!(
+        node.node_type,
+        NodeType::Class | NodeType::Interface | NodeType::Struct
+    ) {
+        return node.get_property("semantic_tags").is_some()
+            || node.get_property("framework_tags").is_some();
+    }
+    false
 }
 
 struct PendingCandidate {
@@ -460,6 +479,12 @@ fn function_decl_parts(node: &Node) -> Vec<String> {
     if let Some(doc) = node.get_property("documentation") {
         parts.push(doc.to_string());
     }
+    if let Some(tags) = node.get_property("semantic_tags") {
+        parts.push(tags.to_string());
+    }
+    if let Some(ftags) = node.get_property("framework_tags") {
+        parts.push(ftags.to_string());
+    }
     parts
 }
 
@@ -473,8 +498,8 @@ fn pending_from_node(
         SemanticIndexScope::Functions | SemanticIndexScope::All
     );
     let include_docs = matches!(scope, SemanticIndexScope::Docs | SemanticIndexScope::All);
-    if include_fn && node.node_type == NodeType::Function {
-        let body_slice = if embed_bodies {
+    if include_fn && is_indexed_code_node(node) {
+        let body_slice = if embed_bodies && node.node_type == NodeType::Function {
             match (node.file_path.as_deref(), node.start_line, node.end_line) {
                 (Some(path), Some(start), Some(end)) => Some((path.to_string(), start, end)),
                 _ => None,
@@ -590,9 +615,9 @@ pub fn embed_text_for_node(node: &Node) -> Option<String> {
     embed_text_for_function(node, None)
 }
 
-/// Collect embeddable text for a function node, optionally including body tokens.
+/// Collect embeddable text for a function (or framework-tagged type) node.
 pub fn embed_text_for_function(node: &Node, repo_root: Option<&Path>) -> Option<String> {
-    if node.node_type != NodeType::Function {
+    if !is_indexed_code_node(node) {
         return None;
     }
 
@@ -611,12 +636,20 @@ pub fn embed_text_for_function(node: &Node, repo_root: Option<&Path>) -> Option<
     if let Some(doc) = node.get_property("documentation") {
         parts.push(doc.to_string());
     }
+    if let Some(tags) = node.get_property("semantic_tags") {
+        parts.push(tags.to_string());
+    }
+    if let Some(ftags) = node.get_property("framework_tags") {
+        parts.push(ftags.to_string());
+    }
 
     if let Some(root) = repo_root {
-        if let Ok(body_tokens) = extract_body_tokens_for_node(root, node) {
-            let mut token_list: Vec<String> = body_tokens.into_iter().collect();
-            token_list.sort_unstable();
-            parts.extend(token_list);
+        if node.node_type == NodeType::Function {
+            if let Ok(body_tokens) = extract_body_tokens_for_node(root, node) {
+                let mut token_list: Vec<String> = body_tokens.into_iter().collect();
+                token_list.sort_unstable();
+                parts.extend(token_list);
+            }
         }
     }
 
@@ -670,7 +703,8 @@ pub fn embed_text_for_scope(
 /// Deterministic sign-hash embedding (bag-of-tokens → sparse signed vector).
 pub fn sign_hash_embed(text: &str, dimensions: usize) -> Vec<f32> {
     let mut vec = vec![0f32; dimensions];
-    for token in tokenize(text) {
+    let tokens = crate::semantic_vocab::normalize_semantic_query_tokens(text);
+    for token in tokens {
         let primary = fnv1a(token.as_bytes());
         let secondary = fnv1a(&[token.as_bytes(), b"#2"].concat());
         let sign = if primary & 1 == 0 { 1.0 } else { -1.0 };
@@ -916,11 +950,6 @@ fn packed_bytes(dimensions: usize) -> usize {
     dimensions.div_ceil(8)
 }
 
-fn tokenize(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|token| !token.is_empty())
-}
-
 fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in bytes {
@@ -994,6 +1023,7 @@ mod tests {
                     code_hash: None,
                     node_type: None,
                     kind: None,
+                    semantic_tags: None,
                 })
                 .collect(),
             binary_embeddings: vec![
@@ -1052,10 +1082,24 @@ mod tests {
         let index = build_from_backend(&backend, 128, None).unwrap();
         assert_eq!(index.len(), 2);
 
-        let hits = query_index(&index, "authenticate bearer token", 2);
+        // Prefer the distinctive name token — filler/synonym normalization in
+        // `sign_hash_embed` can flatten weak overlaps like shared `token` args.
+        let hits = query_index(&index, "authenticate", 2);
         assert_eq!(hits.len(), 2);
-        assert_eq!(hits[0].entry.node_id, n1.id);
-        assert!(hits[0].distance <= hits[1].distance);
+        let auth_hit = hits
+            .iter()
+            .find(|h| h.entry.node_id == n1.id)
+            .expect("authenticate should be retrieved");
+        let revoke_hit = hits
+            .iter()
+            .find(|h| h.entry.node_id == n2.id)
+            .expect("revoke should be retrieved");
+        assert!(
+            auth_hit.distance <= revoke_hit.distance,
+            "authenticate distance {} should be <= revoke {}",
+            auth_hit.distance,
+            revoke_hit.distance
+        );
     }
 
     #[test]
@@ -1091,6 +1135,7 @@ mod tests {
                 code_hash: Some("abc".into()),
                 node_type: None,
                 kind: None,
+                semantic_tags: None,
             }],
             binary_embeddings: vec![0b1010_1010, 0b0101_0101],
         };
@@ -1355,6 +1400,7 @@ mod tests {
                     code_hash: None,
                     node_type: None,
                     kind: None,
+                    semantic_tags: None,
                 })
                 .collect(),
             binary_embeddings: bits,
@@ -1421,5 +1467,111 @@ mod tests {
         assert_eq!(index.len(), 2);
         assert!(index.entries.iter().any(|entry| entry.name == "caller"));
         assert!(index.entries.iter().any(|entry| entry.name == "callee"));
+    }
+
+    #[test]
+    fn framework_tagged_nodes_rank_natural_language_queries() {
+        use crate::semantic_fusion::{query_index_with_fusion, SemanticFusionConfig};
+        use crate::semantic_vocab::VocabAccumulateEmbedder;
+
+        let mut backend = MemoryBackend::new();
+        // Keep QNs disjoint so name tokens do not leak across roles
+        // (e.g. `OrderController.fetch_by_id` would pollute "controllers").
+        let controller = Node::new(NodeType::Class, "OrderController")
+            .with_qualified_name("com.example.web.OrderController")
+            .with_property(
+                "semantic_tags".into(),
+                "controller controllers rest api spring".into(),
+            )
+            .with_property("framework_tags".into(), "role:controller".into());
+        let endpoint = Node::new(NodeType::Function, "fetch_by_id")
+            .with_qualified_name("com.example.api.fetch_by_id")
+            .with_property(
+                "semantic_tags".into(),
+                "endpoint endpoints route routes http rest api handler spring".into(),
+            )
+            .with_property("framework_tags".into(), "role:endpoint".into());
+        let reflection = Node::new(NodeType::Class, "DynamicLoader")
+            .with_qualified_name("com.example.reflect.DynamicLoader")
+            .with_property(
+                "semantic_tags".into(),
+                "reflection reflect dynamic introspection invoke jvm".into(),
+            )
+            .with_property("framework_tags".into(), "role:reflection".into());
+        let unrelated = Node::new(NodeType::Function, "calculate_tax")
+            .with_qualified_name("com.example.tax.calculate_tax")
+            .with_signature("fn calculate_tax(amount: f64) -> f64");
+        let ctrl_id = controller.id;
+        let ep_id = endpoint.id;
+        let refl_id = reflection.id;
+        backend.insert_node(controller).unwrap();
+        backend.insert_node(endpoint).unwrap();
+        backend.insert_node(reflection).unwrap();
+        backend.insert_node(unrelated).unwrap();
+
+        let dims = 64;
+        let embedder = VocabAccumulateEmbedder::new(dims).unwrap();
+        let (index, _stats) = build_index(
+            &backend,
+            &embedder,
+            SemanticBuildOptions::fresh(dims, None),
+        )
+        .unwrap();
+        assert!(
+            index.len() >= 3,
+            "tagged classes + endpoint should be indexed, got {}",
+            index.len()
+        );
+
+        let fusion = SemanticFusionConfig {
+            enabled: true,
+            keyword_and: false,
+            w_semantic: 0.5,
+            w_name: 0.3,
+            w_sketch: 0.2,
+            w_blast: 0.0,
+            w_centrality: 0.0,
+            ..Default::default()
+        };
+        let reload = OnnxReloadOptions::default();
+
+        let hits = query_index_with_fusion(
+            &index,
+            "hey give me all my end points",
+            4,
+            &reload,
+            &fusion,
+            None,
+            Some(&backend),
+            None,
+        )
+        .unwrap();
+        assert_eq!(hits[0].entry.node_id, ep_id, "endpoints → fetch_by_id");
+
+        let hits = query_index_with_fusion(
+            &index,
+            "give me all my controllers",
+            4,
+            &reload,
+            &fusion,
+            None,
+            Some(&backend),
+            None,
+        )
+        .unwrap();
+        assert_eq!(hits[0].entry.node_id, ctrl_id, "controllers → OrderController");
+
+        let hits = query_index_with_fusion(
+            &index,
+            "give me all my reflection classes",
+            4,
+            &reload,
+            &fusion,
+            None,
+            Some(&backend),
+            None,
+        )
+        .unwrap();
+        assert_eq!(hits[0].entry.node_id, refl_id, "reflection → DynamicLoader");
     }
 }

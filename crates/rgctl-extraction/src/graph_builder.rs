@@ -34,6 +34,8 @@ pub struct GraphBuilder {
     env_nodes: HashMap<String, Uuid>,
     nodes: Vec<Node>,
     edges: Vec<Edge>,
+    /// Lazily populated `Uuid -> self.nodes index` map when `append_target_vocab` runs.
+    node_index_by_id: HashMap<Uuid, usize>,
     /// Optional disk spill — when set, nodes/edges are not kept in `Vec`s.
     spill: Option<SegmentedSpill>,
     spill_error: Option<String>,
@@ -275,6 +277,9 @@ impl GraphBuilder {
                 self.spilled_nodes += 1;
             }
         } else {
+            if !self.node_index_by_id.is_empty() {
+                self.node_index_by_id.insert(node.id, self.nodes.len());
+            }
             self.nodes.push(node);
         }
     }
@@ -474,14 +479,20 @@ impl GraphBuilder {
             node = node.with_code_hash(code_hash);
         }
 
+        let semantic_tags = symbol
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
         if let Some(bloom) = prep.and_then(|p| p.token_bloom) {
             node = node.with_token_bloom(bloom);
-        } else if should_sketch_symbol(symbol.symbol_type) {
+        } else if should_sketch_symbol(symbol.symbol_type, semantic_tags.is_some()) {
             let bloom = build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),
                 symbol.signature.as_deref(),
                 body,
+                semantic_tags,
             );
             node = node.with_token_bloom(bloom);
         }
@@ -863,9 +874,87 @@ impl GraphBuilder {
                     arguments: args.to_string(),
                 });
             }
+            if matches!(
+                relation.relation_type,
+                RelationType::ExposesRoute | RelationType::Injects
+            ) {
+                for key in ["http_method", "route_path", "framework", "rule_id"] {
+                    if let Some(v) = relation
+                        .metadata
+                        .get(key)
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                    {
+                        edge = edge.with_property(key.to_string(), v.to_string());
+                    }
+                }
+            }
+            if relation.relation_type == RelationType::Injects
+                && let Some(target_vocab) = relation
+                    .metadata
+                    .get("target_vocab")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+            {
+                self.append_target_vocab(to, target_vocab);
+            }
             self.commit_edge(edge);
         }
         Ok(())
+    }
+
+    /// Append `target_vocab` tokens onto an in-repo Injects target's `semantic_tags` in O(1).
+    fn append_target_vocab(&mut self, to: Uuid, target_vocab: &str) {
+        if self.spill.is_some() {
+            return;
+        }
+        if self.node_index_by_id.is_empty() && !self.nodes.is_empty() {
+            self.node_index_by_id.reserve(self.nodes.len());
+            for (idx, n) in self.nodes.iter().enumerate() {
+                self.node_index_by_id.insert(n.id, idx);
+            }
+        }
+        let Some(&idx) = self.node_index_by_id.get(&to) else {
+            return;
+        };
+        let Some(node) = self.nodes.get_mut(idx) else {
+            return;
+        };
+        if node
+            .properties
+            .get("is_external_stub")
+            .map(String::as_str)
+            == Some("true")
+        {
+            return;
+        }
+        let existing = node
+            .properties
+            .get("semantic_tags")
+            .cloned()
+            .unwrap_or_default();
+        let mut parts: Vec<&str> = existing
+            .split_whitespace()
+            .chain(target_vocab.split_whitespace())
+            .filter(|t| !t.is_empty())
+            .collect();
+        parts.sort_unstable();
+        parts.dedup();
+        let merged = parts.join(" ");
+        node.properties
+            .insert("semantic_tags".to_string(), merged.clone());
+        let bloom = build_token_bloom(
+            &node.name,
+            node.qualified_name.as_deref(),
+            node.signature_text(),
+            None,
+            Some(merged.as_str()),
+        );
+        let mut cur = node.token_bloom.unwrap_or([0; 4]);
+        for (slot, b) in cur.iter_mut().zip(bloom) {
+            *slot |= b;
+        }
+        node.token_bloom = Some(cur);
     }
 
     fn record_inheritance(&mut self, child: &str, parent: &str, is_interface: bool) {
@@ -1045,11 +1134,23 @@ impl GraphBuilder {
         qualified_hint: Option<&str>,
         node_type: NodeType,
     ) -> Uuid {
-        let simple = name
-            .rsplit(['.', '/', ':'])
-            .next()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(name);
+        // Preserve full HTTP route names — `rsplit` on `/` would turn
+        // `"GET /api/users/{id}"` into `"{id}"`.
+        let is_route_stub = qualified_hint.is_some_and(|h| h.starts_with("route::"))
+            || name.starts_with('/')
+            || [
+                "GET ", "POST ", "PUT ", "DELETE ", "PATCH ", "OPTIONS ", "HEAD ", "ANY ",
+            ]
+            .iter()
+            .any(|p| name.starts_with(p));
+        let simple = if is_route_stub {
+            name
+        } else {
+            name.rsplit(['.', '/', ':'])
+                .next()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(name)
+        };
         let qn = qualified_hint
             .filter(|s| !s.is_empty())
             .unwrap_or(name)
@@ -1091,15 +1192,19 @@ impl GraphBuilder {
 
         let file_id = self.ensure_file_node(Path::new(STUB_FILE));
         // JPMS / dotted module ids keep the full name; types use the last segment.
+        // Route stubs keep the full `"METHOD /path"` display name.
         let display_name = if node_type == NodeType::Module {
             qn.clone()
         } else {
             simple.to_string()
         };
-        let node = Node::new(node_type, display_name)
+        let mut node = Node::new(node_type, display_name)
             .with_qualified_name(qn.clone())
             .with_file_path(STUB_FILE.to_string())
             .with_property("is_external_stub".to_string(), "true".to_string());
+        if is_route_stub {
+            node = node.with_label("route".to_string());
+        }
         let id = node.id;
         self.symbol_index.insert(key, id);
         self.symbols_by_qualified
@@ -1625,8 +1730,13 @@ fn single_c_preferred_impl(ids: &[Uuid], symbol_files: &HashMap<Uuid, String>) -
     c_impl
 }
 
-fn should_sketch_symbol(symbol_type: SymbolType) -> bool {
+fn should_sketch_symbol(symbol_type: SymbolType, has_semantic_tags: bool) -> bool {
     matches!(symbol_type, SymbolType::Function | SymbolType::Method)
+        || (has_semantic_tags
+            && matches!(
+                symbol_type,
+                SymbolType::Class | SymbolType::Struct | SymbolType::Interface
+            ))
 }
 
 fn symbol_type_to_node_type(symbol_type: SymbolType) -> NodeType {
@@ -1730,7 +1840,9 @@ fn relation_allows_external_stub(relation: &Relation) -> bool {
         | RelationType::Implements
         | RelationType::Permits
         | RelationType::UsesVariable
-        | RelationType::UsesFact => true,
+        | RelationType::UsesFact
+        | RelationType::ExposesRoute
+        | RelationType::Injects => true,
         // Bare field `References` (no type hint / type metadata) must not invent
         // Class stubs that pollute suffix resolution (#125). Typed References
         // (throws, class literals, Puppet resources, explicit type hints) still stub.
@@ -1785,14 +1897,16 @@ fn stub_node_type_for_target(relation: &Relation) -> NodeType {
             "puppetfact" => return NodeType::PuppetFact,
             "puppetresource" => return NodeType::PuppetResource,
             "puppetclass" => return NodeType::PuppetClass,
+            "route" => return NodeType::Function,
             _ => {}
         }
     }
     match relation.relation_type {
         RelationType::DependsOn => NodeType::Module,
         RelationType::AnnotatedWith => NodeType::Annotation,
-        RelationType::Calls => NodeType::Function,
+        RelationType::Calls | RelationType::ExposesRoute => NodeType::Function,
         RelationType::Implements => NodeType::Interface,
+        RelationType::Injects => NodeType::Class,
         RelationType::Extends
         | RelationType::Instantiates
         | RelationType::Permits
@@ -1833,6 +1947,8 @@ fn relation_type_to_edge_type(relation_type: RelationType) -> EdgeType {
         RelationType::InheritsClass => EdgeType::InheritsClass,
         RelationType::RequiresResource => EdgeType::RequiresResource,
         RelationType::UsesFact => EdgeType::UsesFact,
+        RelationType::ExposesRoute => EdgeType::ExposesRoute,
+        RelationType::Injects => EdgeType::Injects,
     }
 }
 
@@ -3732,6 +3848,163 @@ mod tests {
         assert!(
             edges.iter().any(|e| e.edge_type == EdgeType::Calls && e.to == bark),
             "Dog#bark via include must resolve to Walkable#bark, edges={edges:?}"
+        );
+    }
+
+    #[test]
+    fn exposes_route_preserves_full_route_name_not_brace_segment() {
+        let mut builder = GraphBuilder::new();
+        let file_id = builder.ensure_file_node(Path::new("users.py"));
+        let handler = Symbol {
+            name: "get_user".to_string(),
+            symbol_type: SymbolType::Function,
+            qualified_name: Some("get_user".to_string()),
+            location: SourceLocation {
+                file: "users.py".to_string(),
+                start_line: 1,
+                end_line: 5,
+                start_column: 0,
+                end_column: 1,
+            },
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "python" }),
+        };
+        builder.add_symbol(&handler, file_id);
+        builder.build_resolution_indexes();
+        builder
+            .add_relation(&Relation {
+                from: "get_user".to_string(),
+                to: "GET /api/users/{id}".to_string(),
+                relation_type: RelationType::ExposesRoute,
+                location: SourceLocation {
+                    file: "users.py".to_string(),
+                    start_line: 1,
+                    end_line: 1,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({
+                    "http_method": "GET",
+                    "route_path": "/api/users/{id}",
+                    "framework": "fastapi",
+                    "rule_id": "fastapi.flask.route_decorator"
+                }),
+                to_qualified_hint: Some("route::GET /api/users/{id}".to_string()),
+                to_type_hint: Some("route".to_string()),
+            })
+            .unwrap();
+
+        let route = builder
+            .nodes()
+            .iter()
+            .find(|n| n.name == "GET /api/users/{id}")
+            .expect("route node must keep full METHOD /path name, not {id}");
+        assert_ne!(route.name, "{id}");
+        assert!(
+            builder.edges.iter().any(|e| {
+                e.edge_type == EdgeType::ExposesRoute && e.to == route.id
+            }),
+            "ExposesRoute edge missing"
+        );
+    }
+
+    #[test]
+    fn injects_links_to_in_repo_class_and_appends_target_vocab() {
+        let mut builder = GraphBuilder::new();
+        let file_id = builder.ensure_file_node(Path::new("OrderController.java"));
+        let controller = Symbol {
+            name: "OrderController".to_string(),
+            symbol_type: SymbolType::Class,
+            qualified_name: Some("OrderController".to_string()),
+            location: SourceLocation {
+                file: "OrderController.java".to_string(),
+                start_line: 1,
+                end_line: 20,
+                start_column: 0,
+                end_column: 1,
+            },
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "java" }),
+        };
+        let service = Symbol {
+            name: "OrderService".to_string(),
+            symbol_type: SymbolType::Class,
+            qualified_name: Some("OrderService".to_string()),
+            location: SourceLocation {
+                file: "OrderController.java".to_string(),
+                start_line: 22,
+                end_line: 40,
+                start_column: 0,
+                end_column: 1,
+            },
+            signature: None,
+            return_type: None,
+            parameters: vec![],
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "language": "java" }),
+        };
+        builder.add_symbol(&controller, file_id);
+        builder.add_symbol(&service, file_id);
+        builder.build_resolution_indexes();
+        builder
+            .add_relation(&Relation {
+                from: "OrderController".to_string(),
+                to: "OrderService".to_string(),
+                relation_type: RelationType::Injects,
+                location: SourceLocation {
+                    file: "OrderController.java".to_string(),
+                    start_line: 5,
+                    end_line: 5,
+                    start_column: 0,
+                    end_column: 1,
+                },
+                metadata: serde_json::json!({
+                    "rule_id": "spring.jakarta.field_di",
+                    "target_vocab": "dependency injection provider service"
+                }),
+                to_qualified_hint: None,
+                to_type_hint: Some("class".to_string()),
+            })
+            .unwrap();
+
+        assert!(
+            builder
+                .edges
+                .iter()
+                .any(|e| e.edge_type == EdgeType::Injects),
+            "Injects edge missing"
+        );
+        let svc = builder
+            .nodes()
+            .iter()
+            .find(|n| n.name == "OrderService")
+            .expect("OrderService");
+        assert!(
+            svc.properties
+                .get("is_external_stub")
+                .map(String::as_str)
+                != Some("true")
+        );
+        let tags = svc
+            .properties
+            .get("semantic_tags")
+            .map(String::as_str)
+            .unwrap_or("");
+        assert!(
+            tags.contains("dependency") && tags.contains("service"),
+            "target_vocab should land on in-repo Injects target, got {tags:?}"
         );
     }
 }

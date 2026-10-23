@@ -454,5 +454,14 @@ pub fn extract_all_single_pass(
     plugin.extract_inheritance(root, source, file_path, None, &mut relations)?;
 
     let _ = PHP_FUNCTION_KINDS;
+
+    rgctl_plugin_helpers::apply_framework_catalog(
+        "php",
+        source,
+        Some(root),
+        &mut ctx.symbols,
+        &mut relations,
+    );
+
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
 }

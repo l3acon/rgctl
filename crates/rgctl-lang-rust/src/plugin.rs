@@ -1264,4 +1264,42 @@ trait Drawable {
             result.symbols
         );
     }
+
+    #[test]
+    fn actix_get_and_axum_state_emit_exposes_route_and_injects() {
+        let source = br#"
+use axum::extract::State;
+use std::sync::Arc;
+
+#[get("/health")]
+async fn health() -> &'static str { "ok" }
+
+async fn list_users(State(state): State<Arc<AppState>>) -> String {
+    state.name.clone()
+}
+
+struct AppState { name: String }
+"#;
+        let plugin = RustPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("src/routes.rs"), source)
+            .unwrap();
+        let routes: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::ExposesRoute)
+            .collect();
+        assert!(
+            routes.iter().any(|r| r.to == "GET /health"),
+            "actix #[get]: {:?}",
+            result.relations
+        );
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Injects && r.to.contains("AppState")
+            }),
+            "State<Arc<AppState>> Injects: {:?}",
+            result.relations
+        );
+    }
 }

@@ -12,6 +12,7 @@ Practical, step-by-step guides for every major rgctl feature.
 |-------|---------|-------------|
 | [Discovering and Indexing a Codebase](discovering-and-indexing.md) | `discover` | Build the knowledge graph from source code |
 | [Structured graph queries](structured-query.md) | `find` / `callers` / `relations` / … | Agent-facing graph exploration verbs |
+| [Dependency Injection and Frameworks](dependency-injection-and-frameworks.md) | `ExposesRoute` / `Injects` / `semantic` | HTTP routes, DI wiring, reflection & compiled `frameworks.bin` catalog (User + Developer guide) |
 | [Blast Radius Analysis](blast-radius-analysis.md) | `blast-radius` | Measure upstream impact before changing a function |
 | [Semantic Search](semantic-search.md) | `semantic` | Natural-language search over function symbols |
 | [Graph Metrics](graph-metrics.md) | `metrics` | PageRank, betweenness, and community detection analytics |

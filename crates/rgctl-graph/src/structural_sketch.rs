@@ -18,11 +18,14 @@ pub const MIN_TOKEN_LEN: usize = 3;
 pub type TokenBloom = [u64; TOKEN_BLOOM_WORDS];
 
 /// Build a token bloom from declaration metadata and optional body text.
+///
+/// `extra_tokens` (e.g. framework `semantic_tags`) is tokenized into the same filter.
 pub fn build_token_bloom(
     name: &str,
     qualified_name: Option<&str>,
     signature: Option<&str>,
     body: Option<&str>,
+    extra_tokens: Option<&str>,
 ) -> TokenBloom {
     let mut bloom = empty_bloom();
     tokenize_into_bloom(name, &mut bloom);
@@ -34,6 +37,9 @@ pub fn build_token_bloom(
     }
     if let Some(text) = body {
         tokenize_into_bloom(text, &mut bloom);
+    }
+    if let Some(extra) = extra_tokens {
+        tokenize_into_bloom(extra, &mut bloom);
     }
     bloom
 }
@@ -193,7 +199,8 @@ mod tests {
 
     #[test]
     fn bloom_detects_inserted_body_token() {
-        let bloom = build_token_bloom("helper", None, None, Some("let port = ntohs(raw);"));
+        let bloom =
+            build_token_bloom("helper", None, None, Some("let port = ntohs(raw);"), None);
         assert!(keyword_in_bloom("ntohs", &bloom));
     }
 
@@ -204,6 +211,7 @@ mod tests {
             Some("InvoiceService.processInvoice"),
             None,
             Some("posting to GL account"),
+            None,
         );
         assert!(satisfies_keyword_and(
             &["invoice".into(), "posting".into()],
@@ -217,14 +225,14 @@ mod tests {
 
     #[test]
     fn bloom_jaccard_identical_is_one() {
-        let a = build_token_bloom("f", None, None, Some("alpha beta gamma delta"));
+        let a = build_token_bloom("f", None, None, Some("alpha beta gamma delta"), None);
         assert!((bloom_jaccard(&a, &a) - 1.0).abs() < 1e-9);
     }
 
     #[test]
     fn bloom_jaccard_disjoint_near_zero() {
-        let a = build_token_bloom("f", None, None, Some("alpha beta gamma"));
-        let b = build_token_bloom("g", None, None, Some("zzzz yyyy xxxx"));
+        let a = build_token_bloom("f", None, None, Some("alpha beta gamma"), None);
+        let b = build_token_bloom("g", None, None, Some("zzzz yyyy xxxx"), None);
         assert!(bloom_jaccard(&a, &b) < 0.5);
     }
 }

@@ -29,6 +29,7 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 | Goal | Doc |
 |------|-----|
 | Supported languages | [Languages](languages/README.md) (SSOT: coverage JSON) |
+| Dependency Injection & Frameworks | [Dependency Injection and Frameworks](guides/dependency-injection-and-frameworks.md) — routes (`ExposesRoute`), DI (`Injects`), reflection, semantic tags, and `frameworks.bin` |
 | Markdown / doc context graph | [Guide](guides/markdown-context-graph.md) (step-by-step) — `.md` / `.mdx`, structured queries, Obsidian export, doc semantic index |
 | HTTP server + dashboard | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
 | CI blast-radius policy | [Policy format](policy-format.md) |

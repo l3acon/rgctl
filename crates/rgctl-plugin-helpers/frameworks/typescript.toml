@@ -1,0 +1,59 @@
+language = "typescript"
+
+[[rules]]
+id = "nestjs.controller.stereotype"
+framework = "nestjs"
+kind = "ConceptTagger"
+annotations = ["Controller"]
+tags = ["role:controller"]
+vocab = "controller controllers rest api endpoint endpoints web handler resource"
+
+[[rules]]
+id = "nestjs.http.routes"
+framework = "nestjs"
+kind = "RouteDecorator"
+class_prefix_annotations = ["Controller"]
+method_annotations = [
+  { name = "Get", method = "GET" },
+  { name = "Post", method = "POST" },
+  { name = "Put", method = "PUT" },
+  { name = "Delete", method = "DELETE" },
+  { name = "Patch", method = "PATCH" },
+  { name = "Options", method = "OPTIONS" },
+  { name = "Head", method = "HEAD" },
+  { name = "All", method = "ANY" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rest api handler nestjs"
+
+[[rules]]
+id = "express.fastify.hono.route_call"
+framework = "express"
+kind = "RouteCall"
+router_callees = [
+  { name = "get", method = "GET" },
+  { name = "post", method = "POST" },
+  { name = "put", method = "PUT" },
+  { name = "delete", method = "DELETE" },
+  { name = "patch", method = "PATCH" },
+  { name = "all", method = "ANY" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http express fastify hono"
+
+[[rules]]
+id = "nestjs.angular.ctor_di"
+framework = "nestjs"
+kind = "CtorOrStereotypeInject"
+annotations = ["Injectable", "Controller", "Component", "Inject"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection inject injectable provider service nestjs angular"
+target_vocab = "dependency injection provider service injectable bean"
+
+[[rules]]
+id = "js.ts.reflection"
+framework = "typescript"
+kind = "ConceptTagger"
+call_callees = ["getMetadata", "defineMetadata", "construct", "ownKeys"]
+tags = ["role:reflection"]
+vocab = "reflection reflect metadata introspection reflect-metadata"

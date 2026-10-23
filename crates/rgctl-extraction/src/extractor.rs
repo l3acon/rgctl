@@ -440,19 +440,34 @@ fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Pre
     let offsets = line_start_offsets(source);
     let mut preps = Vec::with_capacity(symbols.len());
     for symbol in symbols {
-        // Hash + bloom only for callables — Struct/Enum/Macro/Import bodies are
-        // not used for clone detection and dominate prep cost on C corpora.
-        let (code_hash, token_bloom) = if matches!(
+        let semantic_tags = symbol
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let is_callable = matches!(
             symbol.symbol_type,
             SymbolType::Function | SymbolType::Method
-        ) {
-            let body = symbol_body_from_source(source, &offsets, symbol);
+        );
+        let is_tagged_type = matches!(
+            symbol.symbol_type,
+            SymbolType::Class | SymbolType::Struct | SymbolType::Interface
+        ) && semantic_tags.is_some();
+        // Hash + bloom for callables; also bloom tagged Class/Struct/Interface so
+        // framework vocab participates in keyword sketches (no body hash for types).
+        let (code_hash, token_bloom) = if is_callable || is_tagged_type {
+            let body = if is_callable {
+                symbol_body_from_source(source, &offsets, symbol)
+            } else {
+                None
+            };
             let code_hash = body.map(hash_code);
             let token_bloom = Some(build_token_bloom(
                 &symbol.name,
                 symbol.qualified_name.as_deref(),
                 symbol.signature.as_deref(),
                 body,
+                semantic_tags,
             ));
             (code_hash, token_bloom)
         } else {

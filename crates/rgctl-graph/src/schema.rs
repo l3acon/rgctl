@@ -311,6 +311,10 @@ pub enum EdgeType {
     Violates,
     /// Subtype method overrides an ancestor method (`Child.m` → `Ancestor.m`)
     Overrides,
+    /// Handler or controller exposes an HTTP/RPC route endpoint
+    ExposesRoute,
+    /// Class, constructor, field, or handler injects a dependency provider/type
+    Injects,
     /// Unknown or forward-compatible edge type; excluded from call-graph traversals.
     #[serde(other)]
     Unknown,
@@ -779,9 +783,11 @@ mod tests {
             EdgeType::Permits,
             EdgeType::Violates,
             EdgeType::Overrides,
+            EdgeType::ExposesRoute,
+            EdgeType::Injects,
             EdgeType::Unknown,
         ];
-        assert_eq!(types.len(), 33);
+        assert_eq!(types.len(), 35);
     }
 
     #[test]

@@ -370,5 +370,13 @@ pub fn extract_all_single_pass(
 
     plugin.collect_inheritance_relations(root, source, file_path, &mut relations);
 
+    rgctl_plugin_helpers::apply_framework_catalog(
+        "kotlin",
+        source,
+        Some(root),
+        &mut ctx.symbols,
+        &mut relations,
+    );
+
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
 }

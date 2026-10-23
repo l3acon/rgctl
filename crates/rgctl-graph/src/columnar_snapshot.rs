@@ -1657,6 +1657,8 @@ mod tests {
         assert!(edges.contains(&EdgeType::Permits));
         assert_eq!(edge_type_to_u8(EdgeType::AnnotatedWith), 28);
         assert_eq!(edge_type_to_u8(EdgeType::Permits), 29);
+        assert_eq!(edge_type_to_u8(EdgeType::ExposesRoute), 32);
+        assert_eq!(edge_type_to_u8(EdgeType::Injects), 33);
         assert_eq!(node_type_to_u16(NodeType::Annotation), 35);
     }
 

@@ -1007,7 +1007,17 @@ impl LanguagePlugin for JavaScriptPlugin {
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
         let tree = self.parse(file_path, source)?;
-        self.relations_from_tree(tree.root_node(), source, file_path, symbols)
+        let root = tree.root_node();
+        let mut relations = self.relations_from_tree(root, source, file_path, symbols)?;
+        let mut sym_copy = symbols.to_vec();
+        rgctl_plugin_helpers::apply_framework_catalog(
+            "javascript",
+            source,
+            Some(root),
+            &mut sym_copy,
+            &mut relations,
+        );
+        Ok(relations)
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {

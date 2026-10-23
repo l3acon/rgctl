@@ -1258,4 +1258,46 @@ class OrderService:
             "{relations:?}"
         );
     }
+
+    #[test]
+    fn fastapi_extract_all_emits_exposes_route_and_injects() {
+        let source = br#"
+from fastapi import Depends
+
+@app.get("/users/{id}")
+def get_user(id: str, db = Depends(get_db)):
+    return db
+"#;
+        let plugin = PythonPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("users.py"), source)
+            .unwrap();
+        let route = result
+            .relations
+            .iter()
+            .find(|r| r.relation_type == RelationType::ExposesRoute)
+            .expect("ExposesRoute");
+        assert_eq!(route.to, "GET /users/{id}");
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Injects && r.to == "get_db"
+            }),
+            "Injects get_db: {:?}",
+            result.relations
+        );
+        let handler = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "get_user")
+            .expect("get_user");
+        let tags = handler
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            tags.contains("endpoint") && tags.contains("dependency"),
+            "semantic_tags={tags:?}"
+        );
+    }
 }

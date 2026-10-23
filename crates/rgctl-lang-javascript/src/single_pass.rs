@@ -359,5 +359,13 @@ pub fn extract_all_single_pass(
         "javascript",
     ));
 
+    rgctl_plugin_helpers::apply_framework_catalog(
+        "javascript",
+        source,
+        Some(root),
+        &mut ctx.symbols,
+        &mut relations,
+    );
+
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
 }

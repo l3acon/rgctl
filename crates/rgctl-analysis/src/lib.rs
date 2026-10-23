@@ -275,7 +275,8 @@ pub use semantic_search::{
 pub use semantic_vocab::{
     DEFAULT_VOCAB_TOKEN_LIST, TokenSpaceAccumulator, VOCAB_ACCUMULATE_DISTILLED_ID,
     VOCAB_ACCUMULATE_MODEL_ID, VOCAB_NATIVE_DIMENSIONS, VocabAccumulateEmbedder,
-    distill_vocab_matrix, encode_rbvk, parse_vocab_token_list,
+    canonicalize_query_keywords, distill_vocab_matrix, encode_rbvk,
+    normalize_semantic_query_tokens, parse_vocab_token_list,
 };
 pub use slicing::{
     BackwardSlicer, CodeSlice, ForwardSlicer, SliceCriterion, SliceDirection, SliceOptions,

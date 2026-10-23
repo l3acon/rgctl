@@ -141,6 +141,8 @@ fn build_eval_graph_from_snapshot(snapshot: &Path) -> Result<EvalGraph> {
             EdgeType::Extends => "EXTENDS",
             EdgeType::Implements => "IMPLEMENTS",
             EdgeType::AnnotatedWith => "ANNOTATED_WITH",
+            EdgeType::ExposesRoute => "EXPOSES_ROUTE",
+            EdgeType::Injects => "INJECTS",
             _ => return Ok(()),
         };
         let Some(from_node) = store.get_node(from)? else {

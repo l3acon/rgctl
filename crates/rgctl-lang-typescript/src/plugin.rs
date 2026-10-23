@@ -31,6 +31,14 @@ impl TypeScriptPlugin {
                 parent.kind(),
                 "class_declaration" | "abstract_class_declaration"
             ) {
+                if let Some(name) = parent
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source).ok())
+                    .map(str::to_string)
+                    .filter(|s| !s.is_empty())
+                {
+                    return Some(name);
+                }
                 let mut cursor = parent.walk();
                 for child in parent.children(&mut cursor) {
                     if matches!(child.kind(), "type_identifier" | "identifier") {
@@ -1315,17 +1323,23 @@ impl TypeScriptPlugin {
                     .or_else(|| {
                         let mut c = node.walk();
                         node.children(&mut c).find_map(|ch| {
-                            if matches!(ch.kind(), "property_identifier" | "identifier") {
+                            if matches!(
+                                ch.kind(),
+                                "property_identifier"
+                                    | "identifier"
+                                    | "private_property_identifier"
+                            ) {
                                 ch.utf8_text(source).ok().map(str::to_string)
                             } else {
                                 None
                             }
                         })
                     });
-                method.and_then(|m| {
+                method.map(|m| {
                     self.find_containing_class_name(node, source)
                         .or_else(|| self.find_containing_interface_name(node, source))
                         .map(|owner| format!("{owner}.{m}"))
+                        .unwrap_or(m)
                 })
             }
             _ => None,
@@ -1427,17 +1441,23 @@ impl TypeScriptPlugin {
                     .or_else(|| {
                         let mut c = node.walk();
                         node.children(&mut c).find_map(|ch| {
-                            if matches!(ch.kind(), "property_identifier" | "identifier") {
+                            if matches!(
+                                ch.kind(),
+                                "property_identifier"
+                                    | "identifier"
+                                    | "private_property_identifier"
+                            ) {
                                 ch.utf8_text(source).ok().map(str::to_string)
                             } else {
                                 None
                             }
                         })
                     });
-                method.and_then(|m| {
+                method.map(|m| {
                     self.find_containing_class_name(node, source)
                         .or_else(|| self.find_containing_interface_name(node, source))
                         .map(|owner| format!("{owner}.{m}"))
+                        .unwrap_or(m)
                 })
             }
             _ => None,
@@ -1544,12 +1564,49 @@ fn export_specifier_source_module(node: Node, source: &[u8]) -> Option<String> {
 
 fn collect_decorators(node: Node, source: &[u8]) -> Vec<(String, Option<String>)> {
     let mut out = Vec::new();
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    for i in 0..node.child_count() {
+        let Some(child) = node.child(i) else {
+            continue;
+        };
         if child.kind() == "decorator" {
             if let Some((name, args)) = decorator_name_and_args(child, source) {
                 out.push((name, args));
             }
+        }
+    }
+    out
+}
+
+fn collect_preceding_sibling_decorators(
+    node: Node,
+    parent: Node,
+    source: &[u8],
+) -> Vec<(String, Option<String>)> {
+    let mut out = Vec::new();
+    let mut pending = Vec::new();
+    let target_start = node.start_byte();
+    let target_end = node.end_byte();
+    for i in 0..parent.child_count() {
+        let Some(child) = parent.child(i) else {
+            continue;
+        };
+        if child.start_byte() == target_start
+            && child.end_byte() == target_end
+            && child.kind() == node.kind()
+        {
+            out.append(&mut pending);
+            break;
+        }
+        if child.kind() == "decorator" {
+            if let Some(parsed) = decorator_name_and_args(child, source) {
+                pending.push(parsed);
+            }
+        } else if !child.is_extra()
+            && child.kind() != "comment"
+            && child.kind() != ";"
+            && child.is_named()
+        {
+            pending.clear();
         }
     }
     out
@@ -1561,6 +1618,8 @@ pub(crate) fn decorators_for_node(node: Node, source: &[u8]) -> Vec<(String, Opt
         if parent.kind() == "export_statement" {
             out.extend(collect_decorators(parent, source));
         }
+        // Method/property decorators are preceding siblings in `class_body`.
+        out.extend(collect_preceding_sibling_decorators(node, parent, source));
     }
     out
 }
@@ -1626,7 +1685,17 @@ impl LanguagePlugin for TypeScriptPlugin {
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
         let tree = self.parse(file_path, source)?;
-        self.relations_from_tree(tree.root_node(), source, file_path, symbols)
+        let root = tree.root_node();
+        let mut relations = self.relations_from_tree(root, source, file_path, symbols)?;
+        let mut sym_copy = symbols.to_vec();
+        rgctl_plugin_helpers::apply_framework_catalog(
+            "typescript",
+            source,
+            Some(root),
+            &mut sym_copy,
+            &mut relations,
+        );
+        Ok(relations)
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
@@ -2044,5 +2113,78 @@ class Repo { save(x: OrderDto): void {} }
             "expected Instantiates: {relations:?}"
         );
     }
+
+    #[test]
+    fn nestjs_extract_all_emits_exposes_route_and_controller_tags() {
+        let source = br#"
+@Controller('users')
+export class UsersController {
+  constructor(private readonly svc: UserService) {}
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.svc.get(id);
+  }
 }
 
+@Injectable()
+export class UserService {
+  get(id: string) { return id; }
+}
+"#;
+        let plugin = TypeScriptPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("users.controller.ts"), source)
+            .unwrap();
+        let routes: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::ExposesRoute)
+            .map(|r| r.to.as_str())
+            .collect();
+        assert_eq!(
+            routes,
+            vec!["GET /users/:id"],
+            "expected only GET /users/:id (no false-positive from this.svc.get(id)), got {routes:?}"
+        );
+        let injects: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::Injects)
+            .map(|r| (r.from.as_str(), r.to.as_str()))
+            .collect();
+        assert!(
+            injects.contains(&("UsersController", "UserService")),
+            "expected Injects UsersController -> UserService, got {injects:?}"
+        );
+        let ctrl = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "UsersController" && s.symbol_type == SymbolType::Class)
+            .expect("UsersController");
+        let tags = ctrl
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            tags.contains("controller"),
+            "controller semantic_tags={tags:?}"
+        );
+        let svc = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "UserService" && s.symbol_type == SymbolType::Class)
+            .expect("UserService");
+        let svc_tags = svc
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            svc_tags.contains("provider") || svc_tags.contains("service"),
+            "service semantic_tags={svc_tags:?}"
+        );
+    }
+
+}

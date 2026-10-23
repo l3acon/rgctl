@@ -1,0 +1,52 @@
+language = "csharp"
+
+[[rules]]
+id = "aspnet.controller.stereotype"
+framework = "aspnet"
+kind = "ConceptTagger"
+annotations = ["ApiController"]
+tags = ["role:controller"]
+vocab = "controller controllers rest api endpoint endpoints aspnet"
+
+[[rules]]
+id = "aspnet.http.routes"
+framework = "aspnet"
+kind = "RouteDecorator"
+class_prefix_annotations = ["Route", "ApiController"]
+method_annotations = [
+  { name = "HttpGet", method = "GET" },
+  { name = "HttpPost", method = "POST" },
+  { name = "HttpPut", method = "PUT" },
+  { name = "HttpDelete", method = "DELETE" },
+  { name = "HttpPatch", method = "PATCH" },
+  { name = "Route", method_arg = "method", default_method = "GET" },
+]
+tags = ["role:endpoint", "protocol:http"]
+vocab = "endpoint endpoints route routes http rest api handler aspnet"
+
+[[rules]]
+id = "aspnet.fromservices.ctor_di"
+framework = "aspnet"
+kind = "CtorOrStereotypeInject"
+annotations = ["FromServices", "ApiController", "Inject"]
+wrapper_types = ["FromServices"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection fromservices constructor aspnet"
+target_vocab = "dependency injection provider service injectable"
+
+[[rules]]
+id = "aspnet.param_wrapper_di"
+framework = "aspnet"
+kind = "ParamWrapperInject"
+wrapper_types = ["FromServices"]
+tags = ["role:di-consumer"]
+vocab = "dependency injection fromservices parameter aspnet"
+target_vocab = "dependency injection provider service injectable"
+
+[[rules]]
+id = "csharp.reflection"
+framework = "csharp"
+kind = "ConceptTagger"
+call_callees = ["GetType", "GetMethod", "CreateInstance", "InvokeMember"]
+tags = ["role:reflection"]
+vocab = "reflection reflect gettype createinstance invoke csharp"

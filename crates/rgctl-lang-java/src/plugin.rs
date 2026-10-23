@@ -1366,7 +1366,17 @@ impl LanguagePlugin for JavaPlugin {
                 message: e,
             },
         )?;
-        self.relations_from_tree(tree.root_node(), source, file_path, symbols)
+        let root = tree.root_node();
+        let mut relations = self.relations_from_tree(root, source, file_path, symbols)?;
+        let mut sym_copy = symbols.to_vec();
+        rgctl_plugin_helpers::apply_framework_catalog(
+            "java",
+            source,
+            Some(root),
+            &mut sym_copy,
+            &mut relations,
+        );
+        Ok(relations)
     }
 
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
@@ -3713,6 +3723,76 @@ module M {
                     && r.from == "M"
                     && r.to == "SpiImpl"),
             "expected Uses relation to SpiImpl (provides provider)"
+        );
+    }
+
+    #[test]
+    fn spring_extract_all_emits_exposes_route_injects_and_reflection() {
+        let source = br#"
+@RestController
+@RequestMapping("/api")
+public class OrderController {
+    @Autowired
+    private OrderService orderService;
+
+    @GetMapping("/orders")
+    public String list() {
+        return "ok";
+    }
+
+    public void load(String name) throws Exception {
+        Class.forName(name);
+    }
+}
+"#;
+        let plugin = JavaPlugin::new().unwrap();
+        let result = plugin
+            .extract_all(Path::new("OrderController.java"), source)
+            .unwrap();
+        let routes: Vec<_> = result
+            .relations
+            .iter()
+            .filter(|r| r.relation_type == RelationType::ExposesRoute)
+            .map(|r| r.to.as_str())
+            .collect();
+        assert!(
+            routes.iter().any(|t| *t == "GET /api/orders"),
+            "expected GET /api/orders, got {routes:?}"
+        );
+        assert!(
+            result.relations.iter().any(|r| {
+                r.relation_type == RelationType::Injects && r.to.contains("OrderService")
+            }),
+            "Injects OrderService: {:?}",
+            result.relations
+        );
+        let ctrl = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "OrderController")
+            .expect("OrderController");
+        let tags = ctrl
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            tags.contains("controller") || tags.contains("endpoint"),
+            "controller tags={tags:?}"
+        );
+        let load = result
+            .symbols
+            .iter()
+            .find(|s| s.name == "load")
+            .expect("load");
+        let refl = load
+            .metadata
+            .get("semantic_tags")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            refl.contains("reflection"),
+            "reflection tags on load={refl:?}"
         );
     }
 }

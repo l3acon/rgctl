@@ -1010,11 +1010,11 @@ mod tests {
         let a = Node::new(NodeType::Function, "nearA")
             .with_file_path("a.java")
             .with_location(1, 20)
-            .with_token_bloom(build_token_bloom("nearA", None, None, Some(body)));
+            .with_token_bloom(build_token_bloom("nearA", None, None, Some(body), None));
         let b = Node::new(NodeType::Function, "nearB")
             .with_file_path("b.java")
             .with_location(1, 20)
-            .with_token_bloom(build_token_bloom("nearB", None, None, Some(body)));
+            .with_token_bloom(build_token_bloom("nearB", None, None, Some(body), None));
         let c = Node::new(NodeType::Function, "far")
             .with_file_path("c.java")
             .with_location(1, 20)
@@ -1023,6 +1023,7 @@ mod tests {
                 None,
                 None,
                 Some("zzzz yyyy xxxx wwww vvvv uuuu"),
+                None,
             ));
         let groups = group_bloom_from_nodes(&[a, b, c], &BloomCloneOptions::default());
         assert_eq!(groups.len(), 1);

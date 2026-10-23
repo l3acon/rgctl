@@ -74,12 +74,13 @@ pub struct FusionCandidate {
 }
 
 /// Tokenize a query string into normalized keywords (length >= [`MIN_TOKEN_LEN`]).
+///
+/// Uses [`crate::semantic_vocab::normalize_semantic_query_tokens`] then collapses
+/// synonym groups to one canonical token so `--keyword-and` matches concepts.
 pub fn query_keywords(query: &str) -> Vec<String> {
-    let mut tokens = HashSet::new();
-    tokenize_string_into(query, &mut tokens);
-    let mut list: Vec<String> = tokens.into_iter().collect();
-    list.sort_unstable();
-    list
+    crate::semantic_vocab::canonicalize_query_keywords(
+        crate::semantic_vocab::normalize_semantic_query_tokens(query),
+    )
 }
 
 /// Collect lowercase metadata tokens for an indexed function.
@@ -88,6 +89,9 @@ pub fn entry_metadata_tokens(entry: &SemanticEntry) -> HashSet<String> {
     tokenize_string_into(&entry.name, &mut tokens);
     if let Some(qn) = &entry.qualified_name {
         tokenize_string_into(qn, &mut tokens);
+    }
+    if let Some(tags) = &entry.semantic_tags {
+        tokenize_string_into(tags, &mut tokens);
     }
     tokens
 }
@@ -396,6 +400,7 @@ mod tests {
             code_hash: None,
             node_type: None,
             kind: None,
+            semantic_tags: None,
         }
     }
 
@@ -431,6 +436,7 @@ mod tests {
                     code_hash: None,
                     node_type: None,
                     kind: None,
+                    semantic_tags: None,
                 },
             },
             FusionCandidate {
@@ -445,6 +451,7 @@ mod tests {
                     code_hash: None,
                     node_type: None,
                     kind: None,
+                    semantic_tags: None,
                 },
             },
         ];
@@ -492,6 +499,7 @@ mod tests {
                 code_hash: None,
                 node_type: None,
                 kind: None,
+                semantic_tags: None,
             },
         }];
 

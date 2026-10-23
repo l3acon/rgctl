@@ -221,7 +221,7 @@ pub fn query_fragment_clones(
         .map(|s| s.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    let seed_bloom = build_token_bloom("", None, None, Some(&seed_snippet));
+    let seed_bloom = build_token_bloom("", None, None, Some(&seed_snippet), None);
 
     // 5. Stage 1 bitwise pre-filter
     let candidate_nodes = stage1_filter_functions(store, &seed_bloom, &filters)?;

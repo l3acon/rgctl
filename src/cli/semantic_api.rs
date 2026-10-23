@@ -239,6 +239,7 @@ fn apply_scope_filter(hits: &mut Vec<crate::analysis::SemanticHit>, scope: CliSe
                 .node_type
                 .as_deref()
                 .is_some_and(|node_type| node_type == "Function")
+                || hit.entry.semantic_tags.is_some()
         }),
         CliSemanticScope::Docs => hits.retain(|hit| {
             hit.entry

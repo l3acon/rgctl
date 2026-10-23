@@ -96,6 +96,9 @@ pub const ALL_EDGE_TYPES: &[EdgeType] = &[
     EdgeType::AnnotatedWith,
     EdgeType::Permits,
     EdgeType::Violates,
+    EdgeType::Overrides,
+    EdgeType::ExposesRoute,
+    EdgeType::Injects,
 ];
 
 /// How `--scope` filters `qualified_name` prefixes.

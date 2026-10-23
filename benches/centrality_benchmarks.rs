@@ -110,6 +110,7 @@ fn bench_hamming_top_k(c: &mut Criterion) {
                 code_hash: None,
                 node_type: None,
                 kind: None,
+                semantic_tags: None,
             })
             .collect(),
         binary_embeddings: binary,
