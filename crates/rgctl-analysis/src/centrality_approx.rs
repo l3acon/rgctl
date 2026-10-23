@@ -149,29 +149,43 @@ impl SampledBetweenness {
         let out_adj = index.build_out_csr();
         let pivots = sample_pivot_indices(n, k, seed);
 
-        let mut betweenness = pivots
-            .par_iter()
-            .fold(
-                || (vec![0.0f64; n], BrandesScratch::new(n)),
-                |mut state, &source| {
-                    let (ref mut acc, ref mut scratch) = state;
-                    scratch.run(&out_adj, source, n);
-                    for (i, delta) in scratch.partial().iter().enumerate() {
-                        acc[i] += delta;
-                    }
-                    state
-                },
-            )
-            .map(|(acc, _)| acc)
-            .reduce(
-                || vec![0.0f64; n],
-                |mut a, b| {
-                    for (x, y) in a.iter_mut().zip(&b) {
-                        *x += y;
-                    }
-                    a
-                },
-            );
+        // Small graphs pay Rayon pool sync without enough work to amortize it.
+        const PARALLEL_THRESHOLD: usize = 4_096;
+        let mut betweenness = if n >= PARALLEL_THRESHOLD {
+            pivots
+                .par_iter()
+                .fold(
+                    || (vec![0.0f64; n], BrandesScratch::new(n)),
+                    |mut state, &source| {
+                        let (ref mut acc, ref mut scratch) = state;
+                        scratch.run(&out_adj, source, n);
+                        for (i, delta) in scratch.partial().iter().enumerate() {
+                            acc[i] += delta;
+                        }
+                        state
+                    },
+                )
+                .map(|(acc, _)| acc)
+                .reduce(
+                    || vec![0.0f64; n],
+                    |mut a, b| {
+                        for (x, y) in a.iter_mut().zip(&b) {
+                            *x += y;
+                        }
+                        a
+                    },
+                )
+        } else {
+            let mut acc = vec![0.0f64; n];
+            let mut scratch = BrandesScratch::new(n);
+            for &source in &pivots {
+                scratch.run(&out_adj, source, n);
+                for (i, delta) in scratch.partial().iter().enumerate() {
+                    acc[i] += delta;
+                }
+            }
+            acc
+        };
 
         let norm = if n > 2 {
             (n as f64 / k as f64) / ((n - 1) as f64 * (n - 2) as f64)

@@ -7,7 +7,7 @@
 //! - Seedless edge scan: sequential typed-edge walk via [`SnapshotNodeStore::for_each_edge`].
 //! - Seeded multi-hop: builds a typed adjacency map once per invocation (O(E_type)).
 
-use crate::schema::{EdgeType, Node, NodeType};
+use crate::schema::{EdgeType, Node, NodeType, SharedStr};
 use crate::snapshot::SnapshotNodeStore;
 use rgctl_error::{Error, Result};
 use serde::Serialize;
@@ -558,38 +558,90 @@ impl<'a> StructuredQuery<'a> {
             }
         }
 
-        let mut candidates: Vec<Node> = Vec::new();
-        if let Some(pat) = pattern {
-            candidates = self.lookup_name_candidates(pat, filters.exact)?;
-        } else if let Some(t) = filters.node_type {
-            if let Some(indexes) = self.indexes()? {
-                if let Some(ids) = indexes.1.get(&t) {
-                    candidates.reserve(ids.len());
-                    for id in ids {
-                        if let Some(n) = self.store.get_node(*id)? {
-                            candidates.push(n);
-                        }
-                    }
-                }
-            } else {
-                for id in self.store.all_node_ids() {
-                    if let Some(n) = self.store.get_node(id)? {
-                        if n.node_type == t {
-                            candidates.push(n);
-                        }
-                    }
-                }
-            }
+        let candidates = if let Some(pat) = pattern {
+            let mut c = self.lookup_name_candidates(pat, filters.exact)?;
+            c.retain(|n| self.node_passes(n, filters));
+            c
         } else {
-            for id in self.store.all_node_ids() {
-                if let Some(n) = self.store.get_node(id)? {
-                    candidates.push(n);
+            // Linear hot-column scan: filter on type/path/line/scope without N× cold_ext
+            // deserializations; materialize cold only when class/property filters require it.
+            self.collect_nodes_hot_scan(filters.node_type, filters)?
+        };
+
+        Self::finish_find(candidates, filters)
+    }
+
+    /// Whether query filters require cold `properties` / labels (not hot columns + qn).
+    fn filters_need_cold_ext(filters: &QueryFilters) -> bool {
+        filters.class.is_some()
+    }
+
+    /// Sequential columnar scan with hot-column pre-filter; cold_ext only when needed.
+    fn collect_nodes_hot_scan(
+        &self,
+        type_filter: Option<NodeType>,
+        filters: &QueryFilters,
+    ) -> Result<Vec<Node>> {
+        if let Some(col) = self.store.columnar() {
+            let need_cold = Self::filters_need_cold_ext(filters);
+            let mut out = Vec::new();
+            for idx in 0..col.node_count() {
+                if let Some(want) = type_filter {
+                    if col.node_type_at(idx)? != want {
+                        continue;
+                    }
+                }
+                if let Some(want_line) = filters.line {
+                    let row = col.node_row_at(idx)?;
+                    if row.start_line == 0 || row.start_line as usize != want_line {
+                        continue;
+                    }
+                }
+                if let Some(glob) = filters.file_glob.as_deref() {
+                    let path = col.node_file_path_str(idx)?.unwrap_or("");
+                    let pat = normalize_file_glob(glob);
+                    let ok = glob_match(&pat, path)
+                        || (!glob.contains('/')
+                            && !glob.contains('\\')
+                            && {
+                                let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+                                glob_match(&pat, base) || glob_match(glob, base)
+                            });
+                    if !ok {
+                        continue;
+                    }
+                }
+                let node = if need_cold {
+                    col.materialize_node_at(idx)?
+                } else {
+                    let mut n = col.materialize_node_hot_at(idx)?;
+                    if let Some(qn) = col.node_qualified_name_str(idx)? {
+                        n.qualified_name = Some(SharedStr::from(qn.to_string()));
+                    }
+                    n
+                };
+                if self.node_passes(&node, filters) {
+                    out.push(node);
                 }
             }
+            return Ok(out);
         }
 
-        candidates.retain(|n| self.node_passes(n, filters));
-        Self::finish_find(candidates, filters)
+        let mut out = Vec::new();
+        for id in self.store.all_node_ids() {
+            let Some(n) = self.store.get_node(id)? else {
+                continue;
+            };
+            if let Some(t) = type_filter {
+                if n.node_type != t {
+                    continue;
+                }
+            }
+            if self.node_passes(&n, filters) {
+                out.push(n);
+            }
+        }
+        Ok(out)
     }
 
     /// Invert AnnotatedWith: return sources carrying any of the listed annotations (OR).
@@ -998,13 +1050,7 @@ impl<'a> StructuredQuery<'a> {
             InventoryBy::Type => {
                 let mut map: HashMap<NodeType, usize> =
                     ALL_NODE_TYPES.iter().map(|t| (*t, 0usize)).collect();
-                for id in self.store.all_node_ids() {
-                    let Some(n) = self.store.get_node(id)? else {
-                        continue;
-                    };
-                    if !self.node_passes(&n, filters) {
-                        continue;
-                    }
+                for n in self.collect_nodes_hot_scan(None, filters)? {
                     *map.entry(n.node_type).or_insert(0) += 1;
                 }
                 let mut counts: Vec<InventoryCount> = ALL_NODE_TYPES
@@ -1083,13 +1129,9 @@ impl<'a> StructuredQuery<'a> {
             }
             InventoryBy::Lang => {
                 let mut map: HashMap<String, usize> = HashMap::new();
-                for id in self.store.all_node_ids() {
-                    let Some(n) = self.store.get_node(id)? else {
-                        continue;
-                    };
-                    if !self.node_passes(&n, filters) {
-                        continue;
-                    }
+                // Prefer hot file-extension heuristic (0 cold_ext). Property
+                // `language` is only consulted when class filters already force cold.
+                for n in self.collect_nodes_hot_scan(None, filters)? {
                     let lang = n
                         .get_property("language")
                         .map(|s| s.to_string())
@@ -1120,13 +1162,7 @@ impl<'a> StructuredQuery<'a> {
             }
             InventoryBy::File => {
                 let mut map: HashMap<String, usize> = HashMap::new();
-                for id in self.store.all_node_ids() {
-                    let Some(n) = self.store.get_node(id)? else {
-                        continue;
-                    };
-                    if !self.node_passes(&n, filters) {
-                        continue;
-                    }
+                for n in self.collect_nodes_hot_scan(None, filters)? {
                     let key = n
                         .file_path
                         .as_deref()
@@ -1150,6 +1186,7 @@ impl<'a> StructuredQuery<'a> {
                 })
             }
             InventoryBy::Community => {
+                // `community_id` lives in cold properties — full materialize required.
                 let mut map: HashMap<String, usize> = HashMap::new();
                 for id in self.store.all_node_ids() {
                     let Some(n) = self.store.get_node(id)? else {
@@ -1183,16 +1220,7 @@ impl<'a> StructuredQuery<'a> {
                 // Observed prefixes only (no zero-fill). Default depth = 2 dotted segments.
                 const DEPTH: usize = 2;
                 let mut map: HashMap<String, usize> = HashMap::new();
-                for id in self.store.all_node_ids() {
-                    let Some(n) = self.store.get_node(id)? else {
-                        continue;
-                    };
-                    if n.node_type != NodeType::Import {
-                        continue;
-                    }
-                    if !self.node_passes(&n, filters) {
-                        continue;
-                    }
+                for n in self.collect_nodes_hot_scan(Some(NodeType::Import), filters)? {
                     let key = import_package_prefix(&n.name, DEPTH);
                     *map.entry(key).or_insert(0) += 1;
                 }

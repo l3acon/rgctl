@@ -453,6 +453,17 @@ impl SnapshotNodeStore {
 
     /// Filter impact-zone UUIDs to function nodes only.
     pub fn filter_function_impact(&self, impact_zone_ids: &[Uuid]) -> Result<Vec<Uuid>> {
+        if let Some(col) = self.mmap().columnar() {
+            let mut out = Vec::new();
+            for id in impact_zone_ids {
+                if let Some(idx) = col.find_node_index(*id)
+                    && col.node_type_at(idx)? == NodeType::Function
+                {
+                    out.push(*id);
+                }
+            }
+            return Ok(out);
+        }
         let mut out = Vec::new();
         for id in impact_zone_ids {
             if let Some(node) = self.get_node(*id)?

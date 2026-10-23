@@ -312,6 +312,8 @@ fn parse_field_u64(line: &str, key: &str) -> Option<u64> {
 }
 
 pub fn run_cold_discover_timed(repo: &Path, extra_args: &[&str]) -> (Output, Duration) {
+    static DISCOVER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = DISCOVER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let rb = repo.join(".rgctl");
     if rb.exists() {
         std::fs::remove_dir_all(&rb).expect("remove stale .rgctl for cold discover");
@@ -326,6 +328,7 @@ pub fn run_cold_discover_timed(repo: &Path, extra_args: &[&str]) -> (Output, Dur
     let output = Command::new(&bin)
         .current_dir(repo)
         .env("RUST_LOG", "info,profile=info")
+        .env("NO_COLOR", "1")
         .args(["-f", "json", "discover", ".", "-v"])
         .args(extra_args)
         .output()

@@ -365,8 +365,24 @@ mod tests {
     #[test]
     fn a_boundary_offset_belongs_to_the_following_function_not_the_previous() {
         let locations: HashMap<String, FunctionLocation> = HashMap::from([
-            ("first".to_string(), FunctionLocation { start_byte: 0, end_byte: 10 }),
-            ("second".to_string(), FunctionLocation { start_byte: 10, end_byte: 20 }),
+            (
+                "first".to_string(),
+                FunctionLocation {
+                    start_byte: 0,
+                    end_byte: 10,
+                    start_line: 1,
+                    end_line: 1,
+                },
+            ),
+            (
+                "second".to_string(),
+                FunctionLocation {
+                    start_byte: 10,
+                    end_byte: 20,
+                    start_line: 2,
+                    end_line: 2,
+                },
+            ),
         ]);
         assert_eq!(
             function_containing_line(&locations, 10).as_deref(),

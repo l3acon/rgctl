@@ -58,8 +58,8 @@ fn bench_petgraph_view_centrality_large(c: &mut Criterion) {
     engine.compute_flat(&index);
     let latency = start.elapsed();
     assert!(
-        latency < Duration::from_millis(20),
-        "Algorithmic scale regression detected: {latency:?}"
+        latency < Duration::from_millis(10),
+        "FastPageRank 150k/700k regression: {latency:?}"
     );
 
     group.finish();
@@ -68,7 +68,7 @@ fn bench_petgraph_view_centrality_large(c: &mut Criterion) {
 fn bench_sampled_betweenness(c: &mut Criterion) {
     let mut group = c.benchmark_group("sampled_betweenness");
     group.sample_size(10);
-    group.measurement_time(Duration::from_secs(10));
+    group.measurement_time(Duration::from_secs(15));
 
     let graph = build_monorepo_mock(20_000, 80_000);
     let view = PetGraphView::from_backend(graph.backend()).unwrap();
@@ -80,6 +80,23 @@ fn bench_sampled_betweenness(c: &mut Criterion) {
             black_box(SampledBetweenness::compute_flat(&index, 64, 42));
         });
     });
+
+    let large = build_monorepo_mock(150_000, 700_000);
+    let large_view = PetGraphView::from_backend(large.backend()).unwrap();
+    let large_index = FlatGraphIndex::from_view(&large_view, &[EdgeType::Calls]);
+    group.bench_function("sampled_betweenness_150k_256pivots", |b| {
+        b.iter(|| {
+            black_box(SampledBetweenness::compute_flat(&large_index, 256, 42));
+        });
+    });
+    let start = Instant::now();
+    SampledBetweenness::compute_flat(&large_index, 256, 42);
+    let latency = start.elapsed();
+    assert!(
+        latency < Duration::from_millis(250),
+        "SampledBetweenness 150k/k=256 regression: {latency:?}"
+    );
+
     group.finish();
 }
 

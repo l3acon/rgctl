@@ -2730,8 +2730,13 @@ fn format_elapsed(elapsed: Duration) -> String {
 }
 
 fn init_logging(verbose: bool, discover_json: bool) {
+    use std::io::IsTerminal;
     use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt::format::FmtSpan;
+
+    let use_ansi = !discover_json
+        && std::env::var_os("NO_COLOR").is_none()
+        && std::io::stdout().is_terminal();
 
     if verbose {
         tracing_subscriber::fmt()
@@ -2741,6 +2746,7 @@ fn init_logging(verbose: bool, discover_json: bool) {
             )
             .with_target(true)
             .with_level(true)
+            .with_ansi(use_ansi)
             .with_span_events(FmtSpan::CLOSE)
             .init();
     } else if discover_json {

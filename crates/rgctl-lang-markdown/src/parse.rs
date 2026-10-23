@@ -1,9 +1,9 @@
 //! Two-grammar markdown parse (block `LANGUAGE` + inline `INLINE_LANGUAGE`).
 
-use rgctl_plugin_api::{Error, Result};
+use rgctl_plugin_api::{with_thread_local_parser, Error, Result};
 use std::collections::HashMap;
 use std::path::Path;
-use tree_sitter::{Node, Parser, Range, Tree};
+use tree_sitter::{Language, Node, Range, Tree};
 
 /// Combined block tree plus per-inline-node inline trees.
 pub struct ParsedMarkdown {
@@ -22,29 +22,23 @@ impl ParsedMarkdown {
 }
 
 /// Parse markdown source with both official grammars.
+///
+/// Uses the shared thread-local parser pool (`markdown` / `markdown-inline`) so
+/// discover workers never allocate a fresh `Parser` per file.
 pub fn parse_markdown(source: &[u8], file_path: &Path) -> Result<ParsedMarkdown> {
-    let mut parser = Parser::new();
-    let block_language = tree_sitter_md::LANGUAGE.into();
-    let inline_language = tree_sitter_md::INLINE_LANGUAGE.into();
+    let block_language: Language = tree_sitter_md::LANGUAGE.into();
+    let inline_language: Language = tree_sitter_md::INLINE_LANGUAGE.into();
 
-    parser
-        .set_included_ranges(&[])
-        .map_err(|e| Error::PluginError(format!("markdown included ranges: {e}")))?;
-    parser
-        .set_language(&block_language)
-        .map_err(|e| Error::PluginError(format!("markdown block grammar: {e}")))?;
-
-    let block = parser
-        .parse(source, None)
-        .ok_or_else(|| Error::ParseError {
+    let block = with_thread_local_parser("markdown", block_language, |parser| {
+        parser
+            .set_included_ranges(&[])
+            .map_err(|e| Error::PluginError(format!("markdown included ranges: {e}")))?;
+        parser.parse(source, None).ok_or_else(|| Error::ParseError {
             file: file_path.to_path_buf(),
             line: 0,
             message: "Failed to parse markdown (block grammar)".to_string(),
-        })?;
-
-    parser
-        .set_language(&inline_language)
-        .map_err(|e| Error::PluginError(format!("markdown inline grammar: {e}")))?;
+        })
+    })?;
 
     let mut inline_trees = Vec::new();
     let mut inline_indices = HashMap::new();
@@ -90,16 +84,20 @@ pub fn parse_markdown(source: &[u8], file_path: &Path) -> Result<ParsedMarkdown>
         }
         ranges.push(range);
 
-        parser
-            .set_included_ranges(&ranges)
-            .map_err(|e| Error::PluginError(format!("markdown inline ranges: {e}")))?;
-        let inline_tree = parser
-            .parse(source, None)
-            .ok_or_else(|| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: node.start_position().row + 1,
-                message: "Failed to parse markdown (inline grammar)".to_string(),
-            })?;
+        let inline_tree = with_thread_local_parser(
+            "markdown-inline",
+            inline_language.clone(),
+            |parser| {
+                parser
+                    .set_included_ranges(&ranges)
+                    .map_err(|e| Error::PluginError(format!("markdown inline ranges: {e}")))?;
+                parser.parse(source, None).ok_or_else(|| Error::ParseError {
+                    file: file_path.to_path_buf(),
+                    line: node.start_position().row + 1,
+                    message: "Failed to parse markdown (inline grammar)".to_string(),
+                })
+            },
+        )?;
         inline_trees.push(inline_tree);
         inline_indices.insert(node.id(), i);
         i += 1;
@@ -124,5 +122,12 @@ mod tests {
         parser
             .set_language(&tree_sitter_md::INLINE_LANGUAGE.into())
             .expect("INLINE_LANGUAGE");
+    }
+
+    #[test]
+    fn parse_markdown_uses_pool() {
+        let src = b"# Hello\n\nA [link](https://example.com).\n";
+        let parsed = super::parse_markdown(src, std::path::Path::new("doc.md")).expect("parse");
+        assert_eq!(parsed.block.root_node().kind(), "document");
     }
 }

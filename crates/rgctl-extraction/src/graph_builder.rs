@@ -1166,9 +1166,15 @@ impl GraphBuilder {
         // would collapse ambiguous FQNs (QE duplicate-qualified-name invariant).
         // `skip_self` is retained for API clarity (super.* callers pass true).
         let _ = skip_self;
+        // Reuse one buffer across separator probes — avoid `format!` per hop on
+        // the sequential merge / relation-resolution thread (AGENTS.md hot path).
+        let mut key = String::with_capacity(64);
         for ancestor in chain.iter().skip(1) {
             for sep in [".", "::", "#"] {
-                let key = format!("{ancestor}{sep}{method}");
+                key.clear();
+                key.push_str(ancestor);
+                key.push_str(sep);
+                key.push_str(method);
                 if let Some(id) = self
                     .symbols_by_qualified
                     .get(&key)
@@ -1500,9 +1506,9 @@ impl GraphBuilder {
 
     /// Resolve an already-ingested ConfigKey by exact or normalized key path.
     fn find_existing_config_key(&self, key: &str) -> Option<Uuid> {
-        let suffix = format!("::{key}");
+        // Match on the key-path tail without allocating `format!("::{key}")` per probe.
         for (lookup, id) in &self.config_key_nodes {
-            if lookup.ends_with(&suffix) || lookup.rsplit("::").next() == Some(key) {
+            if lookup.rsplit("::").next() == Some(key) {
                 return Some(*id);
             }
         }
@@ -1662,8 +1668,12 @@ impl GraphBuilder {
             let type_name = type_simple_name(type_name);
             let skip_self = is_super_call(name, qualified_hint, type_name);
 
+            let mut type_qualified = String::with_capacity(type_name.len() + simple_name.len() + 2);
             for sep in [".", "::", "#"] {
-                let type_qualified = format!("{type_name}{sep}{simple_name}");
+                type_qualified.clear();
+                type_qualified.push_str(type_name);
+                type_qualified.push_str(sep);
+                type_qualified.push_str(simple_name);
                 if let Some(id) = self
                     .symbols_by_suffix
                     .get(&type_qualified)
