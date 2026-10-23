@@ -63,6 +63,28 @@ members = [
     "crates/rgctl-lang-objc",
     "crates/rgctl-lang-clojure",
     "crates/rgctl-lang-ocaml",
+    "crates/rgctl-lang-elisp",
+    "crates/rgctl-lang-toml",
+    "crates/rgctl-lang-powershell",
+    "crates/rgctl-lang-starlark",
+    "crates/rgctl-lang-make",
+    "crates/rgctl-lang-cmake",
+    "crates/rgctl-lang-vhdl",
+    "crates/rgctl-lang-glsl",
+    "crates/rgctl-lang-cuda",
+    "crates/rgctl-lang-odin",
+    "crates/rgctl-lang-d",
+    "crates/rgctl-lang-scheme",
+    "crates/rgctl-lang-racket",
+    "crates/rgctl-lang-fsharp",
+    "crates/rgctl-lang-gleam",
+    "crates/rgctl-lang-erlang",
+    "crates/rgctl-lang-elm",
+    "crates/rgctl-lang-prisma",
+    "crates/rgctl-lang-graphql",
+    "crates/rgctl-lang-svelte",
+    "crates/rgctl-lang-css",
+    "crates/rgctl-lang-html",
     "crates/rgctl-ast-coverage",
     "crates/rgctl-languages",
     "crates/rgctl-agent-pack-codegen",
@@ -139,6 +161,28 @@ rgctl-lang-verilog = { path = "crates/rgctl-lang-verilog", version = "0.4.20" }
 rgctl-lang-objc = { path = "crates/rgctl-lang-objc", version = "0.4.20" }
 rgctl-lang-clojure = { path = "crates/rgctl-lang-clojure", version = "0.4.20" }
 rgctl-lang-ocaml = { path = "crates/rgctl-lang-ocaml", version = "0.4.20" }
+rgctl-lang-elisp = { path = "crates/rgctl-lang-elisp", version = "0.4.20" }
+rgctl-lang-toml = { path = "crates/rgctl-lang-toml", version = "0.4.20" }
+rgctl-lang-powershell = { path = "crates/rgctl-lang-powershell", version = "0.4.20" }
+rgctl-lang-starlark = { path = "crates/rgctl-lang-starlark", version = "0.4.20" }
+rgctl-lang-make = { path = "crates/rgctl-lang-make", version = "0.4.20" }
+rgctl-lang-cmake = { path = "crates/rgctl-lang-cmake", version = "0.4.20" }
+rgctl-lang-vhdl = { path = "crates/rgctl-lang-vhdl", version = "0.4.20" }
+rgctl-lang-glsl = { path = "crates/rgctl-lang-glsl", version = "0.4.20" }
+rgctl-lang-cuda = { path = "crates/rgctl-lang-cuda", version = "0.4.20" }
+rgctl-lang-odin = { path = "crates/rgctl-lang-odin", version = "0.4.20" }
+rgctl-lang-d = { path = "crates/rgctl-lang-d", version = "0.4.20" }
+rgctl-lang-scheme = { path = "crates/rgctl-lang-scheme", version = "0.4.20" }
+rgctl-lang-racket = { path = "crates/rgctl-lang-racket", version = "0.4.20" }
+rgctl-lang-fsharp = { path = "crates/rgctl-lang-fsharp", version = "0.4.20" }
+rgctl-lang-gleam = { path = "crates/rgctl-lang-gleam", version = "0.4.20" }
+rgctl-lang-erlang = { path = "crates/rgctl-lang-erlang", version = "0.4.20" }
+rgctl-lang-elm = { path = "crates/rgctl-lang-elm", version = "0.4.20" }
+rgctl-lang-prisma = { path = "crates/rgctl-lang-prisma", version = "0.4.20" }
+rgctl-lang-graphql = { path = "crates/rgctl-lang-graphql", version = "0.4.20" }
+rgctl-lang-svelte = { path = "crates/rgctl-lang-svelte", version = "0.4.20" }
+rgctl-lang-css = { path = "crates/rgctl-lang-css", version = "0.4.20" }
+rgctl-lang-html = { path = "crates/rgctl-lang-html", version = "0.4.20" }
 rgctl-ast-coverage = { path = "crates/rgctl-ast-coverage", version = "0.4.20" }
 rgctl-languages = { path = "crates/rgctl-languages", version = "0.4.20" }
 tree-sitter = "0.25"

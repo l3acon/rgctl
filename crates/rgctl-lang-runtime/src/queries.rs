@@ -152,9 +152,11 @@ struct PendingDef {
 fn is_definition_span_kind(kind: &str) -> bool {
     !kind.ends_with("_declarator")
         && !kind.ends_with("_name")
-        && !kind.ends_with("_statement")
         && (kind.ends_with("_definition")
             || kind.ends_with("_declaration")
+            || kind.ends_with("_defn")
+            || kind.ends_with("_decl")
+            || kind.ends_with("_def")
             || matches!(
                 kind,
                 "method"
@@ -166,9 +168,21 @@ fn is_definition_span_kind(kind: &str) -> bool {
                     | "function"
                     | "subroutine"
                     | "list_lit"
+                    | "list"
                     | "class"
                     | "data_type"
                     | "newtype"
+                    | "type_alias"
+                    | "module_attribute"
+                    | "rule"
+                    | "element"
+                    | "script_element"
+                    | "rule_set"
+                    | "keyframes_statement"
+                    | "function_statement"
+                    | "class_statement"
+                    | "table"
+                    | "pair"
             ))
 }
 
@@ -177,6 +191,17 @@ fn is_definition_span_kind(kind: &str) -> bool {
 /// Fortran `function_statement`/`module_statement`), without walking past a `function_definition`
 /// up to its enclosing `contract_declaration`/`class_declaration`.
 fn definition_span_node(node: Node<'_>) -> Node<'_> {
+    // Fortran `function_statement` / `subroutine_statement` / `module_statement` are 1-line
+    // headers inside `function` / `subroutine` / `module` (whereas PowerShell `function_statement`
+    // is the full function node).
+    if matches!(
+        node.kind(),
+        "function_statement" | "subroutine_statement" | "module_statement"
+    ) && let Some(parent) = node.parent()
+        && matches!(parent.kind(), "function" | "subroutine" | "module")
+    {
+        return parent;
+    }
     if is_definition_span_kind(node.kind()) {
         return node;
     }
@@ -186,10 +211,6 @@ fn definition_span_node(node: Node<'_>) -> Node<'_> {
             break;
         };
         let kind = parent.kind();
-        // Fortran `module_statement` (line 1) lives inside `module` (full module span).
-        if node.kind() == "module_statement" && kind == "module" {
-            return parent;
-        }
         if is_definition_span_kind(kind) {
             return parent;
         }
@@ -213,8 +234,19 @@ fn definition_span_node(node: Node<'_>) -> Node<'_> {
 }
 
 /// True when a `@reference.call` node is actually the function/macro signature header
-/// inside a definition (e.g. Julia `function add(a, b)` where `signature` wraps a `call_expression`).
-fn is_inside_declaration_header(node: Node<'_>) -> bool {
+/// inside a definition (e.g. Julia `function add(a, b)` where `signature` wraps a `call_expression`,
+/// or Scheme/Racket `(define (add a b) ...)` where the second child of `define` is `(add a b)`).
+fn is_inside_declaration_header(node: Node<'_>, source: &[u8]) -> bool {
+    if node.kind() == "list"
+        && let Some(parent) = node.parent()
+        && parent.kind() == "list"
+        && parent.named_child(1).map(|c| c.id()) == Some(node.id())
+        && let Some(head) = parent.named_child(0)
+        && let Ok(kw) = head.utf8_text(source)
+        && matches!(kw.trim(), "define" | "define-syntax" | "defmacro" | "defun")
+    {
+        return true;
+    }
     let mut cur = node;
     for _ in 0..4 {
         let Some(parent) = cur.parent() else {
@@ -222,7 +254,10 @@ fn is_inside_declaration_header(node: Node<'_>) -> bool {
         };
         if matches!(
             parent.kind(),
-            "signature" | "function_declarator" | "method_declarator"
+            "signature"
+                | "function_declarator"
+                | "method_declarator"
+                | "function_declaration_left"
         ) {
             return true;
         }
@@ -314,7 +349,12 @@ pub fn extract_with_query(
         }
 
         if let (Some(st), Some(node)) = (def_role, def_node) {
-            let resolved_name = name.clone().or_else(|| {
+            let def_name = if ref_role.is_some() {
+                name.clone()
+            } else {
+                name.take()
+            };
+            let resolved_name = def_name.or_else(|| {
                 node.utf8_text(source)
                     .ok()
                     .map(|s| s.lines().next().unwrap_or("").trim().to_string())
@@ -326,13 +366,13 @@ pub fn extract_with_query(
                     name: n,
                     symbol_type: st,
                     location: node_to_location(span, &file),
-                    documentation: doc.clone(),
+                    documentation: doc.take(),
                 });
             }
         }
 
         if let (Some(role), Some(node)) = (ref_role, ref_node) {
-            if role == CaptureRole::ReferenceCall && is_inside_declaration_header(node) {
+            if role == CaptureRole::ReferenceCall && is_inside_declaration_header(node, source) {
                 continue;
             }
             let resolved_name = name.or_else(|| {
@@ -404,23 +444,25 @@ pub fn extract_with_query(
         })
         .map(|s| (s.name.clone(), s.location.start_line, s.location.end_line))
         .collect();
-    for sym in &mut symbols {
-        if sym.symbol_type == SymbolType::Import {
-            continue;
-        }
-        let s_start = sym.location.start_line;
-        let s_end = sym.location.end_line;
-        if let Some((cname, _, _)) = containers
-            .iter()
-            .filter(|(cname, c_start, c_end)| {
-                *c_start <= s_start
-                    && *c_end >= s_end
-                    && (*c_start < s_start || *c_end > s_end)
-                    && cname != &sym.name
-            })
-            .min_by_key(|(_, c_start, c_end)| c_end.saturating_sub(*c_start))
-        {
-            sym.qualified_name = Some(format!("{cname}::{}", sym.name));
+    if !containers.is_empty() {
+        for sym in &mut symbols {
+            if sym.symbol_type == SymbolType::Import {
+                continue;
+            }
+            let s_start = sym.location.start_line;
+            let s_end = sym.location.end_line;
+            let end_idx = containers.partition_point(|(_, c_start, _)| *c_start <= s_start);
+            if let Some((cname, _, _)) = containers[..end_idx]
+                .iter()
+                .filter(|(cname, c_start, c_end)| {
+                    *c_end >= s_end
+                        && (*c_start < s_start || *c_end > s_end)
+                        && cname != &sym.name
+                })
+                .min_by_key(|(_, c_start, c_end)| c_end.saturating_sub(*c_start))
+            {
+                sym.qualified_name = Some(format!("{cname}::{}", sym.name));
+            }
         }
     }
 
@@ -433,8 +475,12 @@ pub fn extract_with_query(
     for f in &function_symbols {
         *fn_name_counts.entry(f.name.as_str()).or_insert(0) += 1;
     }
+    let file_fallback = file_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(language_id);
 
-    let mut relations = Vec::new();
+    let mut relations = Vec::with_capacity(refs.len());
     for r in refs {
         let relation_type = match r.role {
             CaptureRole::ReferenceCall => RelationType::Calls,
@@ -444,10 +490,11 @@ pub fn extract_with_query(
         };
 
         let line = r.location.start_line;
-        let from = function_symbols
+        let end_idx = function_symbols.partition_point(|s| s.location.start_line <= line);
+        let from = function_symbols[..end_idx]
             .iter()
             .copied()
-            .filter(|s| line >= s.location.start_line && line <= s.location.end_line)
+            .filter(|s| line <= s.location.end_line)
             .min_by_key(|s| s.location.end_line.saturating_sub(s.location.start_line))
             .map(|s| {
                 if fn_name_counts.get(s.name.as_str()).copied().unwrap_or(0) > 1 {
@@ -458,14 +505,7 @@ pub fn extract_with_query(
                     s.name.clone()
                 }
             })
-            .unwrap_or_else(|| {
-                // File-level fallback when the call is outside any tagged function.
-                file_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(language_id)
-                    .to_string()
-            });
+            .unwrap_or_else(|| file_fallback.to_string());
 
         relations.push(Relation {
             from,

@@ -1,0 +1,18 @@
+[package]
+name = "rgctl-lang-elisp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl Tier-2 language plugin: elisp (tags.scm queries)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rgctl-ast-coverage = { workspace = true }
+rgctl-lang-runtime = { workspace = true }
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-elisp = "1.7"
+
+[lints]
+workspace = true

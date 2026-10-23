@@ -5,7 +5,7 @@ use crate::regex_extract::{extract_regex_symbols, merge_symbols};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use rgctl_plugin_helpers::ComplexityCalculator;
-use rgctl_plugin_helpers::{extract_symbols_by_kinds, parse_source};
+use rgctl_plugin_helpers::extract_symbols_by_kinds;
 use std::path::Path;
 use tree_sitter::{Node, Tree};
 
@@ -24,7 +24,13 @@ impl TreeSitterLanguagePlugin {
     }
 
     fn parse(&self, source: &[u8], file_path: &Path) -> Result<Tree> {
-        parse_source(source, file_path, (self.grammar)())
+        parse_with_pool(self.config.id, (self.grammar)(), source).map_err(|message| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message,
+            }
+        })
     }
 
     fn find_node_at_line<'a>(

@@ -9,8 +9,8 @@ use tree_sitter::{Language, Parser, Tree};
 
 struct PooledParser {
     parser: Parser,
-    /// True after a successful `set_language` for this entry.
-    language_set: bool,
+    /// Grammar currently configured on `parser` (guards against key collisions like `"unknown"`).
+    grammar: Option<Language>,
 }
 
 thread_local! {
@@ -18,10 +18,9 @@ thread_local! {
 }
 
 /// Borrow the thread-local parser for `lang_id`, ensuring `grammar` is set once
-/// on first use, and run `f`.
+/// on first use (or when the grammar identity changes), and run `f`.
 ///
-/// Looks up by `&str` before allocating a new `String` key. `set_language` runs
-/// only when the entry is first created (or if a prior set failed).
+/// Looks up by `&str` before allocating a new `String` key.
 pub fn with_thread_local_parser<R>(
     lang_id: &str,
     grammar: Language,
@@ -31,18 +30,20 @@ pub fn with_thread_local_parser<R>(
         let mut map = cell.borrow_mut();
         if !map.contains_key(lang_id) {
             let mut parser = Parser::new();
-            let language_set = parser.set_language(&grammar).is_ok();
+            let active = parser.set_language(&grammar).ok().map(|()| grammar.clone());
             map.insert(
                 lang_id.to_string(),
                 PooledParser {
                     parser,
-                    language_set,
+                    grammar: active,
                 },
             );
         }
         let entry = map.get_mut(lang_id).expect("parser entry just ensured");
-        if !entry.language_set {
-            entry.language_set = entry.parser.set_language(&grammar).is_ok();
+        if entry.grammar.as_ref() != Some(&grammar)
+            && entry.parser.set_language(&grammar).is_ok()
+        {
+            entry.grammar = Some(grammar);
         }
         f(&mut entry.parser)
     })
@@ -65,17 +66,17 @@ pub fn parse_with_pool(
                 lang_id.to_string(),
                 PooledParser {
                     parser,
-                    language_set: true,
+                    grammar: Some(grammar.clone()),
                 },
             );
         }
         let entry = map.get_mut(lang_id).expect("parser entry just ensured");
-        if !entry.language_set {
+        if entry.grammar.as_ref() != Some(&grammar) {
             entry
                 .parser
                 .set_language(&grammar)
                 .map_err(|e| format!("set_language({lang_id}): {e}"))?;
-            entry.language_set = true;
+            entry.grammar = Some(grammar);
         }
         entry
             .parser

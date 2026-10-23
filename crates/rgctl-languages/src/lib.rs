@@ -44,6 +44,27 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_objc::register(registry);
     rgctl_lang_clojure::register(registry);
     rgctl_lang_ocaml::register(registry);
+    rgctl_lang_elisp::register(registry);
+    rgctl_lang_html::register(registry);
+    rgctl_lang_css::register(registry);
+    rgctl_lang_svelte::register(registry);
+    rgctl_lang_graphql::register(registry);
+    rgctl_lang_prisma::register(registry);
+    rgctl_lang_elm::register(registry);
+    rgctl_lang_erlang::register(registry);
+    rgctl_lang_gleam::register(registry);
+    rgctl_lang_fsharp::register(registry);
+    rgctl_lang_racket::register(registry);
+    rgctl_lang_scheme::register(registry);
+    rgctl_lang_d::register(registry);
+    rgctl_lang_odin::register(registry);
+    rgctl_lang_cuda::register(registry);
+    rgctl_lang_glsl::register(registry);
+    rgctl_lang_vhdl::register(registry);
+    rgctl_lang_cmake::register(registry);
+    rgctl_lang_make::register(registry);
+    rgctl_lang_starlark::register(registry);
+    rgctl_lang_powershell::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -163,7 +184,27 @@ mod tests {
             ("Foo.m", "objc"),
             ("math.clj", "clojure"),
             ("math.ml", "ocaml"),
-            ("math.mli", "ocaml"),
+            ("math.el", "elisp"),
+            ("index.html", "html"),
+            ("app.css", "css"),
+            ("App.svelte", "svelte"),
+            ("schema.graphql", "graphql"),
+            ("schema.prisma", "prisma"),
+            ("Math.elm", "elm"),
+            ("math.erl", "erlang"),
+            ("math.gleam", "gleam"),
+            ("Math.fs", "fsharp"),
+            ("math.rkt", "racket"),
+            ("math.scm", "scheme"),
+            ("math.d", "d"),
+            ("math.odin", "odin"),
+            ("kernel.cu", "cuda"),
+            ("main.vert", "glsl"),
+            ("adder.vhd", "vhdl"),
+            ("CMakeLists.cmake", "cmake"),
+            ("build.mk", "make"),
+            ("defs.bzl", "starlark"),
+            ("Math.ps1", "powershell"),
         ] {
             assert!(
                 registry.can_process_file(Path::new(path)),

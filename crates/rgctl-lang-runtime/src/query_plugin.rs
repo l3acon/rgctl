@@ -7,7 +7,7 @@ use crate::queries::{
 use crate::regex_extract::{extract_regex_symbols, merge_symbols};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
-use rgctl_plugin_helpers::{parse_source, ComplexityCalculator};
+use rgctl_plugin_helpers::ComplexityCalculator;
 use std::path::Path;
 use tree_sitter::{Node, Query, Tree};
 
@@ -46,7 +46,13 @@ impl QueryLanguagePlugin {
     }
 
     fn parse(&self, source: &[u8], file_path: &Path) -> Result<Tree> {
-        parse_source(source, file_path, (self.grammar)())
+        parse_with_pool(self.config.id, (self.grammar)(), source).map_err(|message| {
+            Error::ParseError {
+                file: file_path.to_path_buf(),
+                line: 0,
+                message,
+            }
+        })
     }
 
     fn extract_all_inner(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
