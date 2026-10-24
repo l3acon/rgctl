@@ -23,6 +23,7 @@ export function ArchitectureRoom() {
   const [edges, setEdges] = useState(true);
   const [hover, setHover] = useState<HoverEntry | null>(null);
   const [sceneFailed, setSceneFailed] = useState<string | null>(null);
+  const [axes, setAxes] = useState<{ axis: string; label: string; x: number; y: number; depth: number }[]>([]);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<UniverseScene | null>(null);
@@ -71,6 +72,7 @@ export function ArchitectureRoom() {
         return;
       }
       scene.onHoverChange(setHover);
+      scene.onAxesChange(setAxes);
       scene.attachPointer(host);
       const scales = scalesFor(view);
       scene.setEdges(
@@ -160,6 +162,42 @@ export function ArchitectureRoom() {
             </Chip>
             <Chip tone="zinc">{edges ? "coupling drawn" : "coupling hidden"}</Chip>
           </div>
+          {axes.length > 0 && !sceneFailed && (
+            <svg
+              className="pointer-events-none absolute right-2 top-2 h-[86px] w-[86px]"
+              viewBox="-50 -50 100 100"
+              aria-hidden="true"
+            >
+              <circle cx="0" cy="0" r="2" fill="#8fa6bd" />
+              {[...axes]
+                .sort((a, b) => a.depth - b.depth)
+                .map((axis) => {
+                  const colour = axis.axis === "x" ? "#ff6b6b" : axis.axis === "y" ? "#7ee787" : "#6cb6ff";
+                  // an axis pointing away from the viewer is drawn short and dim, the same cue a 3D package
+                  // gives by drawing the far half of an axis dashed
+                  const away = axis.depth < 0;
+                  const length = away ? 22 : 34;
+                  const x2 = axis.x * length;
+                  const y2 = -axis.y * length;
+                  return (
+                    <g key={axis.axis} opacity={away ? 0.45 : 1}>
+                      <line x1="0" y1="0" x2={x2} y2={y2} stroke={colour} strokeWidth="2" strokeLinecap="round" />
+                      <circle cx={x2} cy={y2} r="1.8" fill={colour} />
+                      <text
+                        x={x2 * 1.28}
+                        y={y2 * 1.28 + 3}
+                        fill={colour}
+                        fontSize="9"
+                        textAnchor="middle"
+                        fontFamily="ui-monospace, monospace"
+                      >
+                        {axis.label}
+                      </text>
+                    </g>
+                  );
+                })}
+            </svg>
+          )}
           {hover && (
             <div className="pointer-events-none absolute bottom-2 left-2 max-w-[420px] rounded border border-white/12 bg-black/80 p-2">
               <div className="text-[11px] font-semibold text-zinc-100">{hover.title}</div>
@@ -356,6 +394,8 @@ function Buckets({ view }: { view: ArchitectureView }) {
         ))}
       </ul>
       <p className="mt-2 text-[10.5px] leading-relaxed text-zinc-500">
+        Edges are drawn at a **visibility floor**: brightness still orders them by `log(weight)`, but the
+        weakest is lifted enough to see, so the web is a shape rather than a rumour.{" "}
         {remainder && (
           <>
             <code className="text-amber-200/80">(other)</code> is every package below the export's node cap —{" "}

@@ -88,6 +88,35 @@ export class UniverseScene {
     this.loop();
   }
 
+  /**
+   * The axes as the camera currently sees them, for a Maya-style orientation gnomon.
+   *
+   * Projected through the camera's *rotation* only (an orthographic view-space read), which is the whole point
+   * of a gnomon: it says which way is which, not where things are. `depth` is the view-space z, so a label can
+   * be dimmed when its axis points away — the same cue Maya gives by drawing the far half of an axis thinner.
+   */
+  axisVectors(): { axis: "x" | "y" | "z"; label: string; x: number; y: number; depth: number }[] {
+    const inverse = this.camera.quaternion.clone().invert();
+    const axes: { axis: "x" | "y" | "z"; label: string; x: number; y: number; depth: number }[] = [];
+    for (const [axis, label, vector] of [
+      ["x", "X", new THREE.Vector3(1, 0, 0)],
+      ["y", "Y", new THREE.Vector3(0, 1, 0)],
+      ["z", "Z", new THREE.Vector3(0, 0, 1)],
+    ] as const) {
+      const view = vector.clone().applyQuaternion(inverse);
+      axes.push({ axis, label, x: view.x, y: view.y, depth: view.z });
+    }
+    return axes;
+  }
+
+  /** Called once per frame while the camera turns, with the gnomon's axes. */
+  onAxesChange(fn: (axes: ReturnType<UniverseScene["axisVectors"]>) => void): void {
+    this.onAxes = fn;
+  }
+
+  private onAxes: ((axes: ReturnType<UniverseScene["axisVectors"]>) => void) | null = null;
+  private lastQuaternion = new THREE.Quaternion();
+
   onHoverChange(fn: (entry: HoverEntry | null) => void): void {
     this.onHover = fn;
   }
@@ -109,12 +138,19 @@ export class UniverseScene {
   }
 
   /** Rebuild the scene for a new view. Cheap enough (256 solids, 6,524 segments) to do on every toggle. */
+  /** Which layer is currently drawn, so an unrelated update (edges on/off) does not re-frame the view. */
+  private currentLayer: UniverseLayer | null = null;
+
   update(input: UniverseInput): void {
+    // Re-framing on every call threw away the reader's own orbit whenever they toggled the web. The frame is
+    // rebuilt when the *layer* changes — different geometry, different extent — and otherwise left alone.
+    const refit = this.currentLayer !== input.layer;
+    this.currentLayer = input.layer;
     this.clear();
     this.pickables.length = 0;
     if (input.layer === "packages") this.drawPackages(input);
     else this.drawCommunities(input);
-    this.frameWorld();
+    if (refit) this.frameWorld();
   }
 
   private drawPackages(input: UniverseInput): void {
@@ -363,14 +399,18 @@ export class UniverseScene {
     segments.forEach(([from, to, weight], index) => {
       const t = (Math.log(weight) - low) / span;
       position.set([from[0], from[1], from[2], to[0], to[1], to[2]], index * 6);
-      tint.setHSL(0.09 + 0.03 * t, 0.85, 0.1 + 0.3 * t);
+      // A visibility floor, stated rather than hidden: at the bottom of the weight range a `log` brightness
+      // rule puts a weight-1 edge at ~2% lightness on an additive blend, which on a dark canvas is nothing.
+      // The order is still log(weight) — what changed is that the weakest edge is now *visible* rather than
+      // absent, and the room says the floor exists instead of claiming the web is a pure function of weight.
+      tint.setHSL(0.09 + 0.03 * t, 0.85, 0.26 + 0.26 * t);
       colour.set([tint.r, tint.g, tint.b, tint.r, tint.g, tint.b], index * 6);
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(position, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(colour, 3));
     const material = new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, opacity: 0.18,
+      vertexColors: true, transparent: true, opacity: 0.5,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     this.add(new THREE.LineSegments(geo, material));
@@ -506,6 +546,10 @@ export class UniverseScene {
     if (!this.mounted) return;
     this.frame = requestAnimationFrame(this.loop);
     this.controls.update();
+    if (this.onAxes && !this.camera.quaternion.equals(this.lastQuaternion)) {
+      this.lastQuaternion.copy(this.camera.quaternion);
+      this.onAxes(this.axisVectors());
+    }
     this.renderer.render(this.scene, this.camera);
   };
 
