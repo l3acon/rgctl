@@ -19,13 +19,15 @@ Language quality is proven at **four distances** from the plugin:
 
 Always start with unit + a small fixture. Do not open a Tier 1 PR with only “discover succeeds on one file.”
 
+**Tier-1 vs catalog:** Tier-1 deep-analysis languages (CFG/PDG + `*-ast-coverage.json` + single-pass `ScopeStack` / `KindDispatchTable` / `parse_with_pool`) are a subset of the ~60 plugins in [`languages.toml`](../languages.toml). New Tier-1 PRs must use single-pass `extract_all` and keep the coverage JSON in sync (`RGCTL_AST_COVERAGE_STRICT=1` fails on drift; `RGCTL_AST_COVERAGE_TRACK=1` records dispatch hits in depth tests). Cross-language MRO (`Overrides`) and DI/route edges are part of the Tier-1 parity bar where the language has inheritance / frameworks.
+
 ---
 
 ## 2. Where to put tests (map)
 
 ```text
 crates/rgctl-lang-{id}/
-  src/…                    # plugin + unit tests (#[cfg(test)])
+  src/…                    # plugin + unit tests (#[cfg(test)]); single-pass extract_all
   {id}-ast-coverage.json   # grammar kind → extraction intent (build-gated)
 
 tests/fixtures/{id}/
@@ -200,10 +202,11 @@ Replace `{id}` with your language id (`ruby`, `kotlin`, …).
 cargo fmt --all -- --check
 cargo clippy -p rgctl-lang-{id} -p rgctl-languages -p rgctl-analysis -- -D warnings
 
-# AST coverage drift
+# AST coverage drift (single-pass KindDispatchTable manifests)
 cargo check -p rgctl-languages
-# optional strict:
+# optional strict / runtime hit tracking:
 # RGCTL_AST_COVERAGE_STRICT=1 cargo check -p rgctl-languages
+# RGCTL_AST_COVERAGE_TRACK=1 cargo test -p rgctl-lang-{id} --test {id}_depth_extraction
 
 # Plugin units
 cargo test -p rgctl-lang-{id}

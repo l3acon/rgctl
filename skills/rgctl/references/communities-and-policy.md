@@ -101,7 +101,7 @@ rgctl -f json semantic query "checkout flow" --scope community --limit 10
 
 Returns hits pooled by community rather than individual functions.
 
-**Note:** On large repos (100K+ nodes), label-propagation may produce very granular clusters. For subsystem ownership, prefer `communities list` + grep labels over `--scope community`.
+**Note:** Communities use **Fast-Leiden** (not label propagation) with $\mu + 4\sigma$ hub stripping into `"Shared / Infrastructure"`. On large repos (100K+ nodes), `--scope community` can still be noisy with many small clusters — prefer `communities list` + grep labels over `--scope community` for subsystem ownership.
 
 ### Interpreting Communities
 

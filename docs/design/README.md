@@ -17,10 +17,11 @@ Engineering designs for rgctl capabilities. Each doc follows the [migration plan
 | Dominance | [dominance-design.md](dominance-design.md) | Dataflow → Dominator Tree |
 | Structured query (agent CLI) | [../guides/structured-query.md](../guides/structured-query.md) | CLI + agent skills |
 | Community query & naming | [community-query-and-naming-plan.md](community-query-and-naming-plan.md) | Graph Visualization (legend) + `communities list` |
-| Clone detection (exact Type-1) | [clone-detection-design.md](clone-detection-design.md) | CLI-first (`rgctl clones`); dashboard optional later |
-| Hybrid CPG (two-resolution) | [hybrid-cpg-plan.md](hybrid-cpg-plan.md) | CLI/HTTP agent-first (`cpg`); dashboard optional later |
-| Graph metrics | [graph-metrics-design.md](graph-metrics-design.md) | Functions |
+| Clone detection (exact / bloom / fragment SESE+1-WL) | [clone-detection-design.md](clone-detection-design.md) | CLI-first (`rgctl clones`); dashboard optional later |
+| Hybrid CPG (two-resolution; lazy flows/slice) | [hybrid-cpg-plan.md](hybrid-cpg-plan.md) | CLI/HTTP agent-first (`cpg`); dashboard optional later |
+| Graph metrics (FastPageRank + Fast-Leiden) | [graph-metrics-design.md](graph-metrics-design.md) | Functions |
 | Migration planner | [migration-planner-design.md](migration-planner-design.md) | Migration |
+| Graph snapshot diff | [graph-diff-design.md](graph-diff-design.md) | CLI (`review check` / `diff`) |
 | CI policy checks | [ci-policy-checks-design.md](ci-policy-checks-design.md) | CLI-first (blast scores in dashboard) |
 
 ## Screenshots

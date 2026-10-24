@@ -46,14 +46,16 @@ flowchart TB
   PDG --> DF
 ```
 
-PDG is built after CFG dominator analysis (`crates/rgctl-analysis/src/pdg.rs`).
+PDG is built after CFG dominator analysis (`crates/rgctl-analysis/src/pdg.rs`). Reaching definitions (`dataflow.rs`) key defs by lexical **`(name, scope_id)`** so nested block shadowing does not create false data edges, while still modeling `let x = x + 1` (RHS before LHS).
+
+Records live in the v3 indexed `.rgctl/analysis/cfg_pdg.archive.bin` (`CfgPdgArchiveMmap`). `rgctl slice` / `rgctl cpg flows` call `ensure_cfg_pdg_for_source` to build and append a single function’s CFG/PDG when the archive entry is missing — **no upfront `discover --with-cfg` required** for those verbs. Whole-repo `rgctl taint --sink` and `rgctl cpg mutations` still need `discover --with-cfg`.
 
 ### Opt-in fidelity (hybrid CPG P3)
 
 | Flag / option | Effect |
 |---------------|--------|
 | `discover --with-dfg-loops` | Sets `PdgBuildOptions::classify_loop_carried` — tags `DataDependency.loop_carried` when the use block can reach the def block on the CFG (loop-carried) |
-| `cpg flows --with-alias` | On-demand may-alias expansion (`alias::may_alias_names`) for copies + field bases; does not rewrite the PDG archive |
+| `cpg flows --with-alias` / `slice --with-alias` | On-demand may-alias expansion (`alias::may_alias_names`) for copies + field bases; does not rewrite the PDG archive |
 
 Default `discover --with-cfg` leaves `loop_carried = false` on all edges.
 
@@ -77,9 +79,11 @@ Exported via `dataflow_index.json` + shared `slice/{id}.json` PDG payloads.
 | Component | Path |
 |-----------|------|
 | PDG construction | `crates/rgctl-analysis/src/pdg.rs` |
+| Reaching defs | `crates/rgctl-analysis/src/dataflow.rs` (`(name, scope_id)`) |
 | Dominators (input) | `crates/rgctl-analysis/src/dominance.rs` |
+| Archive / lazy append | `crates/rgctl-analysis/src/cfg_pdg_archive.rs` |
 | Slicing | `crates/rgctl-analysis/src/slicing.rs` |
-| CLI | `src/cli/inspect.rs` |
+| CLI | `src/cli/inspect.rs`, `src/cli/slice.rs` |
 | Dashboard engine | `dashboard/src/dataflowEngine.ts` |
 
 ---
@@ -98,11 +102,17 @@ Exported via `dataflow_index.json` + shared `slice/{id}.json` PDG payloads.
 ## 6. CLI usage
 
 ```bash
-rgctl discover . --cfg
+# Optional whole-repo prebuild
+rgctl discover . --with-cfg
+
 rgctl inspect process pdg --edge-layer data
 rgctl inspect process pdg --def-use
 rgctl -f mermaid inspect process pdg
-rgctl slice src/Foo.java --line 42 --variable x --view pdg
+
+# Lazy single-function CFG/PDG if archive entry missing; --function optional (innermost enclosing)
+rgctl slice src/Foo.java --line 42 --variable x
+rgctl slice src/Foo.java --line 42 --variable x --with-alias
+rgctl -f json cpg flows --file src/Foo.java --line 42 --variable x --direction forward
 ```
 
 ---

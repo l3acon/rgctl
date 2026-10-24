@@ -62,7 +62,9 @@ Copy-paste **PR checklist** block: [tier-1 §7](tier-1-language-support.md#7-pr-
 
 | Gate | Layer | Command / location |
 |------|-------|-------------------|
-| AST coverage (build) | A | `cargo check -p rgctl-languages` warns on grammar/`*-ast-coverage.json` drift; `RGCTL_AST_COVERAGE_STRICT=1` fails |
+| Single-pass extract | A | Tier-1 `extract_all` via `ScopeStack` + `KindDispatchTable` + `parse_with_pool` (see [tier-1-language-support.md](tier-1-language-support.md)) |
+| AST coverage (build) | A | `cargo check -p rgctl-languages` warns on grammar/`*-ast-coverage.json` drift; `RGCTL_AST_COVERAGE_STRICT=1` fails; depth tests may set `RGCTL_AST_COVERAGE_TRACK=1` |
+| MRO / DI parity | A | Inheritance → `Overrides` via `MroIndex`; framework `Injects` / `ExposesRoute` where applicable |
 | E1 Plugin symbols + `Calls` | E | `cargo test -p rgctl-lang-{id}` |
 | E2 CFG branching + loop | E | `cargo test --test {id}_cfg_analysis` · `cargo test -p rgctl-analysis cfg_builder` |
 | E3 Taint source→sink | E | `cargo test --test {id}_taint` · pack in `rules/taint/{id}.yaml` |

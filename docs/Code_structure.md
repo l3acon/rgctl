@@ -129,14 +129,14 @@ flowchart TB
 | **Analysis is graph-only** | Algorithms in `rgctl-analysis` take `MemoryBackend`, `PetGraphView`, or snapshots — not raw source files (except CFG/PDG/slice paths that explicitly need source). |
 | **CLI is thin** | `src/cli/` parses args, resolves paths, calls library crates. Heavy logic belongs in workspace crates, not new `src/cli/*.rs` helpers. JSON shape lives in `*_output.rs`; graph/cache enrichment stays in `rgctl-analysis`. |
 | **Errors are centralized** | Use `rgctl_error::Error` / `Result` from `rgctl-error`. Do not add ad-hoc error enums in the CLI. |
-| **All languages always linked** | The binary always includes every Tier 1 `LanguagePlugin` in `rgctl-languages` (see [`languages.toml`](../languages.toml)). |
+| **All languages always linked** | The binary always includes plugins registered via `rgctl-languages` / [`languages.toml`](../languages.toml) (~60 language/config/IaC plugins). Tier-1 deep-analysis languages additionally ship `*-ast-coverage.json` and single-pass `extract_all` (`ScopeStack` + `KindDispatchTable` + `parse_with_pool`). |
 
 ### Layer responsibilities
 
 #### Entry (`rgctl` root crate)
 
 - **`src/main.rs`** — process entry, dispatches to CLI.
-- **`src/cli/`** — subcommands: `discover`, `find` / `callers` / `relations` / …, `blast-radius`, `serve`, `slice`, `inspect`, `metrics`, `semantic`, `communities`, `cpg`, `check`, `export`.
+- **`src/cli/`** — subcommands: `discover`, `update`, `watch`, `merge`, `find` / `callers` / `callees` / `relations` / `inventory`, `blast-radius`, `serve`, `slice`, `inspect`, `metrics`, `semantic`, `communities`, `clones`, `cpg`, `check`, `review`, `export` (`query` / `pr-check` are compatibility aliases).
 - **`src/cli/http_serve.rs`** — `serve`: dashboard + `POST /api/query` (foreground HTTP for one repo).
 - **`src/cli/session_status.rs`** — `status`: cheap snapshot / digest / node-edge summary.
 - **`src/cli/*_output.rs`** — typed JSON serializers (`blast_radius_output`, `discover_output`, structured-query envelopes, …). Commands assemble domain results from workspace crates and serialize here; **do not** embed algorithm logic in output modules.
@@ -156,12 +156,13 @@ If you add a new workspace crate that external tools should use, export it throu
 | Crate | Role |
 |---|---|
 | `rgctl-plugin-api` | Traits and types: `LanguagePlugin`, `Symbol`, relations, config format plugins. **Contract** all languages implement. |
-| `rgctl-plugin-helpers` | Shared tree-sitter/complexity utilities for plugin authors. |
+| `rgctl-plugin-helpers` | Shared tree-sitter/complexity utilities; thread-local `parse_with_pool` / `with_thread_local_parser`. |
+| `rgctl-ast-coverage` | Grammar ↔ `*-ast-coverage.json` drift checks; `RGCTL_AST_COVERAGE_STRICT=1` / `RGCTL_AST_COVERAGE_TRACK=1`. |
 | `rgctl-lang-runtime` | Config-driven generic plugins (tree-sitter / regex) for simple languages. |
 | `rgctl-config-formats` | Non-code config parsers (YAML, JSON, TOML, properties). |
 | `rgctl-lang-markdown` | Custom markup plugin for `.md` / `.mdx` (context graph; not Tier 1). |
 | `rgctl-registry` | `LanguageRegistry`, dynamic plugin loading, `full_registry()`. |
-| `rgctl-languages` | Registers all Tier 1 lang crates at link time. |
+| `rgctl-languages` | Registers language plugins from the workspace catalog at link time. |
 | `rgctl-lang-*` | Per-language implementations (see note below). |
 | `rgctl-macros` | `#[derive(LanguagePlugin)]` and related proc macros. |
 
@@ -171,7 +172,7 @@ If you add a new workspace crate that external tools should use, export it throu
 
 | Crate | Role |
 |---|---|
-| `rgctl-extraction` | `FileDiscoverer`, `Extractor`, `GraphBuilder` — turns plugin output into graph mutations. |
+| `rgctl-extraction` | `FileDiscoverer`, `Extractor`, `GraphBuilder` — turns plugin output into graph mutations; parks unresolved cross-repo relations (`parked_relations.bin` / `RBPK`). |
 | `rgctl-pipeline` | `ProcessingPipeline` — parallel repo processing, progress, stats; calls extraction + graph. |
 | `rgctl-incremental` | `FileTracker`, change detection, incremental graph updates between discovers. |
 
@@ -182,8 +183,9 @@ If you add a new workspace crate that external tools should use, export it throu
 - **`CodeGraph`** — high-level API over the backend.
 - **`backend/`** — `MemoryBackend`, indexes, batch insert, query.
 - **`schema/`** — `Node`, `Edge`, `NodeType`, `EdgeType`.
-- **`snapshot/`** — columnar v2 mmap snapshots (`graph.snapshot.bin`, 64B node / 40B edge rows + string pool); v1 bincode still readable. `SnapshotNodeStore`, `ColumnarGraphMmap`.
-- **`export/` / `import_json`** — JSON serialization (legacy `graph.db`).
+- **`snapshot/`** — default **`RGCL` v2** columnar mmap (`graph.snapshot.bin`, 64B node / 40B edge rows + string arena + `cold_ext`); v1 bincode still readable. `SnapshotNodeStore`, `ColumnarGraphMmap`.
+- **`graph_compactor.rs`** — `DeltaSegment` + `GraphCompactor` for incremental rewrites.
+- **`export/` / `import_json`** — JSON serialization (legacy `graph.db` / `graph.json` via `--write-json-graph` only).
 - **`query/`** — simple string queries over the backend.
 
 **All persistent graph topology** belongs here. Analysis results that attach to nodes may use `rgctl-analysis::results` columnar tables, not new graph backends.
@@ -195,14 +197,15 @@ Single home for **graph algorithms and semantic analysis**:
 | Module area | Examples |
 |---|---|
 | Impact / structure | `blast_radius_scc`, `blast_engine_snapshot`, `macro_call_index`, `macro_call_lookup`, `graph_utils` (`filter_impact_by_caller_depth`, `PetGraphView`), `dependency`, `callgraph` |
-| Metrics | `centrality`, `community`, `complexity` |
-| Control / data flow | `cfg`, `cfg_builder`, `pdg`, `dominance`, `dataflow`, `def_use`, `slicing`, `interprocedural_*` |
+| Metrics | `centrality` (`FastPageRank`, `SampledBetweenness`, `HyperBallHarmonic`, `NodeRole`), `community` (Fast-Leiden + `HubStripPolicy`), `complexity` |
+| Control / data flow | `cfg`, `cfg_builder`, `pdg`, `dominance`, `dataflow`, `def_use`, `slicing`, `interprocedural_*`, `cfg_pdg_archive` (lazy v3) |
+| Clones / MRO / overlays | `clones`, `fragment_clones`, `mro`, `scip_overlay`, `git_churn` |
 | Security-ish analysis | `taint`, `policy` |
 | Projections | `graph_utils` (`PetGraphView`) |
 | Persistence | `results` (columnar analysis tables), `storage` |
 | Handoff | `blast_slice_handoff` (blast → slice seeds) |
 
-**Do not reimplement** SCC blast radius, PageRank, community detection, or CFG building outside this crate.
+**Do not reimplement** SCC blast radius, PageRank, Fast-Leiden community detection, or CFG building outside this crate.
 
 #### Query & export
 
@@ -225,14 +228,16 @@ Single home for **graph algorithms and semantic analysis**:
 | Command | Primary crates |
 |---|---|
 | `discover` | `pipeline`, `extraction`, `registry`, `graph`, `analysis`, `incremental`, `export`, `project-config`; stdout JSON via `discover_output` when `-f json` |
+| `update` / `watch` / `merge` | `incremental`, `graph` (`GraphCompactor`), `extraction` (parked relations) |
 | `blast-radius` | `analysis` (engine + macro index + depth filter), `graph` (columnar snapshot mmap); CLI orchestration in `blast_radius.rs` |
 | `serve` | `http_serve` — foreground HTTP dashboard + `/api/query` |
 | `status` | Session graph presence / digest / counts |
-| `find` / `callers` / `relations` / `inventory` | `graph` (structured query) |
-| `slice` | `analysis` (CFG, PDG, slicing), reads source from disk |
+| `find` / `callers` / `callees` / `relations` / `inventory` | `graph` (structured query) |
+| `slice` / `cpg flows` | `analysis` (lazy `ensure_cfg_pdg_for_source`, PDG, slicing) |
 | `inspect` | `graph`, `analysis` |
-| `metrics` | `analysis` (centrality, community) |
-| `check` | `analysis` (policies, blast radius) |
+| `metrics` | `analysis` (centrality, community, git churn) |
+| `clones` | `analysis` (`clones`, `fragment_clones`) |
+| `check` / `review check` | `analysis` (policies, blast radius, temporal ledger) |
 | `export` | `export`, `graph` |
 
 ### On-disk artifacts (`.rgctl/`)
@@ -241,14 +246,17 @@ Understanding files helps avoid duplicating cache layers:
 
 | File | Produced by | Consumed by |
 |---|---|---|
-| `graph.db` / `graph.json` | `discover` (JSON) | Legacy load paths |
-| `graph.snapshot.bin` | `discover` (columnar v2 default) | `CodeGraph::open_snapshot`, `SnapshotNodeStore`, `ColumnarGraphMmap`, `serve` |
+| `graph.snapshot.bin` | `discover` / `update` / `merge` (`RGCL` v2 default) | `CodeGraph::open_snapshot`, `SnapshotNodeStore`, `ColumnarGraphMmap`, `serve` |
+| `graph.db` / `graph.json` | `discover --write-json-graph` only | Legacy load paths |
+| `facts/` | `discover` / `update` | Per-file extraction facts cache |
+| `parked_relations.bin` | `discover` (unresolved cross-repo) | `rgctl merge` park-and-resolve |
 | `blast_engine.snapshot.bin` | `discover` | `try_load_engine`, lite blast-radius path, `serve` |
 | `macro_call_index.db` / `.bin` | `discover` | `blast-radius` T0 fast path only — SQLite/bincode lookup cache, not the graph |
-| `cfg_pdg.archive.bin` | `discover --with-cfg` | `blast-radius --with-slices`, slice hand-offs |
+| `analysis/cfg_pdg.archive.bin` | `discover --with-cfg`, or lazy append from `slice` / `cpg flows` | `inspect`, slice, `cpg`, `blast-radius --with-slices` |
+| `analysis/git_churn.json` | `discover --with-git` | `metrics --churn`, `relations --edge cochangeswith` |
 | `query.sock` | *(retired)* | Former blast-radius Unix-socket client (v0.4.7); removed with daemon mode |
 | `analysis_results.bin` | `discover` | Columnar metrics (`CentralityTable`, community, blast); blast columns may stay empty on flat/on-demand graphs (bulk fill skipped — #28 won't-fix; use live `blast-radius`) |
-| `dashboard/` (bundle) | `discover` | Browser static dashboard (`index.html`, `manifest.json`, `graph_payload.bin`) |
+| `dashboard/` (bundle) | `discover --with-dashboard` | Browser static dashboard (`index.html`, `manifest.json`, `graph_payload.bin`) |
 
 ---
 
@@ -259,8 +267,12 @@ Alphabetical list of workspace crates **excluding** individual `rgctl-lang-*` pl
 | Crate | Path | Purpose |
 |---|---|---|
 | **rgctl** | `.` | CLI binary, command dispatch, language bundle wiring, public library root. |
-| **rgctl-analysis** | `crates/rgctl-analysis` | Graph algorithms: blast radius, centrality, community, CFG/PDG, slicing, taint, policies, caches, `PetGraphView`. |
-| **rgctl-languages** | `crates/rgctl-languages` | Registers all Tier 1 language plugins (Rust, Python, JS/TS, Go, Java, C#, C, C++). |
+| **rgctl-analysis** | `crates/rgctl-analysis` | Graph algorithms: blast radius, FastPageRank / SampledBetweenness / HyperBall, Fast-Leiden, CFG/PDG, slicing, taint, clones, MRO, SCIP, git churn, policies, caches, `PetGraphView`. |
+| **rgctl-ast-coverage** | `crates/rgctl-ast-coverage` | Grammar ↔ coverage-manifest drift (`RGCTL_AST_COVERAGE_STRICT` / `_TRACK`). |
+| **rgctl-dashboard** | `crates/rgctl-dashboard` | Static dashboard bundle generation. |
+| **rgctl-gql** | `crates/rgctl-gql` | Graph query language (`rgctl gql`). |
+| **rgctl-kantra** | `crates/rgctl-kantra` | Konveyor Kantra rule eval + embedded catalog. |
+| **rgctl-languages** | `crates/rgctl-languages` | Registers language plugins from the workspace catalog (`languages.toml`). |
 | **rgctl-config-formats** | `crates/rgctl-config-formats` | Config file plugins (YAML, JSON, TOML, properties). |
 | **rgctl-lang-markdown** | `crates/rgctl-lang-markdown` | Markdown context graph (headings, links, frontmatter). |
 | **rgctl-core** | `crates/rgctl-core` | Facade crate re-exporting the stable library API for embedders. |
@@ -311,4 +323,4 @@ When adding or fixing language support:
 
 ---
 
-*Related docs: [`user-guide.md`](user-guide.md), [`json-api.md`](json-api.md), [`dashboard-design.md`](dashboard-design.md), [`cli-io-sanity-qe.md`](cli-io-sanity-qe.md), [`graph-storage-architecture.md`](graph-storage-architecture.md), [`CLI_STRUCTURE.txt`](CLI_STRUCTURE.txt).*
+*Related docs: [`user-guide.md`](user-guide.md), [`json-api.md`](json-api.md), [`guides/cli-command-reference.md`](guides/cli-command-reference.md), [`dashboard-design.md`](dashboard-design.md), [`cli-io-sanity-qe.md`](cli-io-sanity-qe.md), [`graph-storage-architecture.md`](graph-storage-architecture.md), [`CLI_STRUCTURE.txt`](CLI_STRUCTURE.txt).*

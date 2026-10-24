@@ -12,7 +12,7 @@ use uuid::Uuid;
 /// Inputs for naming a single community.
 #[derive(Debug, Clone)]
 pub struct CommunityLabelHints<'a> {
-    /// Community id from label propagation.
+    /// Community id from Fast-Leiden (field name may still say louvain for schema compat).
     pub id: usize,
     /// Member symbol names.
     pub names: &'a [String],

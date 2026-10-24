@@ -9,9 +9,12 @@ Think of `discover` as the indexing step: you run it once (or after significant 
 ## Use Cases
 
 - **Onboarding to an unfamiliar codebase.** Run `discover` to build an inventory of every function, class, and call relationship so you can query the structure instead of reading files one by one.
-- **Pre-migration analysis.** Enable `--with-cfg`, `--with-harmonic`, and `--export-migration-hints` to generate a dependency-aware migration roadmap before refactoring a monolith.
-- **CI integration.** Run `discover` in CI so downstream commands like `check` can enforce architectural policies on every pull request.
-- **Deep program analysis.** Enable `--with-cfg` to build control-flow graphs, program dependence graphs, and dominator trees for every function — required by `slice`, `inspect`, and `cpg` commands.
+- **Pre-migration analysis.** Enable `--with-harmonic` and `--export-migration-hints` (optionally `--with-cfg`) to generate a dependency-aware migration roadmap before refactoring a monolith.
+- **CI integration.** Run `discover` in CI so downstream commands like `check` / `review check` can enforce architectural policies on every pull request.
+- **Deep program analysis.** Enable `--with-cfg` to pre-build the whole-repo v3 CFG/PDG archive and field-write index — required by `taint --sink`, `cpg mutations`, and richest `inspect`. **`slice` / `cpg flows` build single-function CFG/PDG lazily** without upfront `--with-cfg`.
+- **Compiler-exact calls.** Overlay a SCIP index with `--scip <PATH.scip>` to upgrade ambiguous call edges (`resolution = "scip"`).
+- **Git churn & co-change.** Enable `--with-git [--git-since 90.days]` for `CoChangesWith` edges and `metrics --churn`.
+- **Multi-repo.** After per-repo discover, `rgctl merge` resolves parked cross-repo relations into one snapshot.
 
 ## Example Project
 
@@ -52,12 +55,16 @@ rgctl -r example/coolstore discover -l java
 
 | Goal | Suggested flags |
 |------|-----------------|
-| **Structural** (query find/callers/…) | `discover .` (default) |
-| **CFG / slice ready** | `--with-cfg` (+ `--with-ast-skeleton` if needed) |
+| **Structural** (query find/callers/…) | `discover .` (default columnar `graph.snapshot.bin`) |
+| **Slice / flows** | structural discover is enough (lazy single-fn CFG/PDG); optional `--with-cfg` to pre-warm |
+| **Taint / mutations / batch inspect** | `--with-cfg` (+ `--with-taint` / `--with-ast-skeleton` if needed) |
+| **SCIP overlay** | `--scip index.scip` |
+| **Git churn / co-change** | `--with-git [--git-since 90.days]` then `metrics --churn` |
 | **Full staged pipeline** | `--full` (CFG + dashboard + harmonic + semantic; not taint/security) |
 | **Migration roadmap** | `--export-migration-hints --with-harmonic` (+ preset/order) |
 | **Kantra** | `--with-kantra` (+ `--kantra-target` …) |
-| **Dirty tree refresh** | prefer `rgctl update` / `serve --watch` — not full rediscover |
+| **Constrained / cgroup** | `--with-limits max-mem-mb=4096,threads=1` (or `RGCTL_WITH_LIMITS`) |
+| **Dirty tree refresh** | prefer `rgctl update` / `rgctl watch` / `serve --watch` — not full rediscover |
 
 `rgctl discover --help` groups flags under Paths & filters · Pipeline features · Migration · Session / limits.
 
@@ -91,9 +98,23 @@ Or set `RGCTL_WITH_LIMITS=max-mem-mb=4096,threads=1`. Soft RSS budget (~95% abor
 - The graph snapshot was written to `example/coolstore/.rgctl/graph.snapshot.bin`.
 - Basic discover finishes in well under a second on this corpus.
 
-### 2. Discovery with Deep Analysis
+### 2. SCIP overlay and git churn
 
-To enable control-flow graphs, PDGs, and dominance analysis for every function, add `--with-cfg`:
+```bash
+# Compiler-exact call resolution overlay (optional .scip protobuf)
+rgctl -r example/coolstore discover -l java --scip /path/to/index.scip
+
+# Recency-weighted churn + CoChangesWith edges
+rgctl -r example/coolstore discover -l java --with-git --git-since 90.days
+rgctl -r example/coolstore -f json metrics --churn
+rgctl -r example/coolstore -f json relations SomeFile.java --edge cochangeswith
+```
+
+Artifacts: `.rgctl/analysis/git_churn.json`. Co-change edges are excluded from default call traversal / PageRank.
+
+### 3. Discovery with Deep Analysis (`--with-cfg`)
+
+To **pre-build** control-flow graphs, PDGs, dominance, and the field-write index for every function, add `--with-cfg`. Needed for `taint --sink`, `cpg mutations`, and batch `inspect`. Not required for `slice` / `cpg flows` (lazy append).
 
 ```bash
 rgctl -r example/coolstore discover -l java --with-cfg
@@ -116,10 +137,24 @@ rgctl -r example/coolstore discover -l java --with-cfg
 
 - In addition to the basic graph, rgctl built a CFG, PDG, and dominator tree for each analyzed Java function (**150** on this tree; inventory still lists **152** function symbols).
 - It indexed **41** field-write sites (`cpg status.field_write_count`), enabling `cpg mutations`.
-- The analysis archive was written to `.rgctl/analysis/cfg_pdg.archive.bin`.
+- The v3 analysis archive was written to `.rgctl/analysis/cfg_pdg.archive.bin` (`cfg_pdg.bin` TOC layout).
+- Per-file extraction facts land under `.rgctl/facts/` for incremental update/watch reuse.
 - A small number of functions may be skipped for analysis errors.
 
-### 3. Full Analysis with Dashboard and Migration
+### 4. Multi-repo merge
+
+Park unresolved cross-repo calls/imports/routes during each repo’s discover (`parked_relations.bin`), then resolve:
+
+```bash
+rgctl discover services/auth
+rgctl discover services/billing
+rgctl merge services/auth services/billing --output-dir .rgctl-merged
+rgctl -r .rgctl-merged -f json callers validateToken
+```
+
+Four-tier resolution: `ExactFqn` → `ImportScopedSuffix` → `UniqueBareName` → `AmbiguousStub`.
+
+### 5. Full Analysis with Dashboard and Migration
 
 For the most complete analysis, combine all the deep-analysis flags:
 
@@ -142,7 +177,7 @@ This enables:
 
 Without `--export-migration-hints`, `discover -f json` emits DiscoverResponse telemetry (`command: "discover"`, `metrics`, `schema_version: 2`) — not the migration plan.
 
-### 4. Filtering by Language
+### 6. Filtering by Language
 
 CoolStore tutorials in these guides use `-l java` (same as `--languages java`) so the Angular/bower frontend is not indexed:
 
@@ -152,7 +187,9 @@ rgctl -r example/coolstore discover --languages java
 
 Omit `-l` / `--languages` only when you intentionally want a multi-language index of the full tree (much larger; vendor JS dominates).
 
-### 5. Excluding Directories
+**Language catalog:** Tier-1 deep-extraction & CFG/PDG languages ship with 100% grammar-verified `*-ast-coverage.json` manifests; the full plugin catalog in `languages.toml` covers **~60** languages and config/IaC formats (not all are Tier-1 deep analysis).
+
+### 7. Excluding Directories
 
 To skip vendor or generated code when indexing more than Java:
 
@@ -160,45 +197,58 @@ To skip vendor or generated code when indexing more than Java:
 rgctl -r example/coolstore discover --exclude bower_components
 ```
 
-### 6. Inspecting Artifacts
+### 8. Inspecting Artifacts
 
 After discovery, artifacts live under **`{repo}/.rgctl/`**:
 
 | Path | Content |
 |------|---------|
-| `.rgctl/graph.snapshot.bin` | Columnar graph snapshot |
-| `.rgctl/analysis/cfg_pdg.archive.bin` | CFG/PDG/dominance archive (with `--with-cfg`) |
+| `.rgctl/graph.snapshot.bin` | Default **RGCL** v2 columnar mmap snapshot |
+| `.rgctl/facts/` | Per-file `FileExtractionFacts` cache (incremental update/watch) |
+| `.rgctl/parked_relations.bin` | Unresolved cross-repo relations (`RBPK`) for `merge` |
+| `.rgctl/analysis/cfg_pdg.archive.bin` | v3 CFG/PDG/dominance archive (`--with-cfg` and/or lazy slice/flows append) |
+| `.rgctl/analysis/git_churn.json` | Git churn overlay (`--with-git`) |
 | `.rgctl/dashboard/manifest.json` | Dashboard metadata (with `--with-dashboard`) |
 | `.rgctl/migration_plan.json` | Migration roadmap (with `--export-migration-hints`) |
+
+`--write-json-graph` is an **opt-in** legacy export; it is not the default discover output (`graph.db` / `graph.json` are not the primary store).
 
 ## Discover Options Reference
 
 | Option | Description |
 |--------|-------------|
-| `--with-cfg` | Per-function CFG, PDG, and dominator trees |
+| `--with-cfg` | Pre-build per-function CFG, PDG, dominators + field-write index |
 | `--with-taint` | Discover-time taint analysis (implies `--with-cfg`) |
 | `--with-dfg-loops` | Classify loop-carried data dependencies on PDGs |
 | `--with-ast-skeleton` | Write coarse AST skeleton archive |
+| `--scip <PATH.scip>` | SCIP protobuf overlay for compiler-exact call resolution |
+| `--with-git` / `--git-since` | Co-change edges + churn hotspots (default window `90.days`) |
 | `--with-security` | Secret scanning |
 | `--with-dashboard` | Export static dashboard bundle |
-| `--with-harmonic` | Compute harmonic centrality for migration ranking |
+| `--with-harmonic` | HyperBallHarmonic centrality for migration ranking |
 | `--export-migration-hints` | Write migration roadmap JSON (and emit it on stdout with `-f json`) |
-| `--write-json-graph` | Write legacy JSON graph files |
+| `--with-limits …` | Soft RSS / thread / spill budgets (containers) |
+| `--write-json-graph` | Opt-in legacy JSON graph files |
 | `-l, --languages` | Restrict to specific languages |
 | `-e, --exclude` | Exclude directories by name |
 | `-v, --verbose` | Debug logging with stage profiling |
 | `--full` | Staged pipeline: basic → CFG/dashboard/harmonic → semantic index |
 
+Also: `rgctl merge <REPOS>... --output-dir <DIR>` (Lifecycle) after per-repo discovers.
+
 ## Benefits
 
 - **Single command to index an entire codebase.** No build system integration, no compilation required — rgctl works directly on source files.
-- **Incremental depth.** Start with basic discovery in under a second, then opt into deeper analysis (`--with-cfg`, `--with-taint`) only when you need it.
-- **Multi-language support.** Nine Tier 1 languages (Java, Go, Rust, Python, JavaScript, TypeScript, C#, C, C++) plus markdown and config formats.
+- **Incremental depth.** Start with basic discovery in under a second; use lazy `slice`/`flows` or opt into `--with-cfg` / `--with-taint` only when you need whole-repo procedural archives.
+- **Multi-language support.** Tier-1 deep-analysis languages plus the full ~60-plugin catalog in `languages.toml`.
 - **Foundation for all other commands.** Every query, metric, and analysis reads from the graph `discover` produces.
 
 ## Related Guides
 
 - [Structured graph queries](structured-query.md) — query the graph that `discover` builds
-- [Graph Metrics](graph-metrics.md) — run PageRank, betweenness, and community detection
+- [Watch mode and incremental update](watch-mode.md) — `update` / `watch` / `serve --watch`
+- [Graph Metrics](graph-metrics.md) — PageRank, betweenness, Fast-Leiden, churn
+- [Program Slicing](program-slicing.md) — lazy CFG/PDG slicing
 - [Migration Planning](migration-planning.md) — use the `--export-migration-hints` output
 - [HTTP Server and Dashboard](http-server-and-dashboard.md) — serve the `--with-dashboard` output in a browser
+- [CLI Command Reference](cli-command-reference.md) — full Lifecycle flag map

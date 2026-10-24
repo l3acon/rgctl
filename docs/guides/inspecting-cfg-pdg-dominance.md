@@ -16,13 +16,15 @@ While higher-level commands like `slice` and `cpg flows` build on these structur
 
 ## Example Project
 
-This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` with `--with-cfg`:
+This guide uses the **CoolStore** (`example/coolstore`). Prefer a whole-repo CFG/PDG archive for `inspect` (batch L_proc records). `slice` / `cpg flows` can populate single-function entries lazily, but `inspect` is happiest after `--with-cfg`:
 
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
 rgctl -r example/coolstore discover . -l java --with-cfg
 ```
+
+Dominance uses Cooper–Harvey–Kennedy / Lengauer–Tarjan constructions over the CFG (`inspect <SYM> dom`).
 
 ## Step-by-Step
 
@@ -187,7 +189,7 @@ The `--def-use` flag adds def-use chain information to the edges.
 
 ## Related Guides
 
-- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- `discover --with-cfg` is required
+- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- prefer `discover --with-cfg` for batch `inspect`
 - [Program Slicing](program-slicing.md) -- slicing operates on the PDG that `inspect` exposes
 - [Hybrid CPG](hybrid-cpg.md) -- the CPG facade that combines these graphs with the call graph
 - [Blast Radius Analysis](blast-radius-analysis.md) -- function-level analysis that complements statement-level inspection

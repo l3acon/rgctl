@@ -29,9 +29,9 @@ Worked NL scenarios showing the discover → query → reason → act pattern fo
 
 **Fast path:** If `.rgctl/` exists and the user did not ask to rebuild, do **not** re-run full discover. Check `rgctl status` (`index_current`); if false, run `rgctl update` once — do not stop `serve --watch` to refresh.
 
-Common flags: `--with-cfg` (CFG/PDG archive), `--with-ast-skeleton`, `--with-dfg-loops` (loop-carried PDG tags). Migration roadmap output is the **migrate** workflow (`--export-migration-hints` → `migration_plan.json`) — do not conflate it with a plain index.
+Common flags: `--scip PATH.scip` (compiler overlay), `--with-git` (churn / `CoChangesWith`), `--with-cfg` (whole-repo CFG/PDG archive for taint/mutations/batch inspect — **not** required for lazy `slice` / `cpg flows`), `--with-ast-skeleton`, `--with-dfg-loops` (loop-carried PDG tags). Multi-repo: `rgctl merge <REPOS>... --output-dir <DIR>`. Migration roadmap output is the **migrate** workflow (`--export-migration-hints` → `migration_plan.json`) — do not conflate it with a plain index.
 
-Artifacts live at `{repo}/.rgctl/`. Check CFG readiness with `rgctl -f json cpg status` before slice/PDG workflows.
+Artifacts live at `{repo}/.rgctl/` (`RGCL` v2 `graph.snapshot.bin`). Check CFG readiness with `rgctl -f json cpg status` before mutations/taint/inspect; prefer lazy `slice` for one-off line criteria.
 
 
 ---
@@ -63,9 +63,9 @@ Report `metrics.score`, `topology.direct_callers`, impact size. Add `--class` / 
 
 # Flow workflow
 
-**When:** Slices, PDG, taint, CPG data flows. Requires `discover --with-cfg`.
+**When:** Slices, PDG, taint, CPG data flows. `rgctl slice` / `cpg flows` lazily build single-function CFG/PDG (no upfront `discover --with-cfg`). Reserve `--with-cfg` for `cpg mutations`, sink-first `taint --sink`, and batch `inspect`.
 
-Check readiness: `rgctl -f json cpg status`.
+Optional readiness check: `rgctl -f json cpg status`.
 
 ### AST skeleton
 
@@ -80,23 +80,26 @@ Coarse skeleton (`kind`, lines, `label`) — **not** a typed signature API (`par
 
 ### Status + line slice
 
-**User intent:** *"Confirm the CFG archive is ready, then slice how `quantity` is used in `updateQuantity`"*
+**User intent:** *"Slice how `quantity` is used in `updateQuantity`"*
 
-Canonical CLI is `rgctl slice` (CPG façade: `cpg slice` / `cpg flows`).
+Canonical CLI is `rgctl slice` (CPG façade: `cpg slice` / `cpg flows`). `--function` is optional (auto-resolves from `file:line`); `--with-alias` expands may-alias names.
 
 ```bash
-rgctl -f json cpg status
+rgctl -f json slice src/cart/CartService.ts \
+  --line 50 --variable quantity --with-alias --view pdg
+# Or with explicit function:
 rgctl -f json slice src/cart/CartService.ts \
   --line 50 --variable quantity --function updateQuantity --view pdg
 ```
 
-For whole-function CFG/PDG, use `inspect <Symbol> cfg|pdg` (façade: `cpg pdg <Symbol>`).
+For whole-function CFG/PDG, prefer `discover --with-cfg` then `inspect <Symbol> cfg|pdg` (façade: `cpg pdg <Symbol>`).
 
 ### Field mutations
 
 **User intent:** *"Check where `ShoppingCart` object fields are mutated"*
 
 ```bash
+# Needs whole-repo discover --with-cfg (field_write.bin)
 rgctl -f json cpg mutations --type ShoppingCart --exclude-ctors
 ```
 

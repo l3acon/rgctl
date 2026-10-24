@@ -88,7 +88,7 @@ cargo build --release --bin rgctl
 ./target/release/rgctl --version
 ```
 
-All **Tier 1** languages registered in [`languages.toml`](languages.toml) (Rust, Python, Ruby, PHP, JavaScript, TypeScript, Go, Java, C#, C, C++) plus markdown are always included in the binary — no per-language feature flags.
+All language plugins registered in [`languages.toml`](../languages.toml) (~60 language/config/IaC plugins, including Tier-1 deep-analysis languages with `*-ast-coverage.json`) plus markdown are linked into the binary — no per-language feature flags. Tier-1 deep extraction (CFG/PDG, single-pass `ScopeStack` + `KindDispatchTable`) is a capability bar, not a separate build feature.
 
 The repository tracks **`Cargo.lock`** (binary workspace). Prefer `cargo build --locked` / `cargo check --locked` so dependency versions match CI. `ort` is pinned exactly while it remains on a `2.0.0-rc.*` train.
 

@@ -6,6 +6,17 @@ The `slice` command performs **line-level program slicing** -- it extracts the m
 
 Slicing works in two directions: **backward** (what statements contributed to this variable's value?) and **forward** (what statements does this variable's value influence?).
 
+## Lazy CFG/PDG (no upfront `discover --with-cfg`)
+
+`rgctl slice` does **not** require a whole-repo `discover --with-cfg` first. When the target function is missing from the v3 indexed archive (`.rgctl/analysis/cfg_pdg.bin` / on-disk `cfg_pdg.archive.bin`), `ensure_cfg_pdg_for_source` parses only that file, builds a **single function** CFG/PDG, and **atomically appends** its `TocEntry` to the archive.
+
+- **`--function` is optional:** when omitted, `slice` auto-resolves the innermost enclosing function from `file:line`.
+- **`--with-alias`:** expands the criterion via intra-procedural may-alias heuristics (copies / field bases).
+- **`--taint`:** enables taint tracking on the slice criterion.
+- Reaching definitions track lexical **`(name, scope_id)`** pairs so block shadowing does not create false edges, while preserving RHS-before-LHS for `let x = x + 1`.
+
+Whole-repo **`rgctl taint --sink`** and **`rgctl cpg mutations`** still need `discover --with-cfg` (full archive / field-write index). Prefer `discover --with-cfg` when you will `inspect` many functions or run batch CPG mutation audits.
+
 ## Use Cases
 
 - **Bug investigation.** Trace a variable's value backward to find where an incorrect computation originates.
@@ -16,26 +27,26 @@ Slicing works in two directions: **backward** (what statements contributed to th
 
 ## Example Project
 
-This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` with `--with-cfg` to enable CFG/PDG analysis:
+This guide uses the **CoolStore** (`example/coolstore`). A structural index is enough to start slicing (lazy CFG/PDG fill-in):
 
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
-rgctl -r example/coolstore discover -l java --with-cfg
+rgctl -r example/coolstore discover -l java
+# Optional: pre-build the whole-repo archive for faster multi-function inspect/mutations
+# rgctl -r example/coolstore discover -l java --with-cfg
 ```
-
-The `--with-cfg` flag is required because slicing depends on the Program Dependence Graph (PDG), which is built from the control-flow graph.
 
 ## Step-by-Step
 
 ### 1. Backward Slice
 
-Find all statements that contribute to the value of `sc` at line 68 in `ShoppingCartService.java`:
+Find all statements that contribute to the value of `sc` at line 68 in `ShoppingCartService.java`. `--function` may be omitted (auto from line); shown here for clarity:
 
 ```bash
 rgctl -r example/coolstore -f json slice \
   ./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java \
-  --line 68 --variable sc --function priceShoppingCart --direction backward
+  --line 68 --variable sc --direction backward
 ```
 
 **Output:**
@@ -99,17 +110,25 @@ rgctl -r example/coolstore -f json slice \
 - **`edges`** -- the data-dependency edges connecting the nodes. The variable `sc` flows from node_0 to node_1, along with `sci` and `getQuantity`.
 - The backward direction means: "what code contributes to `sc`'s state at line 68?"
 
-### 2. Forward Slice
+### 2. Forward Slice with alias expansion
 
-Trace how the variable `sc` at line 68 influences later statements:
+Trace how `sc` at line 68 influences later statements, expanding may-aliases:
+
+```bash
+rgctl -r example/coolstore -f json slice \
+  ./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java \
+  --line 68 --variable sc --direction forward --with-alias
+```
+
+Equivalent façade (also lazy; `--function` optional):
 
 ```bash
 rgctl -r example/coolstore -f json cpg flows \
   ./src/main/java/com/redhat/coolstore/service/ShoppingCartService.java \
-  --line 68 --variable sc --function priceShoppingCart --direction forward
+  --line 68 --variable sc --direction forward --with-alias
 ```
 
-**Output:**
+**Output (flows shape):**
 
 ```json
 {
@@ -156,8 +175,9 @@ rgctl -r example/coolstore -f json cpg flows \
 | `FILE` | Yes | Path to the source file (relative to `--repo`) |
 | `--line` | Yes | Line number of the slicing criterion |
 | `--variable` | Yes | Variable name at the criterion line |
-| `--function` | No | Function name (disambiguates if multiple functions span the line) |
+| `--function` | No | Function name; when omitted, auto-resolved from `file:line` |
 | `--direction` | No | `backward` (default) or `forward` |
+| `--with-alias` | No | Expand criterion via may-alias heuristics (copies / field bases) |
 | `--taint` | No | Enable taint tracking on the slice |
 | `--view` | No | `text` (default), `cfg`, or `pdg` |
 | `--language` | No | Override language detection |
@@ -175,6 +195,7 @@ rgctl -r example/coolstore -f json cpg flows \
 ## Benefits
 
 - **Precision.** Only see the statements that actually matter for a specific data flow.
+- **On-demand CFG/PDG.** First slice of a function builds and caches the v3 archive entry — no whole-repo `--with-cfg` tax.
 - **Quantified focus.** The `reduction_percent` tells you exactly how much irrelevant code was eliminated.
 - **Bidirectional.** Trace data backward to its origins or forward to its consumers.
 - **Statement-level granularity.** More precise than function-level blast-radius analysis.
@@ -182,7 +203,8 @@ rgctl -r example/coolstore -f json cpg flows \
 
 ## Related Guides
 
-- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- must run `discover --with-cfg` for slicing
+- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- structural `discover` is enough; `--with-cfg` is optional pre-warm
 - [Hybrid CPG](hybrid-cpg.md) -- `cpg flows` wraps slicing with a higher-level interface
 - [Inspecting CFG, PDG, and Dominance](inspecting-cfg-pdg-dominance.md) -- examine the raw PDG that slicing uses
 - [Blast Radius Analysis](blast-radius-analysis.md) -- function-level impact analysis (vs. statement-level slicing)
+- [CLI Command Reference](cli-command-reference.md) -- `slice` / `taint` / `cpg` map

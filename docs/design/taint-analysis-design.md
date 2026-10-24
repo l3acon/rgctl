@@ -15,9 +15,9 @@
 | Find risky data paths | Intra-procedural taint on CFG/PDG |
 | Rank severity | Flow severity score + vulnerable flag |
 | Dashboard triage | Function sidebar + flows table |
-| CLI verification | `slice --taint` and exported `taint/*.json` |
+| CLI verification | `slice --taint`, `rgctl taint --sink`, exported `taint/*.json` |
 
-Enabled by `discover --with-cfg` / `--with-taint` (language-dependent pattern catalogs).
+**Whole-repo** taint (`rgctl taint --sink`, dashboard taint bundles) requires `discover --with-cfg` / `--with-taint` (language-dependent pattern catalogs) so the v3 `cfg_pdg.archive.bin` and field/taint sidecars exist. **`rgctl slice --taint`** can still lazily ensure the single enclosing function’s CFG/PDG via `ensure_cfg_pdg_for_source` (same lazy path as plain `slice`); sink-catalog whole-repo scans do not.
 
 ---
 
@@ -36,7 +36,7 @@ flowchart TB
   end
 
   subgraph persist["Persist + export"]
-    ARC[cfg_pdg.archive.bin]
+    ARC["cfg_pdg.archive.bin v3"]
     TI[taint_index.json]
     TD[taint/*.json]
     analysis --> ARC
@@ -50,6 +50,8 @@ flowchart TB
     TD --> TV
   end
 ```
+
+Data edges use lexical **`(name, scope_id)`** reaching definitions (same as PDG/slice).
 
 ---
 
@@ -92,7 +94,12 @@ Dashboard: filter **vulnerable only**; click a flow for path detail.
 ## 6. CLI usage
 
 ```bash
+# Whole-repo sink scan / dashboard: requires --with-cfg (and typically --with-taint)
 rgctl discover . --with-cfg --with-security --with-taint
+rgctl taint --sink
+
+# Per-criterion taint slice: lazy single-function cfg_pdg append OK
+rgctl slice src/Endpoint.java --line 20 --variable request --taint
 rgctl slice src/Endpoint.java --line 20 --variable request --function handle --taint
 # Inspect exported flows under .rgctl/analysis/ or dashboard taint/*.json
 ```

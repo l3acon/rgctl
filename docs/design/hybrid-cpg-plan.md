@@ -6,11 +6,14 @@
 
 ```text
 L_repo   = CALL + type + Contains (+ existing Uses/…)  → graph.snapshot.bin   (always)
-L_proc   = CFG + DFG/PDG [+ field writes] [+ optional AST skeleton] → cfg_pdg archive / on-demand
+L_proc   = CFG + DFG/PDG [+ field writes] [+ optional AST skeleton]
+           → v3 indexed cfg_pdg.archive.bin (TocEntry + memmap2) / lazy single-fn append
 L_query  = virtual CPG API joins L_repo ⟷ L_proc by function UUID (+ call sites)
 ```
 
 **Driving use case:** Prove `OrderDTO` fields are never mutated outside constructors before converting to a Java `record` (see §8). Grep/setters alone are insufficient; agents need typed field-write reachability + local data slices.
+
+**Shipped lazy path:** `rgctl slice` and `rgctl cpg flows` call `ensure_cfg_pdg_for_source` to build and cache one function’s CFG/PDG (lexical `(name, scope_id)` reaching defs) without prior whole-repo `discover --with-cfg`. **`rgctl cpg mutations`** and **`rgctl taint --sink`** still require `discover --with-cfg` (field-write index / full archive).
 
 **Non-goals (this plan):**
 
@@ -39,7 +42,7 @@ flowchart TB
     SNAP[graph.snapshot.bin]
   end
   subgraph L_proc["L_proc — per-function"]
-    ARC[cfg_pdg.archive.bin]
+    ARC["cfg_pdg.archive.bin v3 TOC"]
     IDX[field_write.index.bin optional]
   end
   subgraph L_query["L_query — virtual CPG"]
@@ -51,7 +54,7 @@ flowchart TB
   API --> AGENT[Agent ReAct loop]
 ```
 
-**Invariant:** Default `discover` (no `--with-cfg`) never builds L_proc or field-write index. Snapshot digest rules unchanged ([analysis-architecture.md](../analysis-architecture.md)).
+**Invariant:** Default `discover` (no `--with-cfg`) never builds the **whole-repo** L_proc archive or field-write index. Snapshot digest rules unchanged ([analysis-architecture.md](../analysis-architecture.md)). Query-time `ensure_cfg_pdg_for_source` may still append individual function records for `slice` / `cpg flows`.
 
 ---
 
@@ -76,14 +79,15 @@ Ship **P0→P2** before P3/P4. P1 is the gate for the record-refactor agent stor
 ## 3. Phase 0 — Virtual CPG façade (no new IR)
 
 ### Problem
-Agents must stitch `find` / `blast-radius` / `inspect` / `slice` and know `--with-cfg`. No single “CPG” entrypoint.
+Agents must stitch `find` / `blast-radius` / `inspect` / `slice` with no single “CPG” entrypoint.
 
 ### Design
 
 - **Do not** duplicate CFG/PDG into the snapshot.
 - Add a thin **join layer** that loads:
   - `PreparedGraphSnapshot` / cold metadata for L_repo
-  - `CfgPdgArchive` when present (else clear error: run `discover --with-cfg`)
+  - `CfgPdgArchiveMmap` when present; for `cpg flows` / `cpg slice`, lazily append via `ensure_cfg_pdg_for_source` when a function record is missing
+  - Field-write index for `cpg mutations` (requires prior `discover --with-cfg`)
 - Surface stable JSON schemas (`schema_version`) under `-f json`.
 
 ### Steps
@@ -96,15 +100,15 @@ Agents must stitch `find` / `blast-radius` / `inspect` / `slice` and know `--wit
    - `cpg function <name>` — L_repo node + whether L_proc exists
    - `cpg calls <name>` — CALL neighborhood from snapshot (bridge demo)
    - `cpg pdg <name> [--edge-layer data|control]` — thin wrap of inspect
-   - `cpg slice <file> --line N --variable V …` — thin wrap of slice
+   - `cpg slice` / `cpg flows` — thin wrap of slice; `--function` optional (innermost enclosing from `file:line`)
 3. **HTTP** — `POST /api/cpg` with `{ "op": "…", … }` mirroring CLI (same JSON shapes as `-f json`); wire in `serve`.
-4. **Docs** — AGENTS.md + agent-recipes: “prefer `cpg` when reasoning across control/data/calls”; note requires `--with-cfg`.
+4. **Docs** — AGENTS.md + agent-recipes: “prefer `cpg` when reasoning across control/data/calls”; note lazy flows/slice vs `--with-cfg` for mutations.
 5. **Tests** — Fixture with one Java/Rust function: status ok; slice/pdg round-trip through façade.
 
 ### Acceptance
 
-- After `discover --with-cfg`, agent can run mutation/slice workflows via `cpg` without inventing multi-tool glue (even if mutation query still missing until P1).
-- Default discover unchanged (no new artifacts).
+- Agent can run `cpg flows` / `cpg slice` without inventing multi-tool glue; mutations still need `discover --with-cfg`.
+- Default discover unchanged (no whole-repo L_proc unless `--with-cfg`).
 
 ### Perf
 
@@ -192,15 +196,17 @@ Map:
 
 ### Steps
 
-1. **`cpg flows`** — `--file --line --variable [--direction forward|backward] [--function] [--interprocedural]`
+1. **`cpg flows`** — `--file --line --variable [--direction forward|backward] [--function] [--interprocedural] [--with-alias]`
    - Reuse `slicing.rs` / interprocedural path; JSON schema aligned with `slice` (`schema_version`).
+   - `--function` optional: resolve innermost enclosing function from `file:line`.
+   - Lazy `ensure_cfg_pdg_for_source` when the archive lacks that function (same as top-level `slice`).
 2. **Handoff recipe** — Docs: mutations → pick site → `cpg flows` on receiver local → decide wither/copy.
 3. **Agent recipe** — Copy-paste ReAct loop for DTO→record in [agent-recipes.md](../agent-recipes.md).
 4. **Tests** — Fixture flow: find → mutate → return; forward flows lists assign, write, return lines.
 
 ### Acceptance
 
-- Turns 5–6 runnable solely through `cpg` (+ discover `--with-cfg`).
+- Turns 5–6 runnable solely through `cpg` (`flows`/`slice` lazy; mutations need `discover --with-cfg`).
 - Token story: JSON returns locs/snippets; agent need not load whole files.
 
 ---
@@ -211,7 +217,7 @@ Tighten L_proc data edges without changing L_repo.
 
 | Tier | Flag (illustrative) | Adds |
 |------|---------------------|------|
-| T0 | (default with `--with-cfg`) | Today’s Flow/Anti/Output (name-based) |
+| T0 | (default with `--with-cfg` / lazy append) | Flow/Anti/Output with lexical `(name, scope_id)` reaching defs |
 | T1 | `--with-dfg-loops` | Loop-carried dependence classification |
 | T2 | `--with-dfg-alias` / on-demand | Must/May alias for selected functions |
 
@@ -268,10 +274,13 @@ Document known gaps: reflection, `Object` receivers without cast, cross-language
 ## 9. API sketch (stable for agents)
 
 ```bash
+# mutations / richest inspect: whole-repo L_proc
 rgctl -r "$REPO" discover --with-cfg
 
 rgctl -r "$REPO" -f json cpg status
 rgctl -r "$REPO" -f json cpg mutations --type OrderDTO --exclude-ctors
+
+# flows/slice: --function optional; lazy single-fn append if archive missing the record
 rgctl -r "$REPO" -f json cpg flows \
   --file src/.../OrderProcessor.java --line 114 --variable order --direction forward
 rgctl -r "$REPO" -f json cpg calls OrderProcessor::process
@@ -288,7 +297,7 @@ Keep topology pure; expose derived facts via `cpg` / structured verbs rather tha
 | Artifact | Role | When written |
 |----------|------|--------------|
 | `graph.snapshot.bin` | L_repo | Always (unchanged role) |
-| `analysis/cfg_pdg.archive.bin` | L_proc CFG/PDG (+ optional embedded field writes) | `--with-cfg` |
+| `analysis/cfg_pdg.archive.bin` | L_proc CFG/PDG v3 TOC (+ optional embedded field writes) | `--with-cfg` (full) or lazy `ensure_cfg_pdg_for_source` (single fn) |
 | `analysis/field_write.index.bin` | Inverted mutation index | `--with-cfg` (P1) |
 | (future) `analysis/ast_skeleton…` | Coarse AST | P4 opt-in |
 
@@ -313,7 +322,7 @@ Bump archive / index **version** fields; reject stale with clear CLI errors. Inv
 |-----|--------|
 | AGENTS.md | Hybrid CPG commands table |
 | agent-recipes.md | DTO→record ReAct recipe |
-| user-guide.md | `cpg` section; link CFG requirement |
+| user-guide.md | `cpg` section; lazy flows/slice vs `--with-cfg` for mutations |
 | HTTP Server and Dashboard | `/api/cpg` (if exposed) |
 | This plan → later | Split into `hybrid-cpg-design.md` after P2 ships (screenshots if UI) |
 

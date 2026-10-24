@@ -28,8 +28,14 @@ const paths: Path[] = [
     blurb: "Index a repo, install the agent pack, and learn structured queries.",
     guides: [
       {
+        title: "CLI command reference",
+        feature: "Lifecycle · Query · Analysis · …",
+        blurb: "Canonical CLI taxonomy matching rgctl --help.",
+        href: "/docs/guides/cli-command-reference/",
+      },
+      {
         title: "Discovering and indexing",
-        feature: "discover",
+        feature: "discover · merge · --scip · --with-git",
         blurb: "Build the knowledge graph from source code.",
         href: "/docs/guides/discovering-and-indexing/",
       },
@@ -46,8 +52,14 @@ const paths: Path[] = [
         href: "/docs/guides/structured-query/",
       },
       {
+        title: "DI and frameworks",
+        feature: "Injects · ExposesRoute · frameworks.bin",
+        blurb: "Cross-language DI wiring and HTTP route edges.",
+        href: "/docs/guides/dependency-injection-and-frameworks/",
+      },
+      {
         title: "Watch mode and incremental update",
-        feature: "update, serve --watch",
+        feature: "update, watch, serve --watch",
         blurb: "Keep the graph fresh without full rediscover.",
         href: "/docs/guides/watch-mode/",
       },
@@ -71,7 +83,7 @@ const paths: Path[] = [
       },
       {
         title: "CI policy checks",
-        feature: "check, pr-check",
+        feature: "review check · check",
         blurb: "PR temporal gates and local policy checks.",
         href: "/docs/guides/ci-policy-checks/",
       },
@@ -84,7 +96,7 @@ const paths: Path[] = [
       {
         title: "Program slicing",
         feature: "slice",
-        blurb: "Extract the minimal set of statements affecting a variable.",
+        blurb: "Lazy CFG/PDG slices — no upfront discover --with-cfg required.",
         href: "/docs/guides/program-slicing/",
       },
       {
@@ -101,8 +113,8 @@ const paths: Path[] = [
       },
       {
         title: "Clone detection",
-        feature: "clones",
-        blurb: "Exact (Type-1), bloom, and sub-function fragment clones.",
+        feature: "clones --mode exact|bloom|fragment",
+        blurb: "Type 1–4 clones including SESE + 1-WL fragment mode.",
         href: "/docs/guides/clone-detection/",
       },
     ],
@@ -127,13 +139,13 @@ const paths: Path[] = [
       {
         title: "Community detection",
         feature: "communities",
-        blurb: "Identify and label functional clusters in your codebase.",
+        blurb: "Fast-Leiden clusters with μ+4σ hub stripping.",
         href: "/docs/guides/community-detection/",
       },
       {
         title: "Graph metrics",
-        feature: "metrics",
-        blurb: "PageRank, betweenness, and community detection analytics.",
+        feature: "metrics --pagerank · --churn",
+        blurb: "FastPageRank, betweenness, harmonic, and git churn hotspots.",
         href: "/docs/guides/graph-metrics/",
       },
       {

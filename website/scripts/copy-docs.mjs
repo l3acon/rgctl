@@ -2,7 +2,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
-  readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -15,41 +15,16 @@ const srcDocs = join(repoRoot, "docs");
 const destDocs = join(here, "../content/docs");
 const publicDir = join(here, "../public");
 
-function copyTree(from, to) {
-  mkdirSync(to, { recursive: true });
-  for (const name of readdirSync(from)) {
-    if (
-      name === "internal" ||
-      name === "videos" ||
-      name === "images" ||
-      name === "languages"
-    ) {
-      // languages/ is obsolete — site renders from *-ast-coverage.json
-      // videos/images handled separately or skipped for v1 text docs
-      if (name === "images") {
-        const imgFrom = join(from, name);
-        const imgTo = join(to, name);
-        cpSync(imgFrom, imgTo, { recursive: true });
-      }
-      continue;
-    }
-    const fp = join(from, name);
-    const tp = join(to, name);
-    if (statSync(fp).isDirectory()) {
-      copyTree(fp, tp);
-    } else if (name.endsWith(".md") || name.endsWith(".txt")) {
-      cpSync(fp, tp);
-    }
-  }
-}
-
 if (!existsSync(srcDocs)) {
   console.warn("[copy-docs] missing docs/ — skip");
   process.exit(0);
 }
 
+// Clean slate so deleted/renamed docs do not linger in static builds.
+if (existsSync(destDocs)) {
+  rmSync(destDocs, { recursive: true, force: true });
+}
 mkdirSync(destDocs, { recursive: true });
-// clean slate
 cpSync(srcDocs, destDocs, {
   recursive: true,
   filter: (src) => {
@@ -91,30 +66,40 @@ Install: \`curl -fsSL https://shaaf.dev/rgctl/install.sh | sh\`
 
 ## Capabilities
 
-- Typed code knowledge graph (tree-sitter, 14 Tier-1 languages)
+- Typed code knowledge graph: Tier-1 deep-analysis languages (C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript; plus ERB / Markdown) and the full \`languages.toml\` plugin catalog (config/IaC and additional languages)
 - Structured queries: \`find\`, \`callers\`, \`callees\`, \`relations\`, \`inventory\`
-- Blast radius, communities, PageRank / betweenness metrics
-- Hybrid CPG / CFG / PDG / program slicing (\`discover --with-cfg\`)
+- Blast radius; Fast-Leiden communities; PageRank / betweenness / harmonic metrics; git churn (\`discover --with-git\`, \`metrics --churn\`)
+- Hybrid CPG / CFG / PDG: \`rgctl slice\` builds single-function CFG/PDG lazily on demand; \`discover --with-cfg\` pre-builds the full repo archive
+- Cross-language MRO (\`relations -e overrides\`), SCIP overlay (\`discover --scip\`), frameworks / DI routes
 - Semantic search over functions and docs
 - OSV / vuln reachability and OpenVEX
 - Agent skills via \`rgctl install --skill\`
 
 ## CLI (JSON-first)
 
-- \`rgctl discover .\` — index repo → \`.rgctl/\`
-- \`rgctl -f json find|callers|blast-radius|cpg|slice|metrics|status\`
+- \`rgctl discover .\` — index repo → \`.rgctl/\` (optional \`--with-git\`, \`--scip <PATH.scip>\`, \`--with-cfg\`)
+- \`rgctl update\` / \`rgctl watch\` / \`rgctl merge\` — incremental refresh, file watch, multi-repo park-and-resolve
+- \`rgctl -f json find|callers|callees|relations|inventory|blast-radius|cpg|slice|metrics|status\`
+- \`rgctl relations <SYM> -e overrides\` / \`rgctl relations <FILE> -e cochangeswith\`
+- \`rgctl metrics --pagerank\` / \`--churn\` / \`--communities\`
+- \`rgctl slice <FILE> --line <N> --variable <VAR>\` — lazy CFG/PDG (optional \`--with-alias\`, \`--taint\`)
+- \`rgctl clones --mode exact|bloom|fragment\` — Type 1–4 (SESE + 1-WL fragment)
 - \`rgctl semantic index\` / \`rgctl semantic query\`
-- \`rgctl review paths\` / \`rgctl review check\` (PR gates)
-- \`rgctl clones\` — exact / bloom / fragment clone detection
+- \`rgctl review paths\` / \`rgctl review check\` (PR gates; \`pr-check\` is a compatibility alias)
 - \`rgctl rules\` / \`discover --with-kantra\` — Konveyor-style rules
 
 ## Guides
 
 - https://shaaf.dev/rgctl/docs/guides/
+- https://shaaf.dev/rgctl/docs/guides/cli-command-reference/
 - https://shaaf.dev/rgctl/docs/guides/discovering-and-indexing/
 - https://shaaf.dev/rgctl/docs/guides/agent-skill/
+- https://shaaf.dev/rgctl/docs/guides/dependency-injection-and-frameworks/
 - https://shaaf.dev/rgctl/docs/guides/blast-radius-analysis/
 - https://shaaf.dev/rgctl/docs/guides/hybrid-cpg/
+- https://shaaf.dev/rgctl/docs/guides/program-slicing/
+- https://shaaf.dev/rgctl/docs/guides/clone-detection/
+- https://shaaf.dev/rgctl/docs/guides/community-detection/
 - https://shaaf.dev/rgctl/docs/guides/vulnerability-and-osv-analysis/
 - https://shaaf.dev/rgctl/docs/guides/migration-planning/
 

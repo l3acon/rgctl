@@ -23,11 +23,12 @@ export default function LanguagesIndexPage() {
         Languages
       </h1>
       <p className="mt-3 max-w-2xl text-[var(--body)]">
-        Generated at build time from each plugin&apos;s{" "}
-        <code className="text-sm">*-ast-coverage.json</code> (single source of
-        truth) plus extensions from{" "}
-        <code className="text-sm">languages.toml</code>. Handlers describe how
-        named tree-sitter kinds map into the graph.
+        This table lists languages with grammar-verified{" "}
+        <code className="text-sm">*-ast-coverage.json</code> manifests (Tier-1
+        deep analysis and related custom plugins). The full plugin catalog in{" "}
+        <code className="text-sm">languages.toml</code> also registers additional
+        config/IaC languages. Handlers describe how named tree-sitter kinds map
+        into the graph.
       </p>
       <p className="mt-2 text-sm text-[var(--mute)]">
         Contributor bar:{" "}

@@ -38,12 +38,14 @@ You do not need graph theory to use the CLI: **indexing builds the map; commands
       │  discover  (cd repo && rgctl discover .   — or  rgctl -r PATH discover)
       ▼
   artifact root ({repo}/.rgctl/)
+      │  primary: graph.snapshot.bin (RGCL v2 columnar mmap)
       │
-      ├── find / callers / relations / blast-radius / metrics / communities / cpg / slice / inspect
-      ├── check / pr-check / diff          (CI + snapshot compare)
-      ├── semantic index + query           (opt-in embedder)
-      ├── export                           (JSON, GraphML, Mermaid, Obsidian, …)
-      └── serve                            (optional HTTP dashboard + semantic API)
+      ├── find / callers / callees / relations / inventory / blast-radius / metrics / communities / clones / cpg / slice / inspect
+      ├── check / review check / review paths / diff   (CI + temporal PR gate + snapshot compare)
+      ├── update / watch / merge                       (incremental + multi-repo park-and-resolve)
+      ├── semantic index + query                       (opt-in embedder)
+      ├── export                                       (JSON, GraphML, Mermaid, Obsidian, …)
+      └── serve                                        (optional HTTP dashboard + semantic API)
 ```
 
 1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](guides/discovering-and-indexing.md) for `-r` vs `.` pitfalls.  
@@ -57,15 +59,19 @@ Capability designs for contributors: [design/](design/README.md).
 
 | Flags | Use |
 |-------|-----|
-| (default) | Fast graph + metrics caches |
-| `--with-cfg` | CFG/PDG archive (needed for `slice`, `inspect`, `cpg`, taint) |
+| (default) | Fast graph + metrics caches → `.rgctl/graph.snapshot.bin` (`RGCL` v2) |
+| `--with-cfg` | Whole-repo CFG/PDG archive (v3 `cfg_pdg.bin`); needed for `taint --sink`, `cpg mutations`, richest `inspect`. **Not** required for `slice` / `cpg flows` (lazy single-function build) |
 | `--with-taint` | Discover-time taint (with CFG) |
+| `--with-git` | Git churn hotspots + `CoChangesWith` edges (`metrics --churn`) |
+| `--scip PATH` | SCIP overlay — upgrades ambiguous calls (`resolution = "scip"`) |
 | `--with-kantra` | Konveyor Kantra rule eval (Java-oriented; `VIOLATES` edges) |
 | `--full` | Full pipeline (large corpora / Gate B style runs) |
 | `--with-dashboard` / `--export-migration-hints` | Opt-in UI bundle / migration JSON |
 
 ```bash
 rgctl discover . -l java,kotlin,python --with-cfg
+rgctl discover . --with-git --git-since 90.days
+rgctl discover . --scip index.scip
 rgctl discover . -e node_modules,target,.git,vendor
 ```
 
@@ -77,19 +83,22 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 
 | Capability | Intent |
 |------------|--------|
-| **discover** | Index repo → graph + analytics caches under `.rgctl/` |
-| **find / callers / relations / inventory** | Structured graph queries (agent-facing) |
+| **discover** | Index repo → `RGCL` v2 graph + analytics caches under `.rgctl/` |
+| **find / callers / callees / relations / inventory** | Structured graph queries (agent-facing; `query …` is a compatibility alias) |
 | **blast-radius** | Upstream impact / reachability for a symbol |
-| **slice / taint** | Statement-level data/control dependence; source→sink |
+| **slice / taint** | Statement-level data/control dependence; source→sink (`slice` lazy-builds CFG/PDG; `--with-alias`) |
 | **inspect** | CFG / PDG / dominance for one function |
-| **cpg** | Hybrid CALL + CFG/PDG façade (mutations, flows) |
-| **metrics / communities** | PageRank, betweenness, label-propagation clusters |
+| **cpg** | Hybrid CALL + CFG/PDG façade (`flows` lazy; `mutations` needs `--with-cfg`) |
+| **clones** | Exact / bloom / fragment (SESE hammock + 2-iter 1-WL) with `--seed` |
+| **metrics / communities** | `FastPageRank`, `SampledBetweenness`, `HyperBallHarmonic`; **Fast-Leiden** communities ($\mu+4\sigma$ hub strip) |
+| **merge / update / watch** | Multi-repo park-and-resolve merge; incremental / live update |
 | **semantic** | Opt-in natural-language / keyword search over functions |
 | **export** | Subgraph / projection export (JSON, GraphML, Mermaid, Obsidian, …) |
-| **check / pr-check** | CI policy on blast-radius; temporal PR gate (base/head snapshots) |
+| **check / review check** | CI blast-radius policy; temporal PR gate (`pr-check` = alias of `review check`) |
 | **diff** | Compare two columnar snapshots (digest + `diff_snapshots`) |
 | **migration hints** | Package roadmap JSON (`--export-migration-hints`) |
 | **Kantra** | Migration-rule findings during discover (`--with-kantra`) |
+| **MRO / Overrides** | Cross-language method resolution → `Overrides` edges; polymorphic call retarget |
 | **install** | Bundle agent skills / optional policy into IDEs |
 | **serve** | Foreground HTTP dashboard + semantic HTTP API for one repository |
 
@@ -99,12 +108,13 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 
 ## Languages
 
-Tier 1 support is **custom tree-sitter plugins**. What each plugin handles is declared in  
-`crates/rgctl-lang-*/{id}-ast-coverage.json` (grammar pin + named-kind → handler). Extensions and aliases live in [`languages.toml`](../languages.toml).
+**Tier-1 deep-analysis** languages use custom tree-sitter plugins with grammar-verified `crates/rgctl-lang-*/{id}-ast-coverage.json` manifests, single-pass `extract_all` (`ScopeStack` + `KindDispatchTable` + `parse_with_pool`), and CFG/PDG support. Set `RGCTL_AST_COVERAGE_STRICT=1` to fail the build on grammar/manifest drift.
 
-The website **`/docs/languages/`** pages are generated from those JSON files at build time — do not maintain parallel hand-written coverage tables. Pointers for contributors: [languages/README.md](languages/README.md) · [tier-1-language-support.md](tier-1-language-support.md).
+Separately, [`languages.toml`](../languages.toml) registers **~60** language and config/IaC plugins (Tier 1 + generic tree-sitter + regex + formats). Do not equate “Tier 1 deep analysis” with the full plugin catalog count.
 
-Current Tier 1 ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript (plus markdown as a doc plugin).
+The website **`/docs/languages/`** pages are generated from those JSON files at build time — do not maintain parallel hand-written coverage tables. Pointers: [languages/README.md](languages/README.md) · [tier-1-language-support.md](tier-1-language-support.md) · [CLI command reference](guides/cli-command-reference.md).
+
+Current Tier-1 deep-analysis ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript (plus markdown as a doc plugin; ERB and others with coverage JSON as they land).
 
 ---
 

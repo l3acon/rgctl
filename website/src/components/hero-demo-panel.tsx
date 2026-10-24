@@ -83,15 +83,16 @@ const DEMOS: Demo[] = [
   },
   {
     id: "cpg",
-    label: "cpg",
-    caption: "CALL + CFG/PDG façade",
+    label: "slice",
+    caption: "lazy CFG/PDG · program slice",
     copyText:
-      "rgctl -f json cpg slice --function priceShoppingCart",
+      "rgctl -f json slice CartService.java --line 54 --variable quantity",
     lines: [
       {
         kind: "cmd",
-        text: "cpg slice --function priceShoppingCart",
+        text: "slice CartService.java --line 54 --variable quantity",
       },
+      { kind: "out", text: "✓ CFG/PDG built on demand → cfg_pdg.bin" },
       { kind: "out", text: "{" },
       {
         kind: "json",
@@ -103,8 +104,8 @@ const DEMOS: Demo[] = [
   {
     id: "metrics",
     label: "metrics",
-    caption: "PageRank · harmonic · hotspots",
-    copyText: "rgctl -f json metrics --pagerank",
+    caption: "FastPageRank · churn · hotspots",
+    copyText: "rgctl -f json metrics --pagerank\nrgctl -f json metrics --churn",
     lines: [
       { kind: "cmd", text: "metrics --pagerank" },
       { kind: "out", text: "{" },
@@ -113,6 +114,9 @@ const DEMOS: Demo[] = [
         text: '  "top": [{ "name": "CartController", "pr": 0.082 }]',
       },
       { kind: "out", text: "}" },
+      { kind: "gap" },
+      { kind: "cmd", text: "metrics --churn" },
+      { kind: "out", text: '{ "hotspots": [{ "path": "CartService.java" }] }' },
     ],
   },
   {
@@ -135,7 +139,7 @@ const DEMOS: Demo[] = [
   {
     id: "communities",
     label: "communities",
-    caption: "subsystem clusters",
+    caption: "Fast-Leiden · hub-stripped",
     copyText:
       "rgctl -f json communities list",
     lines: [
@@ -154,14 +158,14 @@ const DEMOS: Demo[] = [
   {
     id: "migration",
     label: "migration",
-    caption: "prioritized plan + CI check",
+    caption: "prioritized plan + review check",
     copyText:
-      "cd your-repo\nrgctl discover . --export-migration-hints\nrgctl -f json check --policy-file policy.json",
+      "cd your-repo\nrgctl discover . --export-migration-hints\nrgctl -f json review check --policy-file policy.json",
     lines: [
       { kind: "cmd", text: "discover . --export-migration-hints" },
       { kind: "out", text: "✓ wrote .rgctl/migration_plan.json" },
       { kind: "gap" },
-      { kind: "cmd", text: "check --policy-file policy.json" },
+      { kind: "cmd", text: "review check --policy-file policy.json" },
       { kind: "out", text: "✓ no blast-radius policy violations" },
     ],
   },

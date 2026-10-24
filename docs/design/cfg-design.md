@@ -14,8 +14,9 @@ Per-function **control-flow graphs**: basic blocks, branch edges, and loop struc
 |------|-----|
 | Visualize executable structure | Basic blocks + conditional/unconditional edges |
 | Feed PDG / slice / taint | Shared CFG construction in analysis pipeline |
-| Scale to large repos | Inline JSON for small repos; `archive_only` lazy load for large |
+| Scale to large repos | v3 indexed `cfg_pdg.archive.bin` (`TocEntry` + `memmap2`); dashboard `archive_only` lazy load |
 | CLI dumps | `inspect SYMBOL cfg` (+ `--prune`, `-f mermaid`) |
+| On-demand build | `ensure_cfg_pdg_for_source` appends one function for `slice` / `cpg flows` without whole-repo `--with-cfg` |
 
 ---
 
@@ -23,17 +24,19 @@ Per-function **control-flow graphs**: basic blocks, branch edges, and loop struc
 
 ```mermaid
 flowchart LR
-  subgraph build["discover --with-cfg"]
+  subgraph build["Whole-repo or lazy"]
+    DISC["discover --with-cfg (full archive)"]
+    LAZY["ensure_cfg_pdg_for_source (single fn)"]
     PARSE[Language CFG builder]
     CFG[ControlFlowGraph]
+    DISC --> PARSE
+    LAZY --> PARSE
     PARSE --> CFG
   end
 
-  subgraph store["Storage"]
-    ARC[cfg_pdg.archive.bin]
-    PER[per-function storage]
+  subgraph store["Storage — v3 indexed archive"]
+    ARC["cfg_pdg.archive.bin (TocEntry + memmap2)"]
     CFG --> ARC
-    CFG --> PER
   end
 
   subgraph export["Dashboard"]
@@ -44,6 +47,8 @@ flowchart LR
     CD --> CV
   end
 ```
+
+**v3 archive:** `CfgPdgArchiveMmap` with 32-byte `TocEntry` directory and zero-copy record lookup. Whole-repo build via `discover --with-cfg`; `rgctl slice` / `rgctl cpg flows` call `ensure_cfg_pdg_for_source` to parse one enclosing function and **atomically append** its `TocEntry` when missing. Lexical `(name, scope_id)` tracking on defs/statements feeds PDG reaching defs (see [pdg-design.md](pdg-design.md)).
 
 **Large repos:** `cfg_index.json` sets `detail_mode: "archive_only"` — UI offers **Load CFG graph** to fetch one function from the record pack on demand.
 
@@ -65,7 +70,7 @@ flowchart LR
 |-----------|------|
 | CFG IR | `crates/rgctl-analysis/src/cfg.rs` |
 | Language lowering | `crates/rgctl-lang-*/` CFG hooks |
-| Archive | `crates/rgctl-analysis/src/cfg_pdg_archive.rs` |
+| Archive | `crates/rgctl-analysis/src/cfg_pdg_archive.rs` (`CfgPdgArchiveMmap`, `ensure_cfg_pdg_for_source`) |
 | CLI inspect | `src/cli/inspect.rs` |
 | Dashboard export | `crates/rgctl-dashboard/src/cfg_export.rs` |
 
@@ -85,10 +90,16 @@ flowchart LR
 ## 6. CLI usage
 
 ```bash
-rgctl discover . --cfg
+# Optional whole-repo prebuild (needed for taint --sink / cpg mutations / richest inspect)
+rgctl discover . --with-cfg
+
+# Inspect (uses archive when present)
 rgctl inspect MyClass#myMethod cfg
 rgctl -f mermaid inspect MyClass#myMethod cfg --prune
 rgctl -f json inspect MyClass#myMethod cfg -o /tmp/cfg.json
+
+# slice / cpg flows build a single-function record on demand if missing from the archive
+rgctl slice src/Foo.java --line 42 --variable x
 ```
 
 ---

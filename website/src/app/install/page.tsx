@@ -98,12 +98,20 @@ export default function InstallPage() {
             "rgctl discover .",
             "rgctl -f json find --type function --count-only | jq '.total'",
             'rgctl -f json blast-radius "priceShoppingCart" --depth 2',
+            "rgctl -f json slice src/.../CartService.java --line 54 --variable quantity",
           ]}
         />
         <p className="text-sm text-[var(--mute)]">
           Dashboard and migration JSON are opt-in: add{" "}
           <code className="font-mono">--with-dashboard</code> /{" "}
-          <code className="font-mono">--export-migration-hints</code>.
+          <code className="font-mono">--export-migration-hints</code>.{" "}
+          <code className="font-mono">slice</code> builds CFG/PDG lazily;
+          use <code className="font-mono">discover --with-cfg</code> to
+          prebuild the full archive. See the{" "}
+          <Link href="/docs/guides/cli-command-reference/" className="underline">
+            CLI command reference
+          </Link>
+          .
         </p>
       </section>
 

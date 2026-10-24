@@ -37,7 +37,7 @@ const capabilityRows = [
       },
       {
         title: "cpg · slice · inspect",
-        body: "Hybrid CALL + CFG/PDG façade: statement slices, field mutations, dominance — Joern-class depth without leaving the CLI.",
+        body: "Hybrid CALL + CFG/PDG façade: statement slices, field mutations, dominance. slice builds CFG/PDG lazily on demand; discover --with-cfg prebuilds the full archive.",
       },
       {
         title: "taint · security",
@@ -51,15 +51,15 @@ const capabilityRows = [
     cells: [
       {
         title: "communities",
-        body: "Label-propagation clusters so agents reason about subsystems, not a flat bag of functions.",
+        body: "Fast-Leiden clusters (hub-stripped) so agents reason about subsystems, not a flat bag of functions.",
       },
       {
         title: "metrics",
-        body: "PageRank, betweenness, harmonic centrality, and hotspots — ranked facts, not LLM guesses about importance.",
+        body: "FastPageRank, betweenness, harmonic centrality, git churn hotspots — ranked facts, not LLM guesses about importance.",
       },
       {
-        title: "migration · check",
-        body: "Export a prioritized migration_plan.json; enforce blast-radius policy in CI with check --policy-file.",
+        title: "migration · review",
+        body: "Export a prioritized migration_plan.json; gate PRs with review check / check --policy-file.",
       },
     ],
   },
@@ -169,7 +169,7 @@ export default function HomePage() {
                 Zero-hydration mmap queries on columnar snapshots
               </li>
               <li className="rounded-[4px] border border-[var(--hairline)] p-4">
-                14 Tier-1 tree-sitter languages + markdown
+                Tier-1 deep-analysis languages + full languages.toml catalog
               </li>
             </ul>
           </div>
@@ -182,7 +182,8 @@ export default function HomePage() {
         </h2>
         <p className="mb-10 max-w-[62ch] text-[var(--body)]">
           Most code graphs stop at symbols, callers, and impact. rgctl adds
-          precomputed reachability, hybrid CPG depth, centrality, communities,
+          precomputed reachability, lazy hybrid CPG depth, FastPageRank,
+          Fast-Leiden communities, fragment clones, MRO/SCIP/git-churn overlays,
           and migration/CI outputs — always as deterministic{" "}
           <code className="font-[family-name:var(--font-mono)] text-[0.9em] text-[var(--ink)]">
             -f json

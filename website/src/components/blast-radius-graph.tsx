@@ -214,8 +214,8 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
   },
 
   cpg: {
-    aria: "CPG slice with CALL CFG and PDG edges",
-    fig: "Fig. cpg · slice",
+    aria: "Program slice with CALL CFG and PDG edges built lazily",
+    fig: "Fig. slice · lazy CFG/PDG",
     stats: "24 nodes · DFG+CFG",
     dimEdges: [
       "M70,60 C120,50 180,55 230,80",
@@ -251,8 +251,8 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
   },
 
   metrics: {
-    aria: "Centrality hotspots with PageRank emphasis",
-    fig: "Fig. metrics · pagerank",
+    aria: "Centrality hotspots with FastPageRank emphasis",
+    fig: "Fig. metrics · pagerank · churn",
     stats: "hotspots ranked",
     dimEdges: [
       "M100,100 C160,80 220,90 280,120",
@@ -339,8 +339,8 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
   },
 
   communities: {
-    aria: "Community clusters in the codebase graph",
-    fig: "Fig. communities",
+    aria: "Fast-Leiden community clusters in the codebase graph",
+    fig: "Fig. communities · Fast-Leiden",
     stats: "cluster 12 · cart",
     dimEdges: [
       "M120,100 C180,90 240,95 300,120",
@@ -386,7 +386,7 @@ const SCENES: Record<GraphSceneId, GraphScene> = {
 
   migration: {
     aria: "Migration plan priority path through hotspots",
-    fig: "Fig. migration · plan",
+    fig: "Fig. migration · review check",
     stats: "priority · check OK",
     dimEdges: [
       "M80,80 C140,60 200,55 270,70",

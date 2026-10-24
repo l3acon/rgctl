@@ -2,7 +2,9 @@
 
 Runnable commands from [user-guide.md](../user-guide.md) §16 and the VHS tapes
 (`docs/videos/user-guide-cli.tape`, `docs/videos/markdown-context-cli.tape`) are
-covered by Rust integration tests:
+covered by Rust integration tests. Scenarios follow canonical CLI verbs
+(`find` / `callers` / `relations` / `slice` / `cpg` / `review check`, …) —
+`query` / `pr-check` are compatibility aliases only.
 
 | Test crate | Scope |
 |------------|--------|

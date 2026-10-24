@@ -2,17 +2,17 @@
 
 ## Introduction
 
-The `metrics` command runs **network analytics** on your code knowledge graph: PageRank to find the most important functions, betweenness centrality to identify bridging nodes, and community detection to measure the modularity of your codebase. These are the same algorithms used to analyze web link graphs and social networks, applied to the structure of your code.
+The `metrics` command runs **network analytics** on your code knowledge graph: pull-based CSR **FastPageRank** for structural importance, **SampledBetweenness** for bridge functions, **Fast-Leiden** community modularity, optional **HyperBallHarmonic** centrality (from `discover --with-harmonic`), and **git churn** hotspots (from `discover --with-git`). These are production graph algorithms applied to the structure of your code.
 
-Metrics give you a quantitative view of your codebase's architecture -- which functions are critical hubs, which serve as bridges between modules, and how well the code separates into distinct clusters.
+Metrics give you a quantitative view of architecture — which functions are critical hubs, which bridge modules, how well code separates into clusters, and which files churn most recently.
 
 ## Use Cases
 
-- **Identify critical functions.** PageRank reveals the most structurally important functions -- the ones most depended upon.
-- **Find architectural bottlenecks.** High betweenness centrality indicates functions that bridge otherwise disconnected parts of the codebase.
-- **Measure modularity.** Community detection tells you how well your code separates into cohesive groups, quantified by a modularity score.
+- **Identify critical functions.** PageRank reveals the most structurally important production symbols.
+- **Find architectural bottlenecks.** High betweenness indicates functions that bridge otherwise disconnected parts of the codebase.
+- **Measure modularity.** Fast-Leiden communities + modularity score quantify how well code separates into cohesive groups.
 - **Prioritize refactoring.** Focus effort on high-PageRank, high-betweenness functions where changes have the largest structural impact.
-- **Track architecture over time.** Run metrics on each release to detect modularity drift or emerging hotspots.
+- **Track hotspots over time.** Combine structural metrics with `metrics --churn` after `discover --with-git`.
 
 ## Example Project
 
@@ -22,13 +22,18 @@ CoolStore examples use `-l java` to index the Java backend only (skip Angular/bo
 
 ```bash
 rgctl -r example/coolstore discover -l java
+# Optional overlays used later in this guide:
+# rgctl -r example/coolstore discover -l java --with-harmonic
+# rgctl -r example/coolstore discover -l java --with-git --git-since 90.days
 ```
 
 ## Step-by-Step
 
-### 1. PageRank
+### 1. PageRank (FastPageRank + NodeRole)
 
-PageRank ranks functions by structural importance -- how many other functions depend on them, directly or transitively. Functions called by many high-PageRank callers themselves receive a high score.
+Pull-based CSR **FastPageRank** (double-buffered, adaptive tolerance) ranks symbols by recursive importance via incoming edges. Dual tracks exist for behavioral (`Calls`) vs structural (`STRUCTURAL_EDGE_TYPES`) projections.
+
+By default, **`NodeRole`** filtering keeps **Production** hotspots first and drops `Test`, `Generated`, and `ExternalStub` nodes from the default top list. Pass `--include-tests` to include test helpers and stubs.
 
 ```bash
 rgctl -r example/coolstore -f json metrics --pagerank
@@ -43,14 +48,6 @@ rgctl -r example/coolstore -f json metrics --pagerank
     "iterations": 9,
     "max_delta": 3.6429738108079146e-07,
     "top": [
-      {
-        "file_path": "<external>",
-        "kind": "interface",
-        "name": "Serializable",
-        "node": "f3549ab7-e2f9-5f39-bd10-0a704c9254b0",
-        "pagerank": 0.03165890535246511,
-        "qualified_name": "java.io.Serializable"
-      },
       {
         "file_path": "src/main/java/com/redhat/coolstore/model/CatalogItemEntity.java",
         "kind": "class",
@@ -75,19 +72,19 @@ rgctl -r example/coolstore -f json metrics --pagerank
 
 **What this tells you:**
 
-- **`converged: true`** -- PageRank converged in 9 iterations on this Java-only graph.
-- **`top`** -- highest-ranked nodes (often types / external stubs such as `Serializable`, then domain classes like `CatalogItemEntity` / `Order`).
+- **`converged: true`** -- PageRank converged (here in 9 iterations on the Java-only graph).
+- **`top`** -- highest-ranked **production** nodes after `NodeRole` filtering (domain types such as `CatalogItemEntity` / `Order`).
 - Each entry includes `node` (UUID), `name`, `kind`, `qualified_name`, and `file_path` when available.
 
-To increase iterations for better convergence:
+Include tests / stubs or raise iteration budget:
 
 ```bash
-rgctl -r example/coolstore -f json metrics --pagerank --iterations 50
+rgctl -r example/coolstore -f json metrics --pagerank --include-tests --iterations 50
 ```
 
-### 2. Betweenness Centrality
+### 2. Betweenness Centrality (SampledBetweenness)
 
-Betweenness centrality measures how often a function lies on the shortest path between two other functions. High-betweenness functions are architectural bridges -- removing them would disconnect parts of the call graph.
+**SampledBetweenness** uses $K=256$ degree-stratified Brandes pivots (sequential Brandes below ~4,096 nodes). High-betweenness functions are architectural bridges — removing them would disconnect parts of the call graph.
 
 ```bash
 rgctl -r example/coolstore -f json metrics --betweenness
@@ -121,13 +118,13 @@ rgctl -r example/coolstore -f json metrics --betweenness
 
 **What this tells you:**
 
-- Functions with the highest betweenness scores are the most critical bridges in the call graph (here: `CartEndpoint.add`, then `priceShoppingCart`).
-- These are the functions where a bug or breaking change would propagate most widely across otherwise separate modules.
+- Functions with the highest betweenness scores are the most critical bridges (here: `CartEndpoint.add`, then `priceShoppingCart`).
+- These are where a bug or breaking change would propagate most widely across otherwise separate modules.
 - Low betweenness means a function is "internal" to a single cluster.
 
-### 3. Community Detection
+### 3. Community Detection (Fast-Leiden)
 
-Community detection partitions the graph into clusters of tightly connected functions using the Louvain algorithm. The `modularity` score (0--1) measures how well the code separates into distinct groups.
+Community detection partitions the graph with **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) after $\mu + 4\sigma$ **`HubStripPolicy`**. The `modularity` score (0--1) measures partition quality. Field names like `louvain_community_id` are schema-compat only — see [Community Detection](community-detection.md).
 
 ```bash
 rgctl -r example/coolstore -f json metrics --communities
@@ -148,53 +145,64 @@ rgctl -r example/coolstore -f json metrics --communities
 
 **What this tells you:**
 
-- **`count: 473`** -- the algorithm identified ~473 distinct communities on the Java-only CoolStore graph.
-- **`assignments: 608`** -- all 608 nodes in the graph were assigned to a community.
-- **`modularity: ~0.39`** -- values above 0.3 indicate meaningful community structure; values above 0.5 indicate strong modularity. The CoolStore application has moderate modularity, consistent with its nature as a single-deployment application.
+- **`count`** -- distinct communities on the Java-only CoolStore graph.
+- **`assignments`** -- nodes assigned to a community.
+- **`modularity: ~0.39`** -- values above 0.3 indicate meaningful structure; above 0.5 indicates strong modularity.
 
-### 4. Combining Metrics
+### 4. Harmonic centrality (HyperBallHarmonic)
 
-You can run multiple metrics in a single command:
+Harmonic centrality is computed at discover time with **HyperBallHarmonic** ($p=6$ HLL) when you pass `--with-harmonic`. It feeds migration ranking; re-run discover to refresh:
+
+```bash
+rgctl -r example/coolstore discover -l java --with-harmonic
+```
+
+### 5. Git churn hotspots
+
+After indexing with git history overlay:
+
+```bash
+rgctl -r example/coolstore discover -l java --with-git --git-since 90.days
+rgctl -r example/coolstore -f json metrics --churn
+```
+
+Ranks files/functions by recency-weighted `git_hotspot_score` (see also `relations --edge cochangeswith` and `.rgctl/analysis/git_churn.json`).
+
+### 6. Combining Metrics
 
 ```bash
 rgctl -r example/coolstore -f json metrics --pagerank --betweenness --communities
 ```
 
-This returns all three analyses in a single JSON response.
-
-### 5. Resolving Node UUIDs
-
-The metrics output uses node UUIDs. To find out which function a UUID refers to, query the graph:
+### 7. Resolving Node UUIDs
 
 ```bash
 rgctl -r example/coolstore -f json find priceShoppingCart --type function --exact
-```
-
-Or use `blast-radius` which resolves names automatically:
-
-```bash
 rgctl -r example/coolstore blast-radius priceShoppingCart
 ```
 
 ## Understanding the Algorithms
 
-| Metric | What It Measures | High Score Means |
-|--------|-----------------|-----------------|
-| **PageRank** | Recursive importance via incoming edges | Many important callers depend on this function |
-| **Betweenness** | Frequency on shortest paths between pairs | This function bridges otherwise disconnected modules |
-| **Community modularity** | Quality of graph partitioning | The codebase has strong, well-separated functional clusters |
+| Metric | Implementation | High Score Means |
+|--------|----------------|-----------------|
+| **PageRank** | Pull CSR FastPageRank + `NodeRole` filter | Many important production callers depend on this symbol |
+| **Betweenness** | SampledBetweenness ($K=256$ Brandes pivots) | Bridges otherwise disconnected modules |
+| **Communities** | Fast-Leiden + HubStripPolicy | Strong, well-separated functional clusters (modularity) |
+| **Harmonic** | HyperBallHarmonic (`discover --with-harmonic`) | Reachable / central for migration ordering |
+| **Churn** | `git_hotspot_score` (`discover --with-git`) | Recently / frequently edited hotspots |
 
 ## Benefits
 
 - **Quantitative architecture analysis.** Replace subjective assessments with concrete scores.
-- **Identify hotspots.** High-PageRank and high-betweenness functions are where bugs hurt most and refactoring pays off most.
+- **Production-first hotspots.** Default PageRank excludes tests and stubs unless `--include-tests`.
 - **Measure modularity.** Track whether your codebase is becoming more or less modular over time.
-- **Standard algorithms.** PageRank, betweenness centrality, and Louvain community detection are well-understood network science tools.
-- **Fast.** All metrics run in-memory on the graph snapshot, typically completing in under a second.
+- **Temporal signal.** Pair structural metrics with git churn and co-change edges.
+- **Fast.** Metrics run in-memory on the mmap snapshot / CSR indexes.
 
 ## Related Guides
 
-- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- must run `discover` before metrics
-- [Community Detection](community-detection.md) -- dig deeper into community analysis
+- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- must run `discover` before metrics; `--with-git` / `--with-harmonic` overlays
+- [Community Detection](community-detection.md) -- Fast-Leiden labels and `communities list`
 - [Blast Radius Analysis](blast-radius-analysis.md) -- per-function impact analysis that complements metrics
 - [Migration Planning](migration-planning.md) -- metrics feed into migration ordering
+- [CLI Command Reference](cli-command-reference.md) -- full `metrics` flag map

@@ -16,13 +16,17 @@ The "hybrid" in the name refers to the two-resolution architecture: the coarse-g
 
 ## Example Project
 
-This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run `discover` with `--with-cfg`:
+This guide uses the **CoolStore** (`example/coolstore`). Start with a structural index; pre-build the whole-repo CFG archive when you need `mutations`, rich `inspect`, or batch L_proc coverage:
 
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
+rgctl -r example/coolstore discover . -l java
+# For mutations / full archive / inspect many symbols:
 rgctl -r example/coolstore discover . -l java --with-cfg
 ```
+
+**Lazy vs whole-repo:** `cpg flows` (and top-level `slice`) build a **single function** CFG/PDG into the v3 archive on demand — no upfront `--with-cfg`. `cpg mutations` still requires `discover --with-cfg` (field-write index). `--function` is **optional** on `flows` / `slice` (auto from `file:line`).
 
 ## Step-by-Step
 
@@ -34,7 +38,7 @@ First, verify that the CPG archive is available:
 rgctl -r example/coolstore -f json cpg status
 ```
 
-**Output:**
+**Output** (after `discover --with-cfg`):
 
 ```json
 {
@@ -52,10 +56,10 @@ rgctl -r example/coolstore -f json cpg status
 
 **What this tells you:**
 
-- **`archive_present: true`** -- the CFG/PDG archive exists (from `discover --with-cfg`).
-- **`function_count: 150`** -- 150 functions have been analyzed at the L_proc level.
+- **`archive_present: true`** -- the v3 CFG/PDG archive exists (whole-repo `--with-cfg`, and/or prior lazy `slice` / `cpg flows` appends).
+- **`function_count: 150`** -- 150 functions have L_proc records in the archive.
 - **`field_write_count: 41`** -- 41 field-write sites are indexed for mutation tracking.
-- **`field_write_index_present: true`** -- the `cpg mutations` command is available.
+- **`field_write_index_present: true`** -- the `cpg mutations` command is available (needs `--with-cfg`).
 - **`ast_skeleton_present: false`** -- the AST skeleton archive is not present (requires `discover --with-ast-skeleton`).
 
 ### 2. Resolve a Function
@@ -151,12 +155,12 @@ rgctl -r example/coolstore -f json cpg mutations \
 
 ### 5. Data Flows
 
-Trace how a variable flows through a function:
+Trace how a variable flows through a function. `--function` is optional (auto from line); `--with-alias` expands may-aliases. Lazy single-function CFG/PDG build if the archive entry is missing:
 
 ```bash
 rgctl -r example/coolstore -f json cpg flows \
   src/main/java/com/redhat/coolstore/service/ShoppingCartService.java \
-  --line 68 --variable sc --function priceShoppingCart --direction forward
+  --line 68 --variable sc --direction forward --with-alias
 ```
 
 **Output:**
@@ -216,12 +220,12 @@ This shows **19** control dependencies and **5** data dependencies in `priceShop
 | `status` | Check archive readiness | `discover` |
 | `function` | Resolve a function by name | `discover` |
 | `calls` | Call neighborhood (in/out) | `discover` |
-| `mutations` | Field mutations for a type | `discover --with-cfg` |
-| `flows` | Data/control flow tracing | `discover --with-cfg` |
-| `pdg` | PDG overlay | `discover --with-cfg` |
-| `slice` | Line-level slice (wraps `slice`) | `discover --with-cfg` |
+| `mutations` | Field mutations for a type | `discover --with-cfg` (field-write index) |
+| `flows` | Data/control flow tracing | Lazy single-fn CFG/PDG (optional `--function`, `--with-alias`) |
+| `pdg` | PDG overlay | Archive entry or rebuild; prefer `--with-cfg` for batch |
+| `slice` | Line-level slice (wraps `slice`) | Lazy (same as top-level `rgctl slice`) |
 | `ast` | AST skeleton | `discover --with-ast-skeleton` |
-| `export` | Export CPG view | `discover --with-cfg` |
+| `export` | Export CPG view | Prefer `--with-cfg` for L_proc edges |
 
 ## Benefits
 
@@ -233,7 +237,8 @@ This shows **19** control dependencies and **5** data dependencies in `priceShop
 
 ## Related Guides
 
-- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- `discover --with-cfg` is required for most CPG subcommands
+- [Discovering and Indexing a Codebase](discovering-and-indexing.md) -- structural discover + optional `--with-cfg` pre-warm
 - [Program Slicing](program-slicing.md) -- the underlying technique that `cpg flows` and `cpg slice` use
 - [Inspecting CFG, PDG, and Dominance](inspecting-cfg-pdg-dominance.md) -- lower-level inspection of the same data
 - [Blast Radius Analysis](blast-radius-analysis.md) -- function-level impact analysis from the same graph
+- [CLI Command Reference](cli-command-reference.md) -- canonical `slice` / `cpg` / `taint` map

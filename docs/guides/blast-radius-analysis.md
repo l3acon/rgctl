@@ -165,7 +165,21 @@ Blast radius for 'ShoppingCartService'
 
 A score of 0 means this function (the constructor) has no upstream callers in the graph -- it is safe to modify in isolation.
 
-### 5. Blast Radius with Policy
+### 5. Boundary classification and slice hand-off
+
+Blast radius uses the **SCC + dense bitset** engine (`blast_engine.bin`). Label impact nodes with architectural boundaries, or hand off to statement-level PDG slices:
+
+```bash
+rgctl -r example/coolstore -f json blast-radius priceShoppingCart \
+  --classify-boundary --boundary REST_ENDPOINT
+
+rgctl -r example/coolstore -f json blast-radius priceShoppingCart \
+  --depth 3 --with-slices
+```
+
+`--with-slices` runs statement-level slice hand-off on impacted functions (slower on large graphs; uses lazy CFG/PDG where needed).
+
+### 6. Blast Radius with Policy
 
 Use `--policy-file` to enforce thresholds:
 
@@ -177,7 +191,7 @@ rgctl -r example/coolstore -f json blast-radius priceShoppingCart \
   --policy-file /tmp/coolstore-ci-policy.json
 ```
 
-The policy file defines rules like maximum impact zone size. If `priceShoppingCart` violates any rule, the `violations` array in the output will be populated and the exit code will be non-zero. (CoolStore does not ship a `policy.json` in-tree.)
+The policy file defines rules like maximum impact zone size. If `priceShoppingCart` violates any rule, the `violations` array in the output will be populated and the exit code will be non-zero. (CoolStore does not ship a `policy.json` in-tree.) For PR gates prefer **`rgctl review check`** ([CI Policy Checks](ci-policy-checks.md)).
 
 ## Understanding the Score
 

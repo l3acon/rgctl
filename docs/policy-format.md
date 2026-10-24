@@ -1,6 +1,6 @@
 # Policy file format
 
-JSON policy files gate **blast-radius**, **`check`**, and **`pr-check`** commands. They encode architecture rules as numeric limits and optional domain boundaries.
+JSON policy files gate **blast-radius**, **`check`**, and **`review check`** (compatibility alias: **`pr-check`**) commands. They encode architecture rules as numeric limits and optional domain boundaries.
 
 **Examples:** [examples/policy-permissive.json](examples/policy-permissive.json), [examples/policy-strict.json](examples/policy-strict.json)
 
@@ -14,8 +14,8 @@ JSON policy files gate **blast-radius**, **`check`**, and **`pr-check`** command
 | `max_impact_nodes` | integer | unlimited | Fail if blast impact zone exceeds this count |
 | `centrality_alert_threshold` | number | unlimited | Fail if betweenness (or related centrality signal) exceeds threshold |
 | `node_domains` | object | `{}` | Map of node UUID string → domain label |
-| `scope.new_violations_only` | boolean | `false` | **`pr-check` only:** exit 1 only on `new` temporal violations |
-| `scope.fail_on_regression` | boolean | `true` | **`pr-check` only:** exit 1 on `regression` (reintroduced after ledger resolution) |
+| `scope.new_violations_only` | boolean | `false` | **`review check` only:** exit 1 only on `new` temporal violations |
+| `scope.fail_on_regression` | boolean | `true` | **`review check` only:** exit 1 on `regression` (reintroduced after ledger resolution) |
 | `scope.strict_diff` | boolean | `false` | **`check`:** treat empty git diff scope as failure |
 | `temporal.effective_from` | ISO date | — | Policy effective date (`YYYY-MM-DD`) |
 | `temporal.grace_period_days` | integer | — | Days after `effective_from` where violations may warn instead of fail |
@@ -25,8 +25,8 @@ JSON policy files gate **blast-radius**, **`check`**, and **`pr-check`** command
 | `temporal.enforce_sla` | boolean | `false` | Fail `existing` violations older than SLA (ledger `first_seen`) |
 | `temporal.sunset_date` | ISO date | — | Escalate to fail on/after this date |
 | `temporal.sunset_warn_days` | integer | — | Emit `severity: warn` within this many days of `sunset_date` |
-| `size_limits.max_changed_files` | integer | unlimited | **`pr-check`:** abort if PR touches more files |
-| `size_limits.max_scoped_entities` | integer | unlimited | **`pr-check`:** abort if scoped entity count exceeds limit |
+| `size_limits.max_changed_files` | integer | unlimited | **`review check`:** abort if PR touches more files |
+| `size_limits.max_scoped_entities` | integer | unlimited | **`review check`:** abort if scoped entity count exceeds limit |
 
 ### Minimal strict policy (CI fail on any impact)
 
@@ -94,24 +94,26 @@ rgctl -r "$REPO" -f json check \
   --strict
 ```
 
-Temporal mode (same semantics as `pr-check`, delta head from base artifact):
+Temporal mode (same semantics as `review check`, delta head from base artifact):
 
 ```bash
 rgctl -r "$REPO" -f json check --temporal --policy-file policy.json \
   --base-ref origin/main --head-ref HEAD
 ```
 
-### Temporal PR gate (`pr-check`)
+### Temporal PR gate (`review check`)
 
 ```bash
-rgctl -r "$REPO" -f json pr-check \
+rgctl -r "$REPO" -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main \
   --head-ref HEAD \
   --strict
+# Compatibility alias (identical JSON + exit codes):
+# rgctl -f json pr-check …
 ```
 
-Defaults: delta head synthesis from base artifact; `--base-artifact` = `$RGCTL_BASE_ARTIFACT` or `{repo}/.rgctl-base/`. Use `--full-snapshots` for pre-built dual artifacts. Additional flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`, `--strict-calendar` (treat grace/sunset warnings as failures). Outcomes append to `.rgctl/violation_ledger.jsonl`. Example workflow: [.github/workflows/rgctl-pr-check.yml](../.github/workflows/rgctl-pr-check.yml). Walkthrough: [CI Policy Checks guide](guides/ci-policy-checks.md).
+Defaults: delta head synthesis from base artifact; `--base-artifact` = `$RGCTL_BASE_ARTIFACT` or `{repo}/.rgctl-base/`. Use `--full-snapshots` for pre-built dual artifacts. Additional flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`, `--strict-calendar` (treat grace/sunset calendar warnings as failures). Outcomes append to `.rgctl/violation_ledger.jsonl` (ratchet: `new` / `existing` / `resolved` / `regression`). Example workflow: [.github/workflows/rgctl-pr-check.yml](../.github/workflows/rgctl-pr-check.yml). Walkthrough: [CI Policy Checks guide](guides/ci-policy-checks.md) · [PR Review guide](guides/pr-review.md).
 
 ---
 

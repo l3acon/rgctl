@@ -18,7 +18,11 @@ rgctl uses a **hybrid tiering** model:
 | **Tier 2** | Generic tree-sitter | `rgctl-lang-{id}/` + `config.rs` | Kinds from `LanguageConfig` | Optional | Usually none | Not required |
 | **Tier 3** | Regex | `rgctl-lang-{id}/` + regex patterns | Pattern-based symbols | No | No | No |
 
-**Tier 1 custom plugins today:** Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++, Puppet, Kotlin, Groovy — see `languages.toml` (`handler = "custom"`).
+**Tier-1 deep-analysis** languages (custom plugins with `*-ast-coverage.json`, CFG/PDG, Layer F) today include: Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++, Puppet, Kotlin, Groovy — see `languages.toml` (`handler = "custom"`). That set is **not** the same as the full **~60** language/config/IaC plugins registered in [`languages.toml`](../languages.toml).
+
+**Single-pass extraction (required hot path):** Tier-1 `extract_all` uses `ScopeStack` + `KindDispatchTable` (O(1) `kind_id` dispatch) + thread-local `parse_with_pool` / `with_thread_local_parser` — no per-file `Parser::new()` on the ingest path. Grammar coverage is gated by `*-ast-coverage.json`; `cargo check -p rgctl-languages` warns on drift, and `RGCTL_AST_COVERAGE_STRICT=1` fails the build. Runtime hit tracking: `RGCTL_AST_COVERAGE_TRACK=1`.
+
+**Cross-language MRO / DI:** Tier-1 OOP languages should emit inheritance / mixin edges that `MroIndex` can linearize into `Overrides`, and framework DI/route edges (`Injects`, `ExposesRoute`, …) where applicable — see [dependency-injection-and-frameworks.md](guides/dependency-injection-and-frameworks.md).
 
 **Markdown** is a separate **custom markup plugin** (`rgctl-lang-markdown`): documentation context graph only — not Tier 1 and not generic Tier 2. See [markdown-context.md](markdown-context.md).
 

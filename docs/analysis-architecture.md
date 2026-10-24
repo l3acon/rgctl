@@ -5,9 +5,9 @@ The `rgctl-analysis` crate bridges the code knowledge graph (`rgctl-graph`) with
 ## Tier 1: Repository graph (source of truth)
 
 - **`MemoryBackend`** — in-memory node/edge store with typed topology
-- **Mmap snapshots** — `PreparedGraphSnapshot`, `MmappedGraphSnapshot` for zero-copy reads
+- **Mmap snapshots** — `PreparedGraphSnapshot`, `MmappedGraphSnapshot`, `ColumnarGraphMmap` / `SnapshotNodeStore` for zero-copy `RGCL` v2 reads
 
-Nodes represent symbols (functions, types, modules). Edges carry `EdgeType` semantics (`Calls`, `Uses`, `Contains`, `References`, etc.).
+Nodes represent symbols (functions, types, modules). Edges carry `EdgeType` semantics (`Calls`, `Uses`, `Contains`, `References`, `Overrides`, `CoChangesWith`, etc.).
 
 ## Tier 2: Projected views (repository-level analysis)
 
@@ -18,6 +18,7 @@ Nodes represent symbols (functions, types, modules). Edges carry `EdgeType` sema
 | `ColdMetadataDb` | `cold_metadata` | Mmap-backed node payloads after early snapshot write |
 | `CallGraph` | `callgraph` | u32-indexed call-only adjacency for fast traversal |
 | `FlatGraphIndex` | `centrality` | Contiguous `usize` edge list for numeric algorithms |
+| `MroIndex` | `mro` | Cross-language MRO → `EdgeType::Overrides`; polymorphic call retarget |
 
 **Convention:** Discover ingest uses **segmented disk spill**
 (`GraphBuilder::with_spill` → `write_columnar_from_spill`): nodes/edges are
@@ -61,13 +62,17 @@ a new snapshot header to “preserve” those caches.
 
 | Analysis | Primary graph | Algorithm |
 |----------|---------------|-----------|
-| Centrality | `PetGraphView` → `FlatGraphIndex` | PageRank, sampled Brandes betweenness, HyperBall harmonic |
-| Community | `PetGraphView` (undirected filter) | Label propagation + modularity ([naming note](design/graph-metrics-design.md#31-community-detection-naming)) |
+| Centrality | `PetGraphView` → `FlatGraphIndex` | Pull-based CSR **`FastPageRank`** (dual-track `Calls` vs `STRUCTURAL_EDGE_TYPES`); **`NodeRole`** filter (`Production` / `Test` / `Generated` / `ExternalStub` / `Entrypoint` — non-production excluded from default hotspots; `--include-tests` to include); **`SampledBetweenness`** ($K=256$ degree-stratified Brandes pivots); **`HyperBallHarmonic`** (`discover --with-harmonic`) |
+| Community | `PetGraphView` (undirected filter) | **Fast-Leiden** (local moving queue + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ **`HubStripPolicy`** → `"Shared / Infrastructure"` (`infrastructure_community_id`). JSON field `louvain_community_id` is historical schema name only |
 | Blast radius (engine) | CSR Calls filter + kosaraju | Kosaraju SCC → on-demand reachability (flat graphs) or bitset rows |
 | Blast radius (analyzer) | `PetGraphView` Calls filter | Reverse BFS |
 | Dependencies | `PetGraphView` directed | Kosaraju SCC, reverse BFS impact |
 | Complexity | Backend node properties | Aggregation |
 | Migration | Community graph | Weighted topological sort |
+| MRO / Overrides | Inheritance / mixin edges | `MroIndex` C3 (Python), Ruby prepend/include, Rust inherent-first, Java/C#/TS/Kotlin, C++ virtual bases, Go promotion → `Overrides` |
+| SCIP overlay | Ambiguous `Calls` | `apply_scip_overlay` (`discover --scip`) upgrades resolution |
+| Git churn | File co-change | `compute_and_apply_git_churn` → `git_hotspot_score` + `CoChangesWith` (`discover --with-git`, `metrics --churn`) |
+| Clones | Function bodies / CFG | `exact` / `bloom` / **`fragment`** (SESE hammock + 2-iter 1-WL; `--seed`) |
 
 ## Tier 3: Intra-procedural graphs
 
@@ -76,6 +81,7 @@ a new snapshot header to “preserve” those caches.
 | `ControlFlowGraph` | `cfg`, `cfg_builder` | Per-function CFG via tree-sitter |
 | `ProgramDependenceGraph` | `pdg` | Data + control dependencies |
 | `DominatorTree` | `dominance` | Immediate dominators and frontiers |
+| `CfgPdgArchiveMmap` | `cfg_pdg_archive` | v3 indexed archive (`TocEntry` + `memmap2`); `ensure_cfg_pdg_for_source` lazy single-function append |
 
 ### Pipeline
 
@@ -83,7 +89,11 @@ a new snapshot header to “preserve” those caches.
 tree-sitter AST → CFG → DominatorTree + ReachingDefs → PDG → Slicing / Taint
 ```
 
+Reaching definitions track lexical **`(name, scope_id)`** pairs to prevent block-shadowing false edges while preserving `let x = x + 1` RHS-before-LHS dataflow.
+
 `InterproceduralCFG` stitches per-function CFGs with `CallGraph` for cross-function slicing.
+
+**Lazy vs whole-repo CFG:** `rgctl slice` and `rgctl cpg flows` call `ensure_cfg_pdg_for_source` to build and cache one function without prior `discover --with-cfg`. Whole-repo `rgctl taint --sink` and `rgctl cpg mutations` still require `discover --with-cfg`.
 
 ## Traversal depth
 
@@ -91,10 +101,11 @@ Graph BFS traversals (blast radius analyzer, dependency impact) share `Traversal
 
 ## Caching and persistence
 
-- **`FlowCache`** / **`CfgPdgArchive`** — per-function CFG/PDG cache
+- **`FlowCache`** / **`CfgPdgArchive`** — per-function CFG/PDG cache (v3 TOC; lazy append)
 - **`BlastEngineSnapshot`** — persisted SCC reachability bitsets (keyed by `graph_digest`)
 - **`AnalysisResults`** — columnar metrics decoupled from graph topology (`CentralityTable`, community, blast tables)
 - **`MacroCallIndex` / lookup DB** — digest-gated; invalidated after snapshot compact
+- **`.rgctl/analysis/git_churn.json`** — optional churn sidecar after `--with-git`
 
 See [Columnar content digest and cache invalidation](#columnar-content-digest-and-cache-invalidation) above.
 
@@ -102,11 +113,11 @@ See [Columnar content digest and cache invalidation](#columnar-content-digest-an
 
 Discover uses **`CentralityAnalyzer::analyze_columnar`**: flat scores from `FlatGraphIndex` are written directly into `AnalysisResults` without intermediate `HashMap<Uuid, _>` handoffs.
 
-| Graph size | PageRank | Betweenness | Harmonic |
-|------------|----------|-------------|----------|
+| Graph size | PageRank (`FastPageRank`) | Betweenness (`SampledBetweenness`) | Harmonic (`HyperBallHarmonic`) |
+|------------|---------------------------|------------------------------------|--------------------------------|
 | V ≤ 500 | Exact (20 iter, ε=1e-6) | Exact Brandes | Exact BFS |
-| 500 < V ≤ 500,000 | Exact (20 iter) | Sampled Brandes (k=512) | HyperBall (h=16, parallel HLL) |
-| V > 500,000 | Gated (8 iter, ε=1e-4) | Sampled Brandes (k=512) | HyperBall (h=8, parallel HLL) |
+| 500 < V ≤ 500,000 | Exact (20 iter) | Sampled Brandes ($K=256$) | HyperBall (h=16, parallel HLL) |
+| V > 500,000 | Gated (8 iter, ε=1e-4) | Sampled Brandes ($K=256$) | HyperBall (h=8, parallel HLL) |
 
 Constants: `LARGE_GRAPH_PAGERANK_*`, `LARGE_GRAPH_HYPERBALL_*` in `centrality.rs` / `centrality_approx.rs`.
 
@@ -119,3 +130,4 @@ See [internal/profile.md](internal/profile.md) for cold-profile commands and dev
 - Crate README: `crates/rgctl-analysis/README.md`
 - OpenSpec design: `openspec/changes/review-rgctl-analysis/design.md`
 - Benchmarks: `cargo bench --bench graph_benchmarks` (workspace root)
+- Research map: [further-reading.md](further-reading.md)

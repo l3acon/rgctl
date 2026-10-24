@@ -22,10 +22,10 @@ This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run 
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
-rgctl -r example/coolstore discover . -l java --with-cfg
+rgctl -r example/coolstore discover . -l java
 ```
 
-After `discover . -l java --with-cfg` on clean CoolStore you should see **608** nodes / **1,709** edges / **152** functions (`rgctl -f json status` / `find --type function --count-only`).
+After `discover . -l java` on clean CoolStore you should see **608** nodes / **1,709** edges / **152** functions (`rgctl -f json status` / `find --type function --count-only`). Structural export does not require `--with-cfg` (that flag pre-builds the CFG/PDG archive for procedural analysis).
 
 ## Step-by-Step
 
@@ -69,7 +69,7 @@ rgctl -r example/coolstore export \
 Exported 608 nodes, 1709 edges -> /tmp/coolstore.json
 ```
 
-The `all` query exports every node and edge in the `-l java --with-cfg` graph -- **608** nodes and **1,709** edges for CoolStore’s Java backend.
+The `all` query exports every node and edge in the `-l java` structural graph -- **608** nodes and **1,709** edges for CoolStore’s Java backend.
 
 ### 3. Filtered Export
 

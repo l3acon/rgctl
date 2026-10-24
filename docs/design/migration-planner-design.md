@@ -69,7 +69,7 @@ flowchart TB
 
 ### 3.1 Why packages, not raw communities?
 
-Early versions grouped by **label-propagation community id** (~300+ nodes on large repos, labels like `Community 2412`). The current design uses **package/module macro nodes** aligned with the dashboard metagraph:
+Early versions grouped by **Fast-Leiden community id** (~300+ nodes on large repos, labels like `Community 2412`). The current design uses **package/module macro nodes** aligned with the dashboard metagraph:
 
 - **Readable labels** (`com.example.orders`, `dev.foo.graph.detection`)
 - **Bounded size** — cap at 256 nodes; overflow merges into `(other)`
@@ -108,7 +108,7 @@ For each `Function` node in the memory backend:
    - `member_count`
    - sums of PageRank, harmonic, betweenness → **averages**
    - **max** blast radius across members
-   - **Louvain votes** — count of each label-propagation community id among members
+   - **Community votes** — count of each Fast-Leiden community id among members (serialized field still named `louvain_community_id`)
 
 After ranking buckets by `member_count` (descending):
 
@@ -126,14 +126,14 @@ Intra-package calls are omitted from the macro graph (they do not create macro e
 
 ### 3.5 Community id on macro nodes (`louvain_community_id`)
 
-Field: `louvain_community_id: Option<usize>` — **majority vote** of member functions’ label-propagation ids. The field name is historical (“Louvain”); rgctl does **not** run Leiden or the Louvain library — see [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
+Field: `louvain_community_id: Option<usize>` — **majority vote** of member functions’ Fast-Leiden community ids. The field name is **historical** (“Louvain”) for schema compatibility only; detection is Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
 
 Used for:
 
 - **Graph node color** in the dashboard (cluster visually)
 - **ForceAtlas2 layout edge weighting** (intra- vs inter-cluster pull)
 
-Community detection itself lives in `crates/rgctl-analysis/src/community.rs` (**label propagation** with modularity scoring). See [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
+Community detection itself lives in `crates/rgctl-analysis/src/community.rs` (**Fast-Leiden**: local moving + BFS refinement + coarsening). See [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
 
 ---
 
@@ -345,9 +345,9 @@ Top → bottom:
 
 - **Library:** Sigma.js + graphology; layout via `layoutForceAtlas2` in `dashboard/src/graphLayout.ts`
 - **Node size:** priority score (min–max mapped to 4–28px)
-- **Node color:** `louvain_community_id` (fallback: macro id)
+- **Node color:** `louvain_community_id` (Fast-Leiden majority vote; fallback: macro id)
 - **Edge layout weights:**
-  - Same Louvain cluster: `call_weight × 4.0`
+  - Same Fast-Leiden cluster: `call_weight × 4.0`
   - Different cluster: `call_weight × 0.35`
   - Hidden chain edges between same-cluster packages without direct calls (`layout:*` keys, not rendered)
 - **Live updates:** node sizes refresh on debounced slider changes (200 ms); full graph remount when `migration_graph.json` changes
@@ -355,7 +355,7 @@ Top → bottom:
 
 ![Package graph — hybrid default preset](../images/design/migration-planner/migration-package-graph.png)
 
-*Figure 6: Package graph — node color = Louvain cluster, node size = priority score.*
+*Figure 6: Package graph — node color = Fast-Leiden cluster (`louvain_community_id` field), node size = priority score.*
 
 ![Package graph after switching to Risk Mitigation preset](../images/design/migration-planner/migration-graph-risk-preset.png)
 

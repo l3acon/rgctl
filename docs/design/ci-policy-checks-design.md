@@ -95,16 +95,22 @@ Policy is **CLI-first**. The dashboard helps **calibrate** thresholds:
 # One-off blast with policy gate
 rgctl -f json blast-radius ShoppingCartService --policy-file policy.json
 
-# CI on PR — evaluate changed functions
+# Working-tree CI — evaluate changed functions
 rgctl check --policy-file policy.json
 rgctl -f json check --policy-file policy.json | jq '.passed, .violations'
+
+# Temporal PR gate (canonical)
+rgctl review paths --base-ref origin/main
+rgctl -f json review check --policy-file policy.json --base-ref origin/main
+rgctl review export
+# aliases: rgctl pr-check …, rgctl check --temporal …
 ```
 
-Typical GitHub Actions pattern: run `discover` in a setup job, then `check` on each PR with the same `.rgctl/` cache artifact.
+Typical GitHub Actions pattern: cache a base `.rgctl-base/` artifact, then `review check` on each PR (or working-tree `check` with the same `.rgctl/` cache).
 
-### Temporal PR gate (`pr-check`)
+### Temporal PR gate (`rgctl review check`)
 
-For merge gates that compare **base vs head** graph artifacts (not just the working tree), use **`rgctl pr-check`**. Default mode **synthesizes the head snapshot** from a cached base artifact + git name-status delta (no second full `discover`). `check --temporal` delegates to the same pipeline.
+For merge gates that compare **base vs head** graph artifacts (not just the working tree), use **`rgctl review check`** (compatibility aliases: `rgctl pr-check`, `rgctl check --temporal`). Default mode **synthesizes the head snapshot** from a cached base artifact + git name-status delta (no second full `discover`). Pair with `rgctl review paths` for upstream/downstream call-path deltas and `rgctl review export` for `.rgctl/workflows/review.json`.
 
 ```mermaid
 flowchart TB
@@ -160,7 +166,7 @@ flowchart TB
 
 Calendar fields (`temporal.*`) apply after temporal classification: grace windows emit `severity: warn` (exit 0 unless `--strict-calendar`); `violation_sla_days` + ledger `first_seen` can fail stale `existing` violations.
 
-Artifact layout: base via `--base-artifact`, `$RGCTL_BASE_ARTIFACT`, or `{repo}/.rgctl-base/`; head synthesized into `{repo}/.rgctl/` unless `--full-snapshots`. Example CI: [.github/workflows/rgctl-pr-check.yml](../../.github/workflows/rgctl-pr-check.yml). User guide: [ci-policy-checks.md](../guides/ci-policy-checks.md).
+Artifact layout: base via `--base-artifact`, `$RGCTL_BASE_ARTIFACT`, or `{repo}/.rgctl-base/`; head synthesized into `{repo}/.rgctl/` unless `--full-snapshots`. Supports `--bisect` and `--strict-calendar` (grace windows warn unless strict). Example CI: [.github/workflows/rgctl-pr-check.yml](../../.github/workflows/rgctl-pr-check.yml). User guides: [ci-policy-checks.md](../guides/ci-policy-checks.md), [pr-review.md](../guides/pr-review.md).
 
 ---
 

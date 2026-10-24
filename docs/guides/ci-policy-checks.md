@@ -8,20 +8,21 @@ This guide focuses on **which command to use**, how to wire **pull-request gates
 
 ## Which command?
 
-| Goal | Command | Graphs needed | Blocks on |
-|------|---------|---------------|-----------|
-| Pre-commit / dirty working tree | `check` | One (`discover` → `.rgctl/`) | Any violation in git scope |
-| PR gate: only **new** breakage vs `main` | **`pr-check`** (default) | Base cache + delta head | `new` (+ `regression` by default) |
-| Same as `pr-check` from `check` | `check --temporal` | Base cache + delta head | Same as `pr-check` |
-| Preview uncommitted edits temporally | `pr-check --synthetic-head worktree` | Base cache + HEAD snapshot + worktree | Same as `pr-check` |
-| One-off symbol review | `blast-radius SYMBOL --policy-file` | One | That symbol only |
+| Goal | Canonical command | Compatibility aliases | Graphs needed | Blocks on |
+|------|-------------------|----------------------|---------------|-----------|
+| Pre-commit / dirty working tree | `check` | — | One (`discover` → `.rgctl/`) | Any violation in git scope |
+| PR gate: only **new** breakage vs `main` | **`review check`** | `pr-check`, `check --temporal` | Base cache + delta head | `new` (+ `regression` by default) |
+| Preview uncommitted edits temporally | `review check --synthetic-head worktree` | `pr-check --synthetic-head worktree` | Base cache + HEAD snapshot + worktree | Same as `review check` |
+| Call-path deltas (no policy) | `review paths` | — | Base + head | Report only |
+| Combined envelope | `review export` | — | Base + head | Writes `.rgctl/workflows/review.json` |
+| One-off symbol review | `blast-radius SYMBOL --policy-file` | — | One | That symbol only |
 
 **Rule of thumb**
 
 - **`check`** — “Did my local edits touch functions that violate policy?” (single snapshot, git-scoped symbols).
-- **`pr-check`** — “Did this PR introduce **new** policy violations compared to `main`?” (base vs head, temporal classes, graph diff).
+- **`review check`** — “Did this PR introduce **new** policy violations compared to `main`?” (base vs head, temporal classes, graph diff). Prefer this over the hidden `pr-check` alias in new docs and CI.
 
-Most teams want **`pr-check`** on pull requests with `scope.new_violations_only: true` so legacy debt on `main` does not block every PR.
+Most teams want **`review check`** on pull requests with `scope.new_violations_only: true` so legacy debt on `main` does not block every PR. See also [Pull Request Review](pr-review.md).
 
 ---
 
@@ -45,14 +46,15 @@ git checkout -   # back to your branch
 **3. Run the temporal gate:**
 
 ```bash
-rgctl -r "$REPO" -f json pr-check \
+rgctl -r "$REPO" -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main \
   --head-ref HEAD \
   --strict
+# Alias: rgctl … pr-check … (same payload / exit codes)
 ```
 
-By default **`pr-check` does not require a second full `discover` on the PR branch**. It copies the base snapshot into `.rgctl/`, applies the git name-status delta (with optional caller cascade), and evaluates policy on scoped entities only.
+By default **`review check` does not require a second full `discover` on the PR branch**. It uses scoped upstream call-closure hydration: copies the base snapshot, applies the git name-status delta (with optional `--cascade-depth` caller cascade), and evaluates policy on scoped entities only. Use `--bisect` for commit attribution and `--strict-calendar` to treat calendar grace warnings as failures.
 
 Exit **1** when `passed` is false. With the sample PR policy, only **`new`** and **`regression`** violations fail the gate.
 
@@ -68,7 +70,7 @@ After `discover`, artifacts live under `{repo}/.rgctl/`:
 .rgctl/
   graph.snapshot.bin       # required
   analysis_results.bin     # optional; speeds centrality reuse
-  violation_ledger.jsonl   # appended by pr-check (violation timeline)
+  violation_ledger.jsonl   # appended by review check (violation timeline)
 ```
 
 For PR gates, cache **`main`** (or merge-base) separately:
@@ -151,11 +153,11 @@ rgctl -r "$REPO" -f json check \
 | *(none)* | Scope = `git diff --name-only HEAD` (uncommitted + staged vs `HEAD`) |
 | `--base-ref` + `--head-ref` | Scope = paths changed between those commits |
 | `--strict` | Fail if git scope is empty (no “check everything” fallback) |
-| `--temporal` | Run the same pipeline as `pr-check` (base cache + delta head) |
+| `--temporal` | Run the same pipeline as `review check` / `pr-check` (base cache + delta head) |
 
 Policy field `scope.strict_diff: true` also enables strict mode for `check`.
 
-**When to use:** local pre-commit hooks, nightly jobs on a single snapshot, or quick gates without maintaining a `main` cache. For merge gates that compare against `main`, prefer **`pr-check`** (or `check --temporal`).
+**When to use:** local pre-commit hooks, nightly jobs on a single snapshot, or quick gates without maintaining a `main` cache. For merge gates that compare against `main`, prefer **`review check`** (aliases: `pr-check`, `check --temporal`).
 
 ### Example: CoolStore
 
@@ -174,9 +176,9 @@ On CoolStore Java-only, that policy (`max_impact_nodes: 15`) fails `check` (`sch
 
 ---
 
-## `rgctl pr-check`
+## `rgctl review check` (`pr-check` alias)
 
-Temporal PR gate: compare **base** (`main`) vs **head** (PR), classify each violation, and optionally report graph diff stats.
+Temporal PR gate: compare **base** (`main`) vs **head** (PR), classify each violation (`New` / `Existing` / `Resolved` / `regression`), and optionally report graph diff stats. `rgctl pr-check` is a hidden compatibility alias with identical flags and exit semantics.
 
 ### How it works (default: delta head)
 
@@ -238,7 +240,7 @@ With the sample PR policy (`new_violations_only: true`, `fail_on_regression: tru
 ### JSON output (schema v2)
 
 ```bash
-rgctl -r . -f json pr-check --policy-file rgctl-tests/rgctl-pr-policy.json \
+rgctl -r . -f json review check --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main --head-ref HEAD --strict \
   | jq '{passed, violations_summary, scope, graph_diff}'
 ```
@@ -267,11 +269,11 @@ rgctl -r . -f json pr-check --policy-file rgctl-tests/rgctl-pr-policy.json \
 
 Each violation includes `symbol`, `classification`, `stable_key`, `violation` (tagged union), optional `introduced_in_commit` (with `--bisect`), and optional `severity` (`warn` | `fail`) from calendar rules.
 
-Shape reference: [json-api.md § pr-check](../json-api.md#8b-pr-check).
+Shape reference: [json-api.md § review check](../json-api.md#8b-review-check--pr-check).
 
 ### Violation ledger
 
-Each `pr-check` run appends to `.rgctl/violation_ledger.jsonl` keyed by `(stable_key, rule_id)`. The ledger powers:
+Each `review check` run appends to `.rgctl/violation_ledger.jsonl` keyed by `(stable_key, rule_id)`. The ledger powers:
 
 - **`regression`** — violation was previously `resolved` in the ledger
 - **SLA enforcement** — `temporal.enforce_sla` + `violation_sla_days` vs ledger `first_seen`
@@ -307,7 +309,7 @@ It:
 
 1. Caches `.rgctl-cache/<base-sha>/` per merge-base commit.
 2. Runs `discover` on cache miss only.
-3. Sets `RGCTL_BASE_ARTIFACT` and runs **delta** `pr-check` (no PR-branch `discover`).
+3. Sets `RGCTL_BASE_ARTIFACT` and runs **delta** `review check` (no PR-branch `discover`).
 
 **Trigger:** `workflow_dispatch` or PR label `rgctl-pr-check`.
 
@@ -351,7 +353,7 @@ jobs:
         env:
           RGCTL_BASE_ARTIFACT: .rgctl-cache/${{ github.event.pull_request.base.sha }}
         run: |
-          ./target/release/rgctl -r . -f json pr-check \
+          ./target/release/rgctl -r . -f json review check \
             --policy-file rgctl-tests/rgctl-pr-policy.json \
             --base-ref origin/${{ github.base_ref }} \
             --head-ref HEAD \
@@ -363,7 +365,7 @@ jobs:
 | Job | Branch | Action |
 |-----|--------|--------|
 | `index-main` | `main` | `discover` → upload `.rgctl/` artifact |
-| `pr-check` | PR | download artifact → `RGCTL_BASE_ARTIFACT` → `pr-check` |
+| `review check` | PR | download artifact → `RGCTL_BASE_ARTIFACT` → `review check` (`pr-check` alias OK) |
 
 Use when you do not want per-SHA cache logic on the runner.
 
@@ -395,7 +397,7 @@ rgctl -r . check --policy-file policy.json
 **Option A — worktree synthetic head (if `.rgctl/` reflects `HEAD`):**
 
 ```bash
-rgctl -r . -f json pr-check \
+rgctl -r . -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --synthetic-head worktree
 ```
@@ -412,7 +414,7 @@ rgctl -r . -f json check --temporal \
 
 ```bash
 export RGCTL_BASE_ARTIFACT="$PWD/.rgctl-base"   # or CI cache path
-rgctl -r . -f json pr-check \
+rgctl -r . -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main \
   --head-ref HEAD \
@@ -431,7 +433,7 @@ cp -a .rgctl /tmp/snapshots/v1.0-rgctl
 
 git checkout v2.0 && rgctl -r . discover .
 
-rgctl -r . -f json pr-check \
+rgctl -r . -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-artifact /tmp/snapshots/v1.0-rgctl \
   --head-artifact . \
@@ -442,7 +444,7 @@ rgctl -r . -f json pr-check \
 ### Find the introducing commit (`--bisect`)
 
 ```bash
-rgctl -r . -f json pr-check \
+rgctl -r . -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main --head-ref HEAD \
   --bisect \
@@ -452,10 +454,10 @@ rgctl -r . -f json pr-check \
 ### Save a report artifact
 
 ```bash
-rgctl -r . -f json pr-check \
+rgctl -r . -f json review check \
   --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main --head-ref HEAD --strict \
-  > "reports/pr-check-$(git rev-parse --short HEAD).json"
+  > "reports/review-check-$(git rev-parse --short HEAD).json"
 ```
 
 ---
@@ -464,7 +466,7 @@ rgctl -r . -f json pr-check \
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `Graph not found` | No `.rgctl/` | Run `discover` (or ensure base cache exists for `pr-check`) |
+| `Graph not found` | No `.rgctl/` | Run `discover` (or ensure base cache exists for `review check`) |
 | `strict diff scope: no changed files` | Empty git diff with `--strict` | Remove `--strict` or change refs |
 | All violations `existing`, gate passes, but you expected failure | `new_violations_only: true` | Intentional — only **new** debt fails |
 | Gate fails on legacy code | `new_violations_only: false` | Set `scope.new_violations_only: true` for PR CI |
@@ -479,7 +481,7 @@ rgctl -r . -f json pr-check \
 | Doc | Content |
 |-----|---------|
 | [policy-format.md](../policy-format.md) | Full JSON schema |
-| [json-api.md](../json-api.md) | `check` / `pr-check` response shapes |
+| [json-api.md](../json-api.md) | `check` / `review check` response shapes |
 | [ci-policy-checks-design.md](../design/ci-policy-checks-design.md) | Architecture diagram, Rust module map |
 | [graph-diff-design.md](../design/graph-diff-design.md) | Snapshot diff + cascade internals |
 | [discovering-and-indexing.md](discovering-and-indexing.md) | `discover` prerequisites |

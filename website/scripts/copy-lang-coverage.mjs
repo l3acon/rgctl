@@ -21,22 +21,31 @@ const cratesDir = join(repoRoot, "crates");
 const destDir = join(here, "../content/languages");
 const languagesToml = join(repoRoot, "languages.toml");
 
-/** Display names for language ids. */
+/** Display names for language ids (every `*-ast-coverage.json` + common toml ids). */
 const DISPLAY = {
+  bash: "Bash",
   c: "C",
   cpp: "C++",
   csharp: "C#",
+  dart: "Dart",
+  elixir: "Elixir",
+  erb: "ERB",
   go: "Go",
   groovy: "Groovy",
+  hcl: "HCL",
   java: "Java",
   javascript: "JavaScript",
   kotlin: "Kotlin",
+  lua: "Lua",
   markdown: "Markdown",
   php: "PHP",
   puppet: "Puppet",
   python: "Python",
   ruby: "Ruby",
   rust: "Rust",
+  scala: "Scala",
+  sql: "SQL",
+  swift: "Swift",
   typescript: "TypeScript",
 };
 

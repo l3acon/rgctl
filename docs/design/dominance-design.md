@@ -34,11 +34,14 @@ flowchart LR
 
 For each edge `A → B` in the CFG, if `B` does not strictly dominate `A`, add control dependence from the **immediate dominator of B** to `B`.
 
+Dominators are computed from the per-function CFG stored in the v3 indexed `.rgctl/analysis/cfg_pdg.archive.bin` (same archive as PDG/slice). Whole-repo population uses `discover --with-cfg`; `inspect … dom` expects the function record to exist (prefer `--with-cfg` or a prior lazy `slice`/`cpg flows` on that function).
+
 ---
 
 ## 3. CLI output
 
 ```bash
+rgctl discover . --with-cfg   # or ensure the function was lazily appended
 rgctl inspect Symbol dom
 rgctl inspect Symbol dom --frontiers
 rgctl -f json inspect Symbol dom -o dom.json

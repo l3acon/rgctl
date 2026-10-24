@@ -11,7 +11,7 @@ These commands are the **agent-facing** way to answer structural questions — s
 - **Inventory a codebase.** Count or list functions, classes, edge types, or communities.
 - **Resolve symbols.** Find definitions by name pattern, type, file glob, or scope prefix.
 - **Trace calls.** List direct or multi-hop callers and callees for a method.
-- **Walk relations.** Follow `calls`, `contains`, `imports`, `references`, `violates`, and other edge types with explicit direction.
+- **Walk relations.** Follow typed edges (`calls`, `overrides`, `cochangeswith`, `exposesroute`, `injects`, `contains`, `imports`, `violates`, …) with explicit direction — zero-hydration hot-column scans over `graph.snapshot.bin`.
 - **Session health.** `status` reports whether `.rgctl/graph.snapshot.bin` is present before heavier commands.
 
 ## Example project
@@ -150,7 +150,23 @@ Seedless scan (use filters to stay bounded):
 rgctl -r example/coolstore -f json relations --edge calls --from-type function --to-type function --limit 20
 ```
 
-Edge names are lowercase CLI tokens (`calls`, `contains`, `imports`, `references`, `violates`, …). Direction: `out`, `in`, or `both`.
+Cross-language MRO overrides, git co-change, routes, and DI (CLI tokens are lowercase, no hyphens):
+
+```bash
+# Method override hierarchy (EdgeType::Overrides)
+rgctl -r example/coolstore -f json relations process --edge overrides --direction both
+
+# Files that co-change (requires discover --with-git)
+rgctl -r example/coolstore -f json relations \
+  src/main/java/com/redhat/coolstore/service/ShoppingCartService.java \
+  --edge cochangeswith
+
+# Seedless HTTP routes / DI wiring (frameworks.bin catalog)
+rgctl -r example/coolstore -f json relations --edge exposesroute --limit 50
+rgctl -r example/coolstore -f json relations CartEndpoint --edge injects --direction out
+```
+
+Edge names are lowercase CLI tokens (`calls`, `overrides`, `cochangeswith`, `exposesroute`, `injects`, `contains`, `imports`, `references`, `violates`, …). Direction: `out`, `in`, or `both`. See [Dependency Injection and Frameworks](dependency-injection-and-frameworks.md).
 
 ### 6. Classes and modules
 
@@ -221,9 +237,9 @@ Filter by migration target using discover’s `--kantra-target` (violations and 
 rgctl -r example/coolstore -f json relations --edge violates --from-type kantrarule --limit 20
 ```
 
-### 9. `query` alias
+### 9. Compatibility alias
 
-`rgctl query find …` is equivalent to `rgctl find …` (same for `callers`, `callees`, `relations`, `inventory`). Useful when wrapping a single `rgctl` subprocess.
+Prefer top-level **`rgctl find` / `callers` / `callees` / `relations` / `inventory`**. The hidden `rgctl query <verb> …` namespace remains a compatibility alias only.
 
 ## JSON shapes (summary)
 

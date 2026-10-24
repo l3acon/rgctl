@@ -7,7 +7,7 @@ import { ArrowRight } from "lucide-react";
 const examples = [
   {
     label: "Index once",
-    cmd: "discover .  # run from repo root; or: rgctl -r PATH discover",
+    cmd: "discover .  # optional: --with-git --scip index.scip",
     href: "/install/",
   },
   {
@@ -16,9 +16,9 @@ const examples = [
     href: "/demo/",
   },
   {
-    label: "Intent search",
-    cmd: '-f json semantic query "checkout flow"',
-    href: "/agents/",
+    label: "Slice",
+    cmd: "-f json slice CartService.java --line 54 --variable quantity",
+    href: "/docs/guides/program-slicing/",
   },
   {
     label: "Hotspots",

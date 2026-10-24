@@ -300,6 +300,19 @@ rgctl -f json review check \
 
 Exit code is `1` if `passed` is `false`, and `0` when clean.
 
+`rgctl pr-check` is a hidden compatibility alias for `review check` (identical flags and exit codes).
+
+### 6. Combined review envelope (`review export`)
+
+Emit a single versioned JSON document combining call-path deltas and optional policy evaluation (writes `.rgctl/workflows/review.json` unless `--stdout`):
+
+```bash
+rgctl -f json review export \
+  --base-ref origin/main \
+  --policy-file rgctl-pr-policy.json \
+  --stdout
+```
+
 ---
 
 ## CLI Flag Reference
@@ -329,6 +342,9 @@ Exit code is `1` if `passed` is `false`, and `0` when clean.
 | `--head-ref <REF>` | `HEAD` | Git head reference. |
 | `--strict` | `false` | Treat warnings as errors. |
 | `--bisect` | `false` | Identify specific commit introducing violation. |
+| `--strict-calendar` | `false` | Treat calendar grace / sunset `warn` as failure. |
+| `--cascade-depth <N>` | `1` | Re-index caller files when callees change (`0` = off). |
+| `--synthetic-head worktree` | off | Uncommitted edits vs `HEAD`. |
 
 ---
 

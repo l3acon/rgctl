@@ -8,6 +8,7 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 |------|--------|
 | Install rgctl + choose operating mode | **[Installation](installation.md)** |
 | Step-by-step feature how-tos (CoolStore) | **[Guides](guides/README.md)** |
+| Full CLI taxonomy (canonical vs aliases) | **[CLI command reference](guides/cli-command-reference.md)** |
 | Per-language AST coverage (website from JSON) | **[Languages](languages/README.md)** · `*-ast-coverage.json` |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) — rules, cold profiles, tests/benches |
 | Use rgctl with LLM IDEs | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
@@ -61,9 +62,11 @@ Internals and contribution bars — not the default agent reading path.
 
 | Term | Meaning |
 |------|---------|
-| Tier 1 languages | Custom plugins; matrix from `*-ast-coverage.json` ([languages/README.md](languages/README.md)) |
-| `--with-cfg` | CFG/PDG archive (prefer over legacy `--cfg`) |
-| Communities | Label propagation (Raghavan 2007); `louvain_community_id` is historical |
+| Tier-1 deep-analysis languages | Custom plugins with `*-ast-coverage.json` + CFG/PDG (single-pass `ScopeStack` + `KindDispatchTable`); distinct from the ~60 language/config plugins in [`languages.toml`](../languages.toml) |
+| Default graph artifact | `.rgctl/graph.snapshot.bin` (`RGCL` v2 columnar mmap); `graph.db` / `graph.json` only with `--write-json-graph` |
+| `--with-cfg` | Whole-repo CFG/PDG archive (needed for `taint --sink`, `cpg mutations`); `slice` / `cpg flows` lazy-build one function without it |
+| Communities | **Fast-Leiden** (local moving + BFS refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy`; JSON field `louvain_community_id` is historical schema name only |
+| Canonical query / policy CLI | `find` / `callers` / `callees` / `relations` / `inventory`; `review check` (`query` / `pr-check` are compatibility aliases) |
 | Dashboard / migration JSON | Opt-in (`--with-dashboard` / `--export-migration-hints`) |
 | First-hour fixture | In-tree **ecommerce-java** |
 

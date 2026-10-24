@@ -18,10 +18,12 @@ Legend: **Implemented** = algorithm or structure in the codebase with tests; **I
 |------|--------|----------|------------|
 | [Ferrante et al. — Program Dependence Graph (TOPLAS 1987)](#14-the-program-dependence-graph-and-its-use-in-optimization-toplas-1987) | **Implemented** | [`pdg.rs`](../crates/rgctl-analysis/src/pdg.rs) — data + control deps | [`inspect`](Introduction.md#cfg-pdg-and-dominance-deep-structure), [`slice`](Introduction.md#program-slicing) |
 | [Weiser — Program slicing (ICSE 1981)](https://dl.acm.org/doi/10.1145/800078.802466) | **Implemented** | [`slicing.rs`](../crates/rgctl-analysis/src/slicing.rs), [`interprocedural_slicing.rs`](../crates/rgctl-analysis/src/interprocedural_slicing.rs) | `rgctl slice` — [User Guide §8](user-guide.md#8-program-slicing-and-taint) |
-| Reaching-definitions dataflow (standard compiler analysis) | **Implemented** | [`dataflow.rs`](../crates/rgctl-analysis/src/dataflow.rs) → PDG data edges | via `discover --with-cfg` |
+| Reaching-definitions dataflow (standard compiler analysis) | **Implemented** | [`dataflow.rs`](../crates/rgctl-analysis/src/dataflow.rs) → lexical `(name, scope_id)` PDG data edges | `discover --with-cfg`, or lazy via `rgctl slice` / `cpg flows` |
 | [Cooper, Harvey & Kennedy — Simple fast dominance (SPE 2001)](https://doi.org/10.1002/spe.3780310304) | **Implemented** | [`dominance.rs`](../crates/rgctl-analysis/src/dominance.rs) (iterative CHK-style) | `rgctl inspect` |
-| Control-flow graphs | **Implemented** | [`cfg.rs`](../crates/rgctl-analysis/src/cfg.rs), [`cfg_builder.rs`](../crates/rgctl-analysis/src/cfg_builder.rs) | `discover --with-cfg`, `inspect` |
-| Forward taint (source → sink + sanitizers) | **Implemented** | [`taint.rs`](../crates/rgctl-analysis/src/taint.rs) | `rgctl slice --taint` — [Introduction § Taint](Introduction.md#taint-analysis) |
+| Control-flow graphs | **Implemented** | [`cfg.rs`](../crates/rgctl-analysis/src/cfg.rs), [`cfg_builder.rs`](../crates/rgctl-analysis/src/cfg_builder.rs); lazy v3 `cfg_pdg.bin` TOC append | `discover --with-cfg`, `inspect`; `slice` / `cpg flows` build on demand |
+| Forward taint (source → sink + sanitizers) | **Implemented** | [`taint.rs`](../crates/rgctl-analysis/src/taint.rs) | `rgctl slice --taint`; whole-repo `taint --sink` needs `discover --with-cfg` |
+| [Barrett et al. — A monotonic superclass linearization (OOPSLA 1996)](https://doi.org/10.1145/236338.236343) (C3) | **Implemented** | [`mro.rs`](../crates/rgctl-analysis/src/mro.rs) — cross-language MRO → `Overrides` | `rgctl relations --edge overrides` |
+| [Weisfeiler–Lehman / 1-WL color refinement](https://en.wikipedia.org/wiki/Weisfeiler_Leman_graph_isomorphism_test) | **Implemented** | [`fragment_clones.rs`](../crates/rgctl-analysis/src/fragment_clones.rs) — 2-iter 1-WL over SESE hammocks | `rgctl clones --mode fragment --seed …` |
 
 **Tests:** [`slicing.rs`](../tests/slicing.rs), [`taint_security.rs`](../tests/taint_security.rs) (CWE-oriented taint/security patterns).
 
@@ -29,10 +31,11 @@ Legend: **Implemented** = algorithm or structure in the codebase with tests; **I
 
 | Work | Status | rgctl | CLI |
 |------|--------|----------|-----|
-| [Page & Brin — PageRank (1998)](https://doi.org/10.1109/69.681760) | **Implemented** | [`centrality.rs`](../crates/rgctl-analysis/src/centrality.rs) — `FastPageRank` on `FlatGraphIndex`; adaptive gating >500k nodes | `rgctl metrics --pagerank` |
-| [Brandes — Betweenness centrality (2001)](https://doi.org/10.1080/00207160108942084) | **Implemented** | [`centrality.rs`](../crates/rgctl-analysis/src/centrality.rs), [`centrality_approx.rs`](../crates/rgctl-analysis/src/centrality_approx.rs) — exact / sampled Brandes | `rgctl metrics --betweenness` |
-| Boldi & Vigna — HyperANF / HyperBall | **Implemented** | [`centrality_approx.rs`](../crates/rgctl-analysis/src/centrality_approx.rs) — parallel HyperLogLog propagation | discover / migration harmonic term |
-| [Raghavan et al. — Label propagation (2007)](https://doi.org/10.1103/PhysRevE.76.036106) + Newman modularity | **Implemented** | [`community.rs`](../crates/rgctl-analysis/src/community.rs) | `rgctl metrics --communities` |
+| [Page & Brin — PageRank (1998)](https://doi.org/10.1109/69.681760) | **Implemented** | [`centrality.rs`](../crates/rgctl-analysis/src/centrality.rs) — pull-based CSR `FastPageRank` + `NodeRole` filtering; adaptive gating >500k nodes | `rgctl metrics --pagerank [--include-tests]` |
+| [Brandes — Betweenness centrality (2001)](https://doi.org/10.1080/00207160108942084) | **Implemented** | [`centrality.rs`](../crates/rgctl-analysis/src/centrality.rs), [`centrality_approx.rs`](../crates/rgctl-analysis/src/centrality_approx.rs) — `SampledBetweenness` ($K=256$ degree-stratified pivots) | `rgctl metrics --betweenness` |
+| Boldi & Vigna — HyperANF / HyperBall | **Implemented** | [`centrality_approx.rs`](../crates/rgctl-analysis/src/centrality_approx.rs) — `HyperBallHarmonic` (parallel HLL) | `discover --with-harmonic` / migration harmonic term |
+| [Traag, Waltman & van Eck — From Louvain to Leiden (Sci. Rep. 2019)](https://doi.org/10.1038/s41598-019-41695-z) | **Implemented** | [`community.rs`](../crates/rgctl-analysis/src/community.rs) — **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy`; field `louvain_community_id` is historical schema name only | `rgctl metrics --communities`, `rgctl communities list` |
+| [Raghavan et al. — Label propagation (2007)](https://doi.org/10.1103/PhysRevE.76.036106) + Newman modularity | **Reading / historical** | Early community designs referenced LPA; **what ships is Fast-Leiden** (row above), not Raghavan LPA | — |
 
 **Tests:** [`centrality_audit.rs`](../tests/centrality_audit.rs).
 
@@ -185,7 +188,19 @@ Research papers on code graphs, migration, LLM agents, and program analysis — 
 
 17. **Enhancing program dependency graph based clone detection using approximate subgraph matching**
     - [PDF](https://www.academia.edu/63870307/Enhancing_program_dependency_graph_based_clone_detection_using_approximate_subgraph_matching)
-    - **rgctl:** `rgctl clones --mode exact` (Type-1) and `--mode bloom` (token-bloom Jaccard candidates); PDG/CFG confirmation is roadmap (M3). Design: [clone-detection-design.md](design/clone-detection-design.md)
+    - **rgctl:** `rgctl clones --mode exact` (Type-1), `--mode bloom` (token-bloom Jaccard), and `--mode fragment` (SESE hammock + 2-iter 1-WL; optional `--seed`). Design: [clone-detection-design.md](design/clone-detection-design.md)
+
+18. **From Louvain to Leiden: guaranteeing well-connected communities** (Traag et al., Sci. Rep. 2019)
+    - [DOI](https://doi.org/10.1038/s41598-019-41695-z)
+    - **rgctl:** [Implemented — Fast-Leiden](../crates/rgctl-analysis/src/community.rs) — see [graph algorithms table](#graph-algorithms--architecture-metrics)
+
+19. **A monotonic superclass linearization for Dylan** (Barrett et al., OOPSLA 1996) — C3
+    - [DOI](https://doi.org/10.1145/236338.236343)
+    - **rgctl:** [Implemented — `MroIndex` / `Overrides`](../crates/rgctl-analysis/src/mro.rs)
+
+20. **Weisfeiler–Lehman graph isomorphism / 1-WL color refinement**
+    - Foundation for structural fragment clone hashing
+    - **rgctl:** [Implemented — fragment clones](../crates/rgctl-analysis/src/fragment_clones.rs)
 
 ## Survey & Review Papers
 
@@ -253,7 +268,7 @@ Active publication venues for this research area:
 ## Related Topics
 
 - **Program Slicing**: Using PDGs to extract relevant program subsets
-- **Clone Detection**: Graph-based similarity for identifying code duplicates — MVP CLI `rgctl clones` (exact); see [clone-detection-design.md](design/clone-detection-design.md)
+- **Clone Detection**: Exact / bloom / fragment (SESE + 1-WL) via `rgctl clones`; see [clone-detection-design.md](design/clone-detection-design.md)
 - **API Migration**: Automated adaptation to new library versions
 - **Monolith to Microservices**: Decomposition using dependency analysis
 - **Software Supply Chain Security**: Dependency graph analysis for vulnerabilities
@@ -261,4 +276,4 @@ Active publication venues for this research area:
 
 ---
 
-*Last updated: 2026-07-06*
+*Last updated: 2026-10-24*

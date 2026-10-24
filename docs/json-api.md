@@ -114,7 +114,8 @@ if (doc.schema_version !== 2) {
 | `inspect` | ✅ | `layer`, `nodes`, `edges` | CFG/PDG/dominance dumps |
 | `semantic` | ✅ | `hits` / `functions_indexed` | Opt-in NL / keyword search |
 | `communities` | ✅ | `communities`, `modularity` | Named community labels |
-| `clones` | ✅ | `groups`, `graph_digest` | Exact Type-1 clone groups (`code_hash`); not semantic search |
+| `clones` | ✅ | `groups`, `graph_digest` | Exact / bloom / fragment (SESE + 1-WL) clone groups; not semantic search |
+| `review check` / `review paths` / `review export` | ✅ | violations / paths / composed export | Temporal PR gate + call-path deltas (`pr-check` = alias) |
 | `cpg` | ✅ | varies by subcommand | Hybrid CPG façade (`slice` / `inspect` are canonical for flow/CFG) |
 | `vuln` / `deps` | ✅ | varies | OSV triage / analyze / deps check (`security …` aliases same handlers) |
 | `security` | ✅ | same as `vuln`/`deps`/`taint` | Soft namespace; no separate JSON schema |
@@ -129,7 +130,9 @@ Help groups commands as Lifecycle · Query · Analysis · Security · Policy · 
 ## 4. `discover`
 
 ```bash
-rgctl -f json discover PATH [-l LANGS] [-e PATTERNS] [--with-cfg] [--with-taint] [--with-kantra] [--kantra-target NAME] [--full]
+rgctl -f json discover PATH [-l LANGS] [-e PATTERNS] [--with-cfg] [--with-taint] \
+  [--with-git] [--git-since 90.days] [--scip PATH.scip] \
+  [--with-kantra] [--kantra-target NAME] [--full]
 ```
 
 Kantra flags (`--with-kantra`, `--kantra-rules`, `--kantra-catalog`, `--kantra-target`, `--kantra-index-only`) do not change stdout JSON shape; they add `.rgctl/kantra_findings.json` and `KantraRule` nodes in `graph.snapshot.bin`. See [`kantra_findings.json`](#kantra_findingsjson).
@@ -471,10 +474,11 @@ jq '.target.canonical_fqn'
 ## 7. `metrics`
 
 ```bash
-rgctl -f json metrics [--pagerank] [--betweenness] [--communities] [--iterations N]
+rgctl -f json metrics [--pagerank] [--betweenness] [--communities] [--churn] \
+  [--iterations N] [--include-tests]
 ```
 
-Default (no section flags) includes **all three** sections. Requesting a single flag omits the others entirely.
+Default (no section flags) includes PageRank, betweenness, and communities. `--churn` (or default when `.rgctl/analysis/git_churn.json` exists after `discover --with-git`) adds `churn_hotspots`. Requesting a single flag omits the others entirely. Default PageRank tops filter by `NodeRole` (production); `--include-tests` includes test nodes.
 
 ### TypeScript shape
 
@@ -493,6 +497,17 @@ interface MetricsResponse {
     modularity: number;
     assignments: number;
   };
+  churn_hotspots?: Array<{
+    node: string;
+    kind: "file" | "function";
+    name: string;
+    file_path?: string;
+    hotspot_score: number;
+    commit_count?: number;
+    churn_lines?: number;
+    recency_churn_score?: number;
+    co_changing_files?: Array<{ file_path: string; cochange_count: number; jaccard: string }>;
+  }>;
 }
 ```
 
@@ -501,6 +516,7 @@ interface MetricsResponse {
 ```bash
 rgctl -f json metrics --pagerank | jq '.pagerank.top[:5]'
 rgctl -f json metrics | jq '.communities.modularity'
+rgctl -f json metrics --churn | jq '.churn_hotspots[:5]'
 ```
 
 ---
@@ -722,10 +738,10 @@ OpenSpec: `openspec/changes/add-review-workflow-export/`.
 
 ```bash
 rgctl -f json slice FILE --line N --variable VAR [--function NAME] \
-  [--view text|cfg|pdg] [--direction backward|forward] [--taint]
+  [--view text|cfg|pdg] [--direction backward|forward] [--taint] [--with-alias]
 ```
 
-Response shape depends on **`--view`** and **`--taint`**.
+`--function` is optional (auto-resolved from `file:line`). Does **not** require prior `discover --with-cfg` — lazily builds/caches the target function in the v3 CFG/PDG archive. Response shape depends on **`--view`** and **`--taint`**.
 
 ### `--view text` (default)
 
@@ -830,7 +846,7 @@ rgctl -f json slice src/.../Foo.java --line 10 --variable input --function Foo -
 rgctl -f json inspect SYMBOL cfg|pdg|dom [layer options]
 ```
 
-Requires `discover --with-cfg` for richest PDG/CFG data from the analysis archive.
+Prefer `discover --with-cfg` for a pre-built whole-repo archive; otherwise individual functions may appear after lazy `slice` / `cpg flows` appends.
 
 ### CFG layer
 
@@ -1050,7 +1066,7 @@ Incremental filecontent results are cached under `.rgctl/kantra_cache/` (content
 | `violations[].symbol` | string? | Import or symbol name when resolved by referenced rules |
 | `violations[].enrichment` | object? | Graph linkage + metrics (after blast engine build) |
 | `violations[].enrichment.node_id` | string? | UUID of matched graph node (used for `VIOLATES` edges) |
-| `violations[].enrichment.community_id` | number? | Louvain community |
+| `violations[].enrichment.community_id` | number? | Fast-Leiden community id (field may still be named `louvain_community_id` in older sidecars) |
 | `violations[].enrichment.pagerank` | number? | PageRank centrality |
 | `violations[].enrichment.blast_radius_score` | number? | Blast-radius score for the node |
 | `violations[].enrichment.impact_zone_size` | number? | Transitive impact zone size |
@@ -1237,7 +1253,7 @@ rgctl -r "$REPO" -f json semantic query "cart" --scope community --limit 5 \
 
 ## 16. `communities`
 
-List / refresh heuristic labels over label-propagation clusters. Types: `src/cli/communities.rs`.
+List / refresh heuristic labels over **Fast-Leiden** clusters ($\mu+4\sigma$ hub strip; `louvain_community_id` is a historical schema field name only). Types: `src/cli/communities.rs`.
 
 ```bash
 rgctl -r "$REPO" -f json communities list
@@ -1376,7 +1392,7 @@ rgctl -r "$REPO" -f json clones --mode fragment --seed process_orders --lines 3-
 
 ## 17. `cpg`
 
-Hybrid CPG façade (needs `discover --with-cfg`). Types: `crates/rgctl-analysis/src/cpg.rs` + `src/cli/cpg.rs`. All JSON payloads use `schema_version: 1`.
+Hybrid CPG façade. **`cpg flows`** lazy-builds CFG/PDG for the target function (no upfront `--with-cfg`; `--function` optional; `--with-alias` supported). **`cpg mutations`** and whole-repo field-write index still need `discover --with-cfg`. Types: `crates/rgctl-analysis/src/cpg.rs` + `src/cli/cpg.rs`. All JSON payloads use `schema_version: 1`.
 
 ### `cpg status`
 
@@ -1771,7 +1787,8 @@ Binds `http://127.0.0.1:8080/` — dashboard at `/`, semantic search at `POST /a
 **Command:**
 
 ```bash
-rgctl -f json discover PATH [--languages LANGS] [--exclude PATTERNS] [--with-security] [--with-cfg] [--with-taint] [--write-json-graph]
+rgctl -f json discover PATH [--languages LANGS] [--exclude PATTERNS] [--with-security] \
+  [--with-cfg] [--with-taint] [--with-git] [--scip PATH] [--write-json-graph]
 ```
 
 **Source:** `src/cli/discover_output.rs`, `src/cli/discover_impl.rs`
@@ -1833,7 +1850,7 @@ Without `-f json`, discover remains human-readable text progress (unchanged).
 | `.rgctl/analysis_results.bin` | Always | Columnar analysis tables |
 | `.rgctl/dashboard/` | When export succeeds | Static dashboard bundle (`index.html`, `manifest.json`, …) |
 | `.rgctl/graph.db` / `.rgctl/graph.json` | `--write-json-graph` only | Legacy full graph JSON |
-| `.rgctl/analysis/cfg_pdg.archive.bin` | `--with-cfg` or `--with-taint` | CFG + PDG for `--with-slices` |
+| `.rgctl/analysis/cfg_pdg.archive.bin` | `--with-cfg` / `--with-taint`, or lazy append from `slice` / `cpg flows` | CFG + PDG archive (v3 TOC) |
 | `.rgctl/analysis/*.json` | `--with-cfg` or `--with-taint` | Per-function analysis storage (taint, CFG, PDG) |
 | `.rgctl/dashboard/taint_index.json` | `--with-cfg` or `--with-taint` | Dashboard taint catalog (see [json-api.md](json-api.md) §12) |
 
@@ -1854,12 +1871,12 @@ See [§5 Structured query verbs](#5-structured-query-verbs) for TypeScript shape
 **Command:**
 
 ```bash
-rgctl -f json metrics [--pagerank] [--betweenness] [--communities] [--iterations N]
+rgctl -f json metrics [--pagerank] [--betweenness] [--communities] [--churn] [--iterations N] [--include-tests]
 ```
 
 **Source:** `src/cli/metrics_output.rs`, `src/cli/metrics.rs`
 
-Default (no section flags) computes **all three** sections.
+Default (no section flags) computes PageRank, betweenness, and communities; `--churn` after `discover --with-git`.
 
 ```json
 {
@@ -2151,15 +2168,15 @@ See [json-api.md §16](json-api.md#16-communities).
 
 ## 11. `cpg`
 
-See [json-api.md §17](json-api.md#17-cpg). Requires `discover --with-cfg`.
+See [json-api.md §17](json-api.md#17-cpg). `flows` is lazy (no upfront `--with-cfg`); `mutations` still needs `discover --with-cfg`.
 
 | Subcommand | Primary fields |
 |------------|----------------|
 | `status` | `archive_present`, `function_count`, `field_write_*`, `ast_skeleton_*` |
 | `function` | `id`, `name`, `has_l_proc`, `is_constructor` |
 | `calls` | `edges[]` |
-| `mutations` | `mutations[]` (file, line, member, function, …) |
-| `flows` | `steps[]` |
+| `mutations` | `mutations[]` (file, line, member, function, …) — needs `--with-cfg` |
+| `flows` | `steps[]` — lazy CFG/PDG; `--function` optional; `--with-alias` |
 | `export` | file output (`--format` / `--output`), not stdout JSON |
 
 All `-f json` CPG payloads use `schema_version: 1`.

@@ -11,7 +11,7 @@ Structural comparison between two columnar v2 snapshots for PR gates.
 | L2 | `snapshot_diff` | `DiffSink`, node hash index, edge merge-join on stable keys |
 | L3 | `rgctl_incremental::pr_scope` | Git `name-status` paths + hunk line overlap |
 | L3b | `rgctl_incremental::cascade` | Reverse `Calls` expansion for caller re-extract |
-| L4 | `pr-check` CLI | Temporal policy on scoped head entities |
+| L4 | `rgctl review check` CLI (`pr-check` alias) | Temporal policy on scoped head entities |
 | L5 | `policy_diff` | NEW / EXISTING / RESOLVED classification |
 | L6 | `check --base-ref/--head-ref/--strict` | Working-tree / PR diff scoping fixes |
 
@@ -41,12 +41,12 @@ re-parsed so `Calls` edges target the new stable node IDs.
 3. `IncrementalUpdater` unions cascaded paths with `extract_paths()` before delta extract +
    `rebuild_relations`.
 
-`--cascade-depth` (default **1**, `0` = disabled) on incremental update and `pr-check` (used when
+`--cascade-depth` (default **1**, `0` = disabled) on incremental update and `rgctl review check` / `pr-check` (used when
 delta head synthesis lands in Phase 4).
 
 ## Scoped policy analysis (Phase 5)
 
-`pr-check` no longer dual-hydrates full graphs for blast/centrality:
+`review check` no longer dual-hydrates full graphs for blast/centrality:
 
 1. Resolve scoped entity UUIDs from `StableNodeKey` on each snapshot.
 2. `collect_upstream_call_closure` → mmap `Calls` reverse BFS.

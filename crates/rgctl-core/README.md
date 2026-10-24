@@ -2,6 +2,8 @@
 
 Public library facade for rgctl — one dependency for graph, analysis, pipeline, dashboard helpers, and related crates.
 
+Graph persistence defaults to the **`RGCL` v2** columnar mmap snapshot (`.rgctl/graph.snapshot.bin`) from `rgctl-graph`. Analysis algorithms (Fast-Leiden communities, FastPageRank, lazy v3 `cfg_pdg.bin` slicing, SESE+1-WL fragment clones, MRO `Overrides`, SCIP overlay, git churn) live in `rgctl-analysis`.
+
 ## Unique code
 
 Only `memory::MemoryMonitor` (RSS tracking via sysinfo) lives in this crate. All graph and analysis logic is in workspace crates re-exported from `lib.rs`.

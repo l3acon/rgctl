@@ -3,6 +3,38 @@ import { join } from "node:path";
 
 const contentRoot = join(process.cwd(), "content/languages");
 
+/** Fallback display names when catalog.json is missing an entry (keep in sync with copy-lang-coverage.mjs). */
+export const LANGUAGE_DISPLAY: Record<string, string> = {
+  bash: "Bash",
+  c: "C",
+  cpp: "C++",
+  csharp: "C#",
+  dart: "Dart",
+  elixir: "Elixir",
+  erb: "ERB",
+  go: "Go",
+  groovy: "Groovy",
+  hcl: "HCL",
+  java: "Java",
+  javascript: "JavaScript",
+  kotlin: "Kotlin",
+  lua: "Lua",
+  markdown: "Markdown",
+  php: "PHP",
+  puppet: "Puppet",
+  python: "Python",
+  ruby: "Ruby",
+  rust: "Rust",
+  scala: "Scala",
+  sql: "SQL",
+  swift: "Swift",
+  typescript: "TypeScript",
+};
+
+export function displayNameFor(id: string, fallback?: string): string {
+  return LANGUAGE_DISPLAY[id] || fallback || id;
+}
+
 export const HANDLER_ORDER = [
   "Symbol",
   "Relation",
@@ -51,9 +83,12 @@ export function languagesContentRoot(): string {
 export function listLanguages(): LanguageCatalogEntry[] {
   const catalog = readJson<LanguageCatalog>(join(contentRoot, "catalog.json"));
   if (!catalog?.languages?.length) return [];
-  return [...catalog.languages].sort((a, b) =>
-    a.displayName.localeCompare(b.displayName),
-  );
+  return [...catalog.languages]
+    .map((l) => ({
+      ...l,
+      displayName: displayNameFor(l.id, l.displayName),
+    }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 export function getLanguage(id: string): LanguageCatalogEntry | null {

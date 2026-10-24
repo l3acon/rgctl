@@ -97,6 +97,8 @@ rgctl discover .
 rgctl -f json blast-radius ShoppingCartService
 rgctl -f json blast-radius process --class OrderService --depth 3
 rgctl -f json blast-radius Foo --policy-file policy.json   # exit 1 if VIOLATED
+rgctl -f json blast-radius Foo --classify-boundary         # boundary classification
+rgctl -f json blast-radius Foo --with-slices               # hand-off to PDG slices (uses cfg_pdg archive)
 ```
 
 ---

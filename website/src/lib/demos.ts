@@ -82,7 +82,7 @@ export const demos: DemoScenario[] = [
     title: "Named communities",
     prompt: "What architectural communities does the graph see?",
     commands: ["-f json communities list"],
-    note: "Lists label-propagation communities — not orphaned modules.",
+    note: "Lists Fast-Leiden communities (hub-stripped) — not orphaned modules.",
     output: `{
   "schema_version": 1,
   "modularity": 0.45,
@@ -184,8 +184,10 @@ export const demos: DemoScenario[] = [
     title: "Variable flows",
     prompt: "Trace how quantity flows from CartService.ts.",
     commands: [
-      "-f json cpg flows src/cart/CartService.ts --line 50 --variable quantity --function updateQuantity --direction forward",
+      "-f json cpg flows src/cart/CartService.ts --line 50 --variable quantity --direction forward",
+      "-f json slice src/cart/CartService.ts --line 50 --variable quantity --direction forward",
     ],
+    note: "slice / cpg flows build CFG/PDG for the enclosing function lazily when discover --with-cfg was not run.",
     output: `{
   "schema_version": 1,
   "steps": [
@@ -197,12 +199,34 @@ export const demos: DemoScenario[] = [
       "Add validation at the service boundary before the repository call.",
   },
   {
+    id: "clones",
+    flow: "Pre-refactor safety",
+    title: "Fragment clones",
+    prompt: "Find near-duplicate fragments of this pricing block.",
+    commands: [
+      "-f json clones --mode fragment --seed priceShoppingCart --min-statements 3",
+    ],
+    note: "fragment mode: SESE hammock + 1-WL canonical hashing (Type 3/4). Also: --mode exact|bloom.",
+    output: `{
+  "schema_version": 1,
+  "mode": "fragment",
+  "groups": [
+    {"size": 2, "members": ["priceShoppingCart", "quoteCart"]}
+  ]
+}`,
+    reasoning:
+      "Compare fragment pairs before consolidating shared pricing logic.",
+  },
+  {
     id: "check",
     flow: "Policy verification",
     title: "CI policy check",
     prompt: "Validate recent changes against project policies.",
-    commands: ["-f json check --policy-file policy.json"],
-    note: "Policies use max_impact_nodes / forbidden_crossings — see docs/policy-format.md.",
+    commands: [
+      "-f json review check --policy-file policy.json",
+      "-f json check --policy-file policy.json",
+    ],
+    note: "Prefer review check for PR gates; check remains for local policy. pr-check is a compatibility alias.",
     output: `{
   "schema_version": 1,
   "passed": true,

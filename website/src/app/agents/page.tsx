@@ -28,30 +28,30 @@ const steps = [
   {
     n: "4",
     title: "Reason from JSON",
-    body: "Parse schema_version on stdout — then edit, and re-check with check / pr-check when needed.",
+    body: "Parse schema_version on stdout — then edit, and re-check with review check / check when needed.",
   },
 ];
 
 const topics = [
   {
     title: "Index",
-    blurb: "Build or refresh the graph.",
-    cli: "discover",
+    blurb: "Build or refresh the graph (SCIP / git churn optional).",
+    cli: "discover · update · watch · merge",
   },
   {
     title: "Impact",
     blurb: "Upstream blast radius and callers.",
-    cli: "blast-radius · callers",
+    cli: "blast-radius · callers · relations",
   },
   {
     title: "Data flow",
-    blurb: "Slices, mutations, CPG flows.",
-    cli: "slice · cpg",
+    blurb: "Lazy slices, mutations, CPG flows.",
+    cli: "slice · cpg · inspect",
   },
   {
     title: "Search",
     blurb: "Symbol lookup and semantic query.",
-    cli: "find · semantic query",
+    cli: "find · inventory · semantic query",
   },
   {
     title: "Migration",
@@ -61,12 +61,12 @@ const topics = [
   {
     title: "Kantra",
     blurb: "Konveyor rules and violations.",
-    cli: "discover --with-kantra",
+    cli: "discover --with-kantra · rules",
   },
   {
     title: "CI gates",
     blurb: "Policy checks on PRs and diffs.",
-    cli: "check · pr-check",
+    cli: "review paths · review check",
   },
 ];
 

@@ -73,12 +73,14 @@ const tracks = [
   },
   {
     title: "Graph & CPG Algorithms",
-    body: "CFG/PDG, blast-radius, communities, metrics, snapshot storage.",
+    body: "Lazy CFG/PDG, blast-radius, Fast-Leiden communities, FastPageRank, fragment clones, snapshot storage.",
     links: [
       { href: "/docs/analysis-architecture/", label: "Analysis architecture" },
       { href: "/docs/graph-storage-architecture/", label: "Graph storage" },
       { href: "/docs/guides/hybrid-cpg/", label: "Hybrid CPG guide" },
+      { href: "/docs/guides/community-detection/", label: "Community detection" },
       { href: "/docs/guides/blast-radius-analysis/", label: "Blast radius guide" },
+      { href: "/docs/guides/clone-detection/", label: "Clone detection" },
     ],
   },
 ];

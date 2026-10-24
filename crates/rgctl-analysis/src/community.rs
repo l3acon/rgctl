@@ -39,7 +39,7 @@ pub fn community_edge_types_for_backend(backend: &MemoryBackend) -> Vec<EdgeType
 }
 
 /// Default σ multiplier for statistical hub stripping (`μ + kσ`).
-pub const DEFAULT_HUB_SIGMA_K: f64 = 2.0;
+pub const DEFAULT_HUB_SIGMA_K: f64 = 4.0;
 
 /// Never freeze more than this fraction of nodes as infrastructure hubs.
 pub const DEFAULT_MAX_FROZEN_FRACTION: f64 = 0.05;
@@ -47,7 +47,7 @@ pub const DEFAULT_MAX_FROZEN_FRACTION: f64 = 0.05;
 /// Skip hub stripping on graphs smaller than this.
 pub const DEFAULT_MIN_NODES_FOR_HUB_STRIP: usize = 20;
 
-/// Policy for identifying high-degree utility hubs before label propagation.
+/// Policy for identifying high-degree utility hubs before Fast-Leiden local moving.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HubStripPolicy {
     /// No hub stripping.

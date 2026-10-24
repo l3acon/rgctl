@@ -330,17 +330,23 @@ Harmonic, dashboard, migration export, security, CFG/PDG, and discover-time tain
 | Flag | What it adds |
 |------|----------------|
 | `--with-security` | Secret scanning |
-| `--with-cfg` | Per-function CFG, dominators, PDG (archive under `.rgctl/analysis/`) |
+| `--with-cfg` | Whole-repo CFG/PDG archive under `.rgctl/analysis/` (needed for `taint --sink`, `cpg mutations`, richest `inspect`; **not** required for `slice` / `cpg flows`) |
 | `--with-taint` | Discover-time taint into archive (implies CFG/PDG pass) |
 | `--taint-rules PATH` | Extra YAML pack file or directory (after built-ins + `.rgctl/taint-rules.d/`) |
+| `--with-git` | Git churn hotspots + `CoChangesWith` edges (`metrics --churn`, `relations --edge cochangeswith`) |
+| `--scip PATH` | SCIP overlay — upgrades ambiguous call edges (`resolution = "scip"`) |
 | `--with-harmonic` | Harmonic centrality (migration ranking) |
 | `--with-dashboard` | Static dashboard bundle under `.rgctl/dashboard/` |
 | `--export-migration-hints` | Migration roadmap JSON (alias: `--export-migration-plan`) |
 | `--with-kantra` | Konveyor Kantra rule evaluation + rules graph index (see below) |
 
 ```bash
-# CFG so inspect / slice have rich PDG context
+# Whole-repo CFG for inspect / cpg mutations / taint --sink
 rgctl discover . -l java -e target --with-cfg
+
+# Optional overlays
+rgctl discover . --with-git --git-since 90.days
+rgctl discover . --scip path/to/index.scip
 
 # Full walkthrough set used for the samples below
 rgctl discover . -l java -e target \
@@ -358,7 +364,7 @@ Example lines from that richer run:
 [✓] Dashboard: …/ecommerce-java/./.rgctl/dashboard/index.html
 ```
 
-Use `--with-cfg` when you need `inspect` / slice overlays; add `--with-taint` for discover-time taint flows. On large monorepos (100k+ functions) expect minutes to hours.
+Use `--with-cfg` when you need whole-repo `inspect` richness, `cpg mutations`, or `taint --sink`. `slice` and `cpg flows` lazy-build a single function's CFG/PDG into the v3 archive on demand. Add `--with-taint` for discover-time taint flows. On large monorepos (100k+ functions) expect minutes to hours.
 
 ### Kantra migration rules (`--with-kantra`)
 
@@ -439,7 +445,7 @@ See [analysis-architecture.md](analysis-architecture.md) and [internal/profile.m
 
 ### Legacy JSON graph (optional)
 
-By default, rgctl writes a **binary snapshot** (`graph.snapshot.bin`). Legacy `graph.db` / `graph.json` are only written when requested:
+By default, rgctl writes an **`RGCL` v2 columnar mmap snapshot** (`graph.snapshot.bin`). Legacy `graph.db` / `graph.json` are only written when requested:
 
 ```bash
 rgctl discover . --write-json-graph
@@ -451,7 +457,7 @@ After a successful run, the layout below appears under **`{repo}/.rgctl/`**:
 
 ```
 {repo}/.rgctl/
-├── graph.snapshot.bin          # Columnar mmap graph (primary cache for queries)
+├── graph.snapshot.bin          # RGCL v2 columnar mmap graph (primary cache for queries)
 ├── content_store.bin           # Large markdown bodies / files (body_ref / blob_ref; Obsidian + doc semantic)
 ├── blast_engine.snapshot.bin   # Pre-built blast-radius engine
 ├── macro_call_index.db         # Blast-radius lookup cache (SQLite; not the graph)
@@ -590,12 +596,11 @@ rgctl -r "$REPO" -f json relations clearCart --edge calls --direction in | jq '.
 ### Common node / edge types
 
 - Node types for `--type`: `function`, `class`, `interface`, `module`, `file`, `kantrarule`, …
-- Edge types for `--edge`: `calls`, `imports`, `contains`, `depends_on`, `implements`, `references`, `violates`, …
+- Edge types for `--edge`: `calls`, `imports`, `contains`, `depends_on`, `implements`, `overrides`, `references`, `violates`, `cochangeswith`, …
 
 ### Named communities (analysis overlay)
 
-`discover` runs label-propagation community detection and stores assignments in
-`.rgctl/analysis_results.bin` — **not** as edges in the topology graph.
+`discover` runs **Fast-Leiden** community detection (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` (ubiquitous utilities → `"Shared / Infrastructure"`). Assignments land in `.rgctl/analysis_results.bin` — **not** as topology edges. JSON field `louvain_community_id` is a historical schema name only.
 
 Community detection uses behavioral edges (`Calls`, `Uses`, `References`) by default.  
 On mixed code + markdown repos, doc `REFERENCES` participate in the same community pass as code edges; this is expected behavior.
@@ -722,24 +727,25 @@ Schema: [json-api.md](json-api.md) (blast-radius + field catalogs).
 rgctl -r "$REPO" blast-radius 'CartService::clearCart' --with-slices
 ```
 
-Requires `discover --with-cfg` for rich PDG context.
+`--with-slices` is richest after `discover --with-cfg`; without it, slice hand-offs still work via on-demand CFG/PDG for touched functions.
 
 ---
 
 ## 8. Program slicing and taint
 
-`slice` performs **line-level** backward or forward slicing on a source file. Paths may be absolute, cwd-relative, or relative to `--repo`. Run `discover --with-cfg` first so PDG data is available.
+`slice` performs **line-level** backward or forward slicing on a source file. Paths may be absolute, cwd-relative, or relative to `--repo`. **No upfront `discover --with-cfg` is required:** if the target function is missing from `.rgctl/analysis/cfg_pdg.bin`, `slice` lazily builds that function's CFG/PDG and appends it to the v3 archive. Whole-repo `rgctl taint --sink` still needs `discover --with-cfg`.
 
 ### Backward slice
 
-“What code influences this variable at this line?” — in `OrderService.checkout`, `cart` is assigned on line 52:
+“What code influences this variable at this line?” — in `OrderService.checkout`, `cart` is assigned on line 52. `--function` is optional: when omitted, rgctl auto-resolves the innermost enclosing function from `file:line`.
 
 ```bash
 rgctl -r "$REPO" slice \
   src/main/java/com/example/ecommerce/service/OrderService.java \
   --line 52 \
-  --variable cart \
-  --function checkout
+  --variable cart
+# equivalent with explicit function:
+#   … --function checkout
 ```
 
 ```text
@@ -772,8 +778,11 @@ rgctl -r "$REPO" slice \
   --line 38 \
   --variable cart \
   --function addItem \
-  --direction forward
+  --direction forward \
+  --with-alias
 ```
+
+`--with-alias` expands alias-aware data dependence when following flow through renamed / reassigned locals.
 
 ### Taint trace
 
@@ -802,7 +811,7 @@ rgctl -r "$REPO" -f mermaid slice \
 
 ### `--function` names
 
-`--function` must be the **method/function name** in the source file (as parsed by tree-sitter), not the enclosing class name:
+`--function` is optional (auto-resolved from `file:line`). When set, it must be the **method/function name** in the source file (as parsed by tree-sitter), not the enclosing class name:
 
 ```bash
 rgctl -r "$REPO" find checkout --type function --exact
@@ -813,7 +822,7 @@ rgctl -r "$REPO" find checkout --type function --exact
 ## 9. Inspect CFG / PDG / dominance
 
 `inspect` dumps semantic layers for an **indexed function symbol**. Prefer a unique name, or the same
-`path/to/file.ts::symbol` / `Class::method` form as `blast-radius`. Run `discover --with-cfg` first.
+`path/to/file.ts::symbol` / `Class::method` form as `blast-radius`. Prefer `discover --with-cfg` for a pre-built archive; otherwise the archive may be empty until a lazy `slice` / `cpg flows` populates individual functions.
 
 ```bash
 rgctl -r "$REPO" inspect checkout cfg
@@ -869,9 +878,10 @@ rgctl -r "$REPO" inspect checkout dom --frontiers
 
 ## 10. Hybrid CPG (`cpg`)
 
-The `cpg` façade bridges the **repo call graph** (L_repo) with the **per-function CFG/PDG archive** (L_proc) built by `discover --with-cfg`. Use it for typed field mutations, data flows, and Joern-style handoffs without stitching several CLI tools yourself.
+The `cpg` façade bridges the **repo call graph** (L_repo) with the **per-function CFG/PDG archive** (L_proc). Use it for typed field mutations, data flows, and Joern-style handoffs without stitching several CLI tools yourself.
 
-Requires a prior `discover … --with-cfg` (the ecommerce walkthrough already uses that flag).
+- **`cpg flows`**: like `slice` — lazily builds the target function's CFG/PDG when missing; `--function` auto-resolved from `file:line`; supports `--with-alias`.
+- **`cpg mutations`** (and whole-repo field-write index): still requires prior `discover … --with-cfg`.
 
 ### Status and CALL neighborhood
 
@@ -921,10 +931,10 @@ Empty result means no **typed** non-ctor writes were recovered (receivers withou
 ### Flows, AST, export
 
 ```bash
-# Forward flows from a variable at a line (wraps slice; optional --with-alias)
+# Forward flows from a variable at a line (wraps slice; --function optional; --with-alias)
 rgctl -r "$REPO" -f json cpg flows \
   src/main/java/com/example/ecommerce/coolstore/service/ShoppingCartService.java \
-  --line 75 --variable sc --function priceShoppingCart --direction forward
+  --line 75 --variable sc --direction forward --with-alias
 
 # Optional: discover --with-ast-skeleton then:
 rgctl -r "$REPO" -f json cpg ast priceShoppingCart
@@ -937,10 +947,11 @@ rgctl -r "$REPO" cpg export --format graphson --output /tmp/ecommerce-cpg.json \
 
 ## 11. Graph metrics
 
-`metrics` reports network analytics on the indexed call graph. Prefer **JSON** for scripting (text mode prints debug-style structs).
+`metrics` reports network analytics on the indexed call graph (`FastPageRank`, `SampledBetweenness`, Fast-Leiden community summary, optional git churn). Prefer **JSON** for scripting (text mode prints debug-style structs). Default PageRank hotspots filter to production `NodeRole` nodes; pass `--include-tests` to include tests.
 
 ```bash
 rgctl -r "$REPO" -f json metrics --communities | jq .
+rgctl -r "$REPO" -f json metrics --churn | jq '.churn_hotspots[:5]'   # after discover --with-git
 ```
 
 ```json
@@ -976,6 +987,28 @@ rgctl -r "$REPO" -f json metrics --pagerank | jq '.pagerank | {iterations, conve
 ```bash
 rgctl -r "$REPO" metrics --betweenness
 rgctl -r "$REPO" -f json metrics --pagerank --iterations 50 | jq .
+```
+
+### Clone detection
+
+Three modes — exact Type-1 (`code_hash`), bloom (token-sketch Jaccard), and **fragment** (SESE hammock + 2-iter 1-WL; optional `--seed`):
+
+```bash
+rgctl -r "$REPO" -f json clones --mode exact --exclude test | jq '.group_count'
+rgctl -r "$REPO" -f json clones --mode bloom --threshold 0.9 | jq '.groups[:3]'
+rgctl -r "$REPO" -f json clones --mode fragment --seed process_orders --lines 3-8 \
+  | jq '{group_count, seed, groups: .groups[:3]}'
+```
+
+Guide: [clone-detection.md](guides/clone-detection.md).
+
+### Multi-repo merge
+
+Park unresolved cross-repo relations during per-repo discover, then resolve with `merge`:
+
+```bash
+rgctl merge services/auth services/billing --output-dir .rgctl-merged
+rgctl -r .rgctl-merged -f json callers validateToken
 ```
 
 ---
@@ -1116,10 +1149,15 @@ For structural lookups on docs, use `find` / `relations` — see [markdown conte
 
 `check` evaluates blast-radius policy rules against functions changed in the current git working tree (or all functions if git is unavailable).
 
-Example policy files: [docs/examples/policy-strict.json](examples/policy-strict.json). Format: [policy-format.md](policy-format.md).
+For **temporal PR gates** (base/head snapshots, `new` / `existing` / `resolved` classification, violation ledger), use **`rgctl review check`** (`pr-check` is a compatibility alias). Also: `rgctl review paths` for structural before/after call-path deltas.
+
+Example policy files: [docs/examples/policy-strict.json](examples/policy-strict.json). Format: [policy-format.md](policy-format.md). Guide: [pr-review.md](guides/pr-review.md).
 
 ```bash
 rgctl -r "$REPO" check --policy-file policy.json
+
+rgctl -r "$REPO" -f json review check --policy-file rgctl-tests/rgctl-pr-policy.json \
+  --base-ref origin/main --head-ref HEAD --strict
 ```
 
 Exit code **1** when violations are found — suitable for CI pipelines.
@@ -1218,18 +1256,22 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | Command | Purpose |
 |---------|---------|
 | `discover` | Index repo, build `.rgctl/` artifacts (`--full` = staged CFG/dashboard/harmonic + semantic) |
-| `find` / `callers` / `callees` / `relations` / `inventory` / `status` | Structured graph queries ([§6](#6-structured-graph-queries)) |
-| `communities` | List / refresh heuristic community labels |
+| `update` / `watch` / `merge` | Incremental patch; live watch; multi-repo park-and-resolve merge |
+| `find` / `callers` / `callees` / `relations` / `inventory` / `status` | Structured graph queries ([§6](#6-structured-graph-queries)); `query …` is a compatibility alias |
+| `communities` | List / refresh Fast-Leiden community labels |
+| `clones` | Exact / bloom / fragment (`--mode fragment --seed …`) clone groups |
 | `blast-radius` | Upstream call-graph impact for a symbol |
-| `slice` | Line-level program slice or taint trace |
+| `slice` | Line-level program slice or taint trace (lazy CFG/PDG; `--with-alias`) |
 | `inspect` | CFG / PDG / dominance for a function |
-| `cpg` | Hybrid CPG: status, mutations, flows, calls, export (needs `--with-cfg`) |
-| `metrics` | PageRank, betweenness, communities summary |
+| `cpg` | Hybrid CPG: status, mutations (needs `--with-cfg`), flows (lazy), calls, export |
+| `metrics` | PageRank, betweenness, communities, `--churn` |
 | `export` | Serialize graph (json, graphml, dot, mermaid, obsidian vault, okf) |
-| `check` | CI policy gateway |
+| `check` / `review check` / `review paths` | CI policy; temporal PR gate (`pr-check` alias); call-path deltas |
 | `install` | Copy the bundled agent pack (single skill `rgctl`) into adapter dirs |
 | `semantic` | Opt-in semantic index + query (`--scope community`, `docs`, `all`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/status` (auto full pipeline); `--no-pipeline` fail-fast |
+
+Full taxonomy: [CLI command reference](guides/cli-command-reference.md).
 
 ### `discover` flags
 
@@ -1239,9 +1281,11 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `-e, --exclude` | Comma-separated path exclude patterns |
 | `-v, --verbose` | Debug logging + stage profile lines |
 | `--with-security` | Secret scanning |
-| `--with-cfg` | CFG / PDG (not taint); alias `--cfg` |
+| `--with-cfg` | Whole-repo CFG / PDG archive (not taint); alias `--cfg` |
 | `--with-taint` | Discover-time taint (implies CFG pass) |
 | `--taint-rules PATH` | Extra taint YAML pack (file or dir; after built-ins / `.rgctl/taint-rules.d/`) |
+| `--with-git` | Git churn + `CoChangesWith` (`--git-since`, default `90.days`) |
+| `--scip PATH` | SCIP overlay for compiler-exact call resolution |
 | `--with-dfg-loops` | Tag loop-carried `DataDependency` edges in PDG (with `--with-cfg`) |
 | `--with-ast-skeleton` | Build AST skeleton archive for `cpg ast` |
 | `--with-harmonic` | Harmonic centrality (default off; needed for migration ranking) |
@@ -1294,21 +1338,21 @@ rgctl -r "$REPO" blast-radius clearCart --class CartService
 
 ### Slice parse / PDG errors
 
-Ensure you ran `discover --with-cfg`, then pass the method name and a variable that exists on that line:
+`slice` does not require upfront `--with-cfg`. Pass a variable that exists on that line; omit `--function` to auto-resolve from `file:line`, or set the method name explicitly:
 
 ```bash
 rgctl -r "$REPO" slice \
   src/main/java/com/example/ecommerce/service/CartService.java \
-  --line 53 --variable item --function addItem --language java
+  --line 53 --variable item --language java
 ```
 
 ### Empty `cpg mutations`
 
-Confirm `cpg status` shows a field-write index, then match the **resolved type name** (Java/C#/…: `ShoppingCart`; C: `shopping_cart_t`). Setters count as mutation sites; unresolved receivers are omitted unless `--include-unresolved`. Re-run `discover --with-cfg` after adding CoolStore sources.
+Confirm `cpg status` shows a field-write index (requires `discover --with-cfg`), then match the **resolved type name** (Java/C#/…: `ShoppingCart`; C: `shopping_cart_t`). Setters count as mutation sites; unresolved receivers are omitted unless `--include-unresolved`. Re-run `discover --with-cfg` after adding CoolStore sources. (`cpg flows` can still run without a whole-repo CFG pass.)
 
 ### Slow `discover`
 
-Start with the default mode. Add `--with-cfg` or `--with-taint` only when you need inspect, slice overlays, or taint. Keep `--with-harmonic` / `--with-dashboard` off unless you need migration ranking or the static UI.
+Start with the default mode. Add `--with-cfg` or `--with-taint` only when you need whole-repo inspect/mutations/taint. Keep `--with-harmonic` / `--with-dashboard` off unless you need migration ranking or the static UI.
 
 On **very large repos** (500k+ graph nodes), discover automatically:
 

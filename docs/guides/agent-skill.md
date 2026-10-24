@@ -42,7 +42,9 @@ This guide uses the **CoolStore** (`example/coolstore`). Make sure you have run 
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
-rgctl -r example/coolstore discover -l java --with-cfg
+rgctl -r example/coolstore discover -l java
+# Optional: whole-repo CFG for taint / mutations / batch inspect
+# rgctl -r example/coolstore discover -l java --with-cfg
 ```
 
 ## Step-by-Step
@@ -270,7 +272,7 @@ The agent follows the skill's decision table (row 1: "Generate a migration plan"
 
 ```bash
 rgctl -r example/coolstore discover -l java \
-  --with-cfg --with-harmonic --export-migration-hints \
+  --with-harmonic --export-migration-hints \
   --migration-preset hybrid_default --migration-order scheduled
 ```
 
@@ -496,7 +498,7 @@ The skill embeds a decision table that maps natural-language patterns to CLI com
 
 | What You Ask the Agent | What the Agent Runs |
 |------------------------|---------------------|
-| "Generate a migration plan" | `discover . --with-cfg --with-harmonic --export-migration-hints` |
+| "Generate a migration plan" | `discover . --with-harmonic --export-migration-hints` |
 | "What are the bottlenecks?" | `metrics --pagerank` |
 | "List all functions" | `find --type function --count-only` / `find --type function --limit 50` |
 | "What communities exist?" | `communities list` |
@@ -505,9 +507,11 @@ The skill embeds a decision table that maps natural-language patterns to CLI com
 | "Show the call stack around X" | `callers X --depth 3` / `callees X` |
 | "Where is ShoppingCart mutated?" | `cpg mutations --type ShoppingCart` |
 | "Trace variable X forward" | `cpg flows FILE --line N --variable X --direction forward` |
-| "Validate against policies" | `check --policy-file policy.json` |
+| "Validate against policies" | `check --policy-file policy.json` or `review check --policy-file …` |
+| "PR call-path review" | `review paths --base-ref origin/main` |
+| "Find fragment clones of this block" | `clones --mode fragment --seed FILE:START-END` |
 
-The agent handles disambiguation (e.g., adding `--class` or `--file` when a symbol name is ambiguous) and error recovery (e.g., running `discover --with-cfg` if slicing fails because CFG data is missing).
+The agent handles disambiguation (e.g., adding `--class` or `--file` when a symbol name is ambiguous). For slicing, prefer lazy `rgctl slice` (no upfront `--with-cfg`); reserve `discover --with-cfg` for `taint --sink`, `cpg mutations`, and batch `inspect`.
 
 ## Install options reference
 

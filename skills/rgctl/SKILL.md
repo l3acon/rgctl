@@ -51,7 +51,7 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 5. ACTION          → edit / plan / check — re-query if graph may be stale
 ```
 
-**Prerequisite (once per repo):** `discover` (and `semantic index` when using search). Deep analysis (`cpg`, `inspect`, slice/taint) needs `discover --with-cfg`.
+**Prerequisite (once per repo):** `discover` (and `semantic index` when using search). `rgctl slice` / `cpg flows` build single-function CFG/PDG lazily (no upfront `--with-cfg`). Reserve `discover --with-cfg` for `taint --sink`, `cpg mutations`, and batch `inspect`.
 
 ## What to Do When Invoked
 
@@ -75,6 +75,9 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | User Intent | CLI Command |
 |-------------|-------------|
 | Build graph index | `cd repo && discover .` or `rgctl -r PATH discover` |
+| SCIP compiler overlay | `discover . --scip index.scip` |
+| Git churn / co-change | `discover . --with-git [--git-since 90.days]` → `metrics --churn` / `relations -e cochangeswith` |
+| Multi-repo merge | `merge repoA repoB --output-dir OUT` |
 | Patch graph after edits | `rgctl update` (or `update --files path1,path2`) — structural only |
 | Keep graph fresh while serving | `serve --watch` (debounced FS updates); still run `update` to enqueue if needed |
 | Prefer canonical verbs | `find`/`callers`/`slice`/`vuln analyze` (see encyclopedia map); `query`/`cpg`/`security` are façades |
@@ -83,7 +86,9 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | Full staged pipeline | `discover . --full` |
 
 **Common flags:**
-- `--with-cfg` — Enable CFG/PDG (for slice, inspect, cpg)
+- `--with-cfg` — Pre-build whole-repo CFG/PDG archive (taint/mutations/batch inspect; not required for lazy `slice`)
+- `--scip PATH` — Compiler-exact SCIP call overlay
+- `--with-git` — Git churn + `CoChangesWith` edges
 - `--with-dashboard` — Build dashboard bundle
 - `--export-migration-hints` — Write `.rgctl/migration_plan.json` (primary migration deliverable)
 - `--with-security --with-taint` — Security scanning
@@ -124,6 +129,9 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | Find callers/callees | `callers <Symbol> --depth 1` / `callees <Symbol>` |
 | Outside callers of a module | `callers <Symbol> --scope <pkg> --scope-mode outside` |
 | EXTENDS / IMPLEMENTS inventory | `relations --edge extends --from-type class` (omit SYMBOL) |
+| MRO overrides | `relations <SYM> --edge overrides --direction both` |
+| Git co-change files | `relations <FILE> --edge cochangeswith` (needs `discover --with-git`) |
+| Framework routes / DI | `relations --edge exposesroute` / `relations --edge injects` |
 | Natural-language search | `semantic query "checkout flow"` |
 | List communities | `communities list` |
 | Subsystem ownership | `semantic query "X" --scope community` |
@@ -163,7 +171,9 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 |-------------|-------------|
 | PageRank hotspots (names + paths in JSON) | `metrics --pagerank -f json` |
 | Betweenness bridges | `metrics --betweenness -f json` |
-| Community stats | `metrics --communities` |
+| Community stats (Fast-Leiden) | `metrics --communities` |
+| Git churn hotspots | `metrics --churn` (after `discover --with-git`) |
+| Fragment / exact / bloom clones | `clones --mode fragment --seed <SYM\|FILE:LINES>` (or `exact` / `bloom`) |
 
 `top[]` entries include `name`, `qualified_name`, `kind`, `file_path` alongside `node` (UUID) — no follow-up `cpg function` needed.
 
@@ -172,19 +182,20 @@ Legacy daemon cache under `~/.rgctl/cache/` is obsolete; run `rgctl discover .` 
 | User Intent | CLI Command |
 |-------------|-------------|
 | CFG/PDG status | `cpg status` |
-| Field mutations | `cpg mutations --type Foo` |
-| Data flow trace | `cpg flows FILE --line N --variable V --function F` |
-| Program slice | `slice FILE --line N --variable V --function Class::method` |
+| Field mutations | `cpg mutations --type Foo` (needs `discover --with-cfg`) |
+| Data flow trace | `cpg flows FILE --line N --variable V` (optional `--function`, `--with-alias`; lazy CFG) |
+| Program slice | `slice FILE --line N --variable V` (optional `--function`, `--with-alias`; lazy CFG) |
 | CFG inspection | `inspect <Symbol> cfg [--file PATH] [--class C] [--line N]` |
 | PDG inspection | `inspect <Symbol> pdg --edge-layer data` |
 
-Needs `discover --with-cfg`. Disambiguate overloaded symbols with `--file` / `--class` / `--line` on `inspect`, `cpg function|calls|ast|pdg`, and `blast-radius`.
+`slice` / `cpg flows` do **not** need upfront `--with-cfg`. Prefer `discover --with-cfg` for `cpg mutations`, sink-first `taint`, and batch `inspect`. Disambiguate overloaded symbols with `--file` / `--class` / `--line` on `inspect`, `cpg function|calls|ast|pdg`, and `blast-radius`.
 
 ### 5b. Diff & Konveyor rules
 
 | User Intent | CLI Command |
 |-------------|-------------|
 | Snapshot / graph diff | `diff --base <A> --head <B>` (or prepared refs; see encyclopedia) |
+| Multi-repo merge | `merge <REPOS>... --output-dir <DIR>` |
 | Kantra / migration rules during discover | `discover . --with-kantra` |
 | List / query installed rules | `rules` (and related subcommands) |
 
@@ -210,8 +221,11 @@ Needs `discover --with-cfg`. Disambiguate overloaded symbols with `--file` / `--
 | "PR policy gate / new violations vs main" | `review check --policy-file …` (alias `pr-check`) |
 | "Who calls X" | `callers X --depth 2` (impact → `blast-radius X`) |
 | "javax imports / annotations" | `find "import javax*" --type import`; `relations --edge annotatedwith --from-type function --to-type annotation` |
-| "Where is X mutated?" | `cpg mutations --type X --exclude-ctors` |
-| "Duplicate code / copy-pasted loop or snippet" | `clones --mode fragment --seed <fn> --lines <start-end>` (or `--mode exact` / `--mode bloom`) |
+| "Where is X mutated?" | `cpg mutations --type X --exclude-ctors` (needs `--with-cfg`) |
+| "Slice / data flow for this line" | `slice FILE --line N --variable V` (lazy; optional `--with-alias`) |
+| "Duplicate code / copy-pasted loop or snippet" | `clones --mode fragment --seed <fn\|FILE:LINES>` (or `--mode exact` / `--mode bloom`) |
+| "What co-changes with this file?" | `discover --with-git` then `relations FILE --edge cochangeswith` / `metrics --churn` |
+| "Override hierarchy for this method" | `relations <SYM> --edge overrides --direction both` |
 
 ## Failure Playbook
 
@@ -220,7 +234,8 @@ Needs `discover --with-cfg`. Disambiguate overloaded symbols with `--file` / `--
 | No `.rgctl/` in repo | Run `cd repo && rgctl discover .` |
 | `status` shows `index_current=false` | Run `rgctl update` once (works under `serve --watch` via queue); do **not** full rediscover |
 | blast-radius / callers empty for a file that exists on disk | `rgctl update --files <path>` once, retry query; then fall back to reading source |
-| slice/inspect/cpg fails | Re-discover with `--with-cfg` |
+| `slice` / `cpg flows` fails | Confirm `--line` is inside a function body; retry (lazy append). Reserve rediscover `--with-cfg` for mutations/taint/inspect |
+| inspect / `cpg mutations` / sink-first taint fails | Re-discover with `--with-cfg` |
 | vuln analyze / sink-first taint weak (`cfg_available=false`) | Re-discover with `--with-cfg` (add `--with-taint` for PDG confidence) |
 | semantic query fails | `semantic index` |
 | Ambiguous symbol | Add `--file` / `--class` / `--line` (inspect/cpg/blast-radius/find/callers); read `candidates` + `recovery_command` under `-f json` |

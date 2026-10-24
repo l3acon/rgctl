@@ -126,14 +126,23 @@ rgctl -r example/coolstore -f json semantic query "order processing" \
   --limit 10 --candidate-pool 200
 ```
 
-### 5. Community-Scoped Search
+### 5. Diffusion, expansion, and community scope
 
-Search within a specific scope. Community-scoped search finds entire communities relevant to your query:
+Index with optional call-graph Jacobi diffusion, then query with neighborhood expansion or community scope:
 
 ```bash
+rgctl -r example/coolstore semantic index --diffuse
+
+rgctl -r example/coolstore -f json semantic query "validate JWT bearer token" \
+  --expand neighbors --expand-depth 2 --limit 10
+
 rgctl -r example/coolstore -f json semantic query "checkout" \
   --scope community --limit 10
 ```
+
+`--diffuse` spreads embedding mass along `Calls` edges at index time. `--expand` late-fuses call / blast-radius neighbors into the result set after Hamming + keyword fusion. `--scope community` ranks whole communities whose members match the query.
+
+Default compiled embedder family is **`vocab-accumulate-v1`** (FNV token table); builds with a distilled matrix may report **`vocab-accumulate-v2`** in banners / `model_id` (same CLI surface).
 
 ### 6. Document-Scoped Search
 

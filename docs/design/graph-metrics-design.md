@@ -12,8 +12,8 @@
 
 | Goal | How |
 |------|-----|
-| Find architectural hotspots | PageRank + betweenness on call graph |
-| Migration batching | Communities (label propagation) + harmonic centrality |
+| Find architectural hotspots | Pull-based CSR `FastPageRank` + `SampledBetweenness` on call graph |
+| Migration batching | Fast-Leiden communities + harmonic centrality |
 | Agent ranking | `-f json metrics --pagerank` |
 | Dashboard sort/filter | WASM-paginated function table |
 
@@ -55,11 +55,12 @@ flowchart TB
 
 | Metric | Meaning | Used in |
 |--------|---------|---------|
-| **PageRank** | Global importance in call graph | Functions tab, migration α term |
-| **Betweenness** | Bridge / bottleneck score | Functions tab, policy cascade hazard |
-| **Harmonic** | Reachability closeness | Functions tab, migration β term |
-| **Communities** | Label-propagation clusters | Graph colors, migration Louvain vote |
+| **PageRank** | Global importance (`FastPageRank`, dual-track Calls vs structural; default `NodeRole::Production` hotspots) | Functions tab, migration α term |
+| **Betweenness** | Bridge / bottleneck (`SampledBetweenness`, $K=256$) | Functions tab, policy cascade hazard |
+| **Harmonic** | Reachability closeness (`HyperBallHarmonic`, `--with-harmonic`) | Functions tab, migration β term |
+| **Communities** | Fast-Leiden clusters (+ $\mu+4\sigma$ hub strip) | Graph colors, migration community vote |
 | **Blast score** | Precomputed impact (per function) | Functions tab, migration γ term |
+| **Git churn** | Recency-weighted hotspot + `CoChangesWith` (after `discover --with-git`) | `metrics --churn` |
 
 Background: [harmonic-centrality.md](../harmonic-centrality.md), [migration-algorithms.md](../migration-algorithms.md), [internal/profile.md](../internal/profile.md) (cold-profile corpora and timings).
 
@@ -72,8 +73,9 @@ Discover applies **adaptive centrality gating** and a **columnar write path** so
 | Concern | Behavior |
 |---------|----------|
 | Centrality storage | Flat `Vec` → `AnalysisResults::CentralityTable` (no UUID `HashMap` on discover) |
-| PageRank (V > 500k) | 8 iterations, ε=1e-4 |
+| `FastPageRank` (V > 500k) | 8 iterations, ε=1e-4; dual-track Calls vs `STRUCTURAL_EDGE_TYPES`; default hotspots filter `NodeRole::Production` |
 | HyperBall harmonic (V > 500k) | 8 rounds, **Rayon-parallel** node scatter |
+| `SampledBetweenness` | $K=256$ degree-stratified Brandes pivots (exact Brandes when V small) |
 | `function_metrics.json` | **`sparse_mode: "community_only"`** — empty rows; use WASM + metagraph |
 | `metagraph.json` | Package-level aggregates only (`member_indices` omitted at scale) |
 | Dashboard export | In-memory `AnalysisResults` via `DashboardExportContext` (no reload per stage) |
@@ -86,13 +88,20 @@ Discover applies **adaptive centrality gating** and a **columnar write path** so
 
 ## 3.1 Community detection naming
 
-**Naming first:** rgctl does **not** run the Leiden algorithm today. What ships is **label propagation** ([Raghavan et al., 2007](https://doi.org/10.1103/PhysRevE.76.036106)) with Newman modularity scoring, plus hub stripping and deterministic tie-breaking. Docs and UI still say “Louvain” in places (`louvain_community_id`, migration layout colors), and [`.github/TASK_PLAN.md`](../../.github/TASK_PLAN.md) lists Leiden as planned but unimplemented.
+**What ships:** **Fast-Leiden** on CSR `FlatGraphIndex` ([Traag, Waltman & van Eck, 2019](https://doi.org/10.1038/s41598-019-41695-z)) — not Raghavan label propagation and not the classic Louvain library. Pipeline:
+
+0. **$\mu + 4\sigma$ `HubStripPolicy`** — isolate ubiquitous utilities into `"Shared / Infrastructure"` (`infrastructure_community_id`)
+1. **Queue-based local moving** — modularity gain $\Delta Q$ with deterministic tie-breaking
+2. **BFS connected-subgraph refinement** (`refine_partition`) — guarantees 0 disconnected communities
+3. **Super-node coarsening** — aggregate and repeat until modularity converges
+
+JSON / dashboard field names like `louvain_community_id` are **historical schema labels only**; they store Fast-Leiden community ids for backward compatibility.
 
 | Name in repo | What it actually is |
 |--------------|---------------------|
-| `CommunityDetector` | Label propagation on `Calls` + `Uses` |
-| “Louvain” in dashboard / migration | Majority vote of label-propagation ids (layout color only) |
-| Leiden (task 2.1.1) | **Not implemented** |
+| `CommunityDetector` | Fast-Leiden on `Calls` + `Uses` (+ `References` when present) |
+| “Louvain” / `louvain_community_id` | Historical field / layout color — majority vote of Fast-Leiden ids |
+| Label propagation (Raghavan) | **Not** what ships (superseded by Fast-Leiden) |
 
 Implementation: [`crates/rgctl-analysis/src/community.rs`](../../crates/rgctl-analysis/src/community.rs). For migration batching, the dashboard uses **package/module macro nodes**; community ids mainly drive graph coloring and cluster-aware layout, not the primary schedule order.
 
@@ -102,9 +111,10 @@ Implementation: [`crates/rgctl-analysis/src/community.rs`](../../crates/rgctl-an
 
 | Component | Path |
 |-----------|------|
-| Centrality | `crates/rgctl-analysis/src/centrality.rs`, `centrality_approx.rs` |
-| Communities | `crates/rgctl-analysis/src/community.rs` |
+| Centrality | `crates/rgctl-analysis/src/centrality.rs` (`FastPageRank`, `NodeRole`), `centrality_approx.rs` (`SampledBetweenness`) |
+| Communities | `crates/rgctl-analysis/src/community.rs` (Fast-Leiden + `HubStripPolicy`) |
 | Harmonic | `crates/rgctl-analysis/src/centrality_approx.rs` (`HyperBallHarmonic`) |
+| Git churn | `crates/rgctl-analysis/src/git_churn.rs` |
 | Persist | `crates/rgctl-analysis/src/results.rs` |
 | CLI | `src/cli/metrics.rs` |
 | Dashboard export | `crates/rgctl-dashboard/src/export_context.rs`, `function_metrics_export.rs` |
@@ -120,7 +130,7 @@ Implementation: [`crates/rgctl-analysis/src/community.rs`](../../crates/rgctl-an
 | Sort | Column headers PR / BC / Harm / Blast |
 | Tooltips | `FUNCTION_COLUMN_TOOLTIPS` in `functionListUtils.ts` |
 
-Graph tab uses `communities.json` / metagraph community colors for package view (label-propagation ids; see [§3.1 Community detection naming](#31-community-detection-naming)).
+Graph tab uses `communities.json` / metagraph community colors for package view (Fast-Leiden ids; see [§3.1 Community detection naming](#31-community-detection-naming)).
 
 ---
 
@@ -128,13 +138,16 @@ Graph tab uses `communities.json` / metagraph community colors for package view 
 
 ```bash
 rgctl discover .
+rgctl discover . --with-git          # optional: git_churn.json + CoChangesWith
 rgctl metrics
 rgctl -f json metrics --pagerank --iterations 50
+rgctl -f json metrics --pagerank --include-tests   # include Test / Generated roles
 rgctl -f json metrics --betweenness
 rgctl -f json metrics --communities
+rgctl -f json metrics --churn        # after discover --with-git
 ```
 
-`discover` already computes core metrics; `metrics` re-emits them as JSON without re-indexing.
+`discover` already computes core metrics; `metrics` re-emits them as JSON without re-indexing. Default PageRank hotspots filter to production `NodeRole`; pass `--include-tests` to include tests.
 
 ---
 

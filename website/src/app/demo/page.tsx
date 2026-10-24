@@ -18,8 +18,11 @@ export default function DemoPage() {
       </h1>
       <p className="mt-3 max-w-2xl text-[var(--body)]">
         Interactive agent scenarios first — prompt → tool call → schema-aligned
-        JSON → reasoning. Recorded CLI and dashboard walkthroughs below. Prefer
-        the ecommerce-java fixture when you run commands locally.
+        JSON → reasoning (blast-radius, Fast-Leiden communities, lazy{" "}
+        <code className="font-mono text-sm">slice</code>, fragment clones,{" "}
+        <code className="font-mono text-sm">review check</code>). Recorded CLI
+        and dashboard walkthroughs below. Prefer the ecommerce-java fixture when
+        you run commands locally.
       </p>
 
       <h2 className="mt-10 text-2xl tracking-tight text-[var(--ink)]">

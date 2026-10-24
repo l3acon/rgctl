@@ -256,7 +256,7 @@ rgctl -f json clones --mode fragment --seed "src/payment.rs:40-65"
 ```
 
 #### `rgctl semantic <index|query|distill>`
-1-bit quantized binary Hamming semantic search with compiled vocabulary embeddings (`vocab-accumulate-v1`), optional call-graph Jacobi diffusion (`--diffuse`), late multi-signal rank fusion, and call/blast-radius neighborhood expansion (`--expand`):
+1-bit quantized binary Hamming semantic search with compiled vocabulary embeddings (`vocab-accumulate-v1`; distilled builds may report `vocab-accumulate-v2`), optional call-graph Jacobi diffusion (`--diffuse`), late multi-signal rank fusion, and call/blast-radius neighborhood expansion (`--expand`):
 ```bash
 rgctl semantic index --diffuse
 rgctl -f json semantic query "validate JWT bearer token" --expand neighbors --expand-depth 2

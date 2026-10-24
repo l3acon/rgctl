@@ -2,11 +2,11 @@
 
 ## Summary
 
-`rgctl` is a high-performance Rust code knowledge graph for LLM agents: tree-sitter extraction, typed relations, mmap snapshots, blast-radius / communities / CPG, and JSON-first CLI (`-f json`).
+`rgctl` is a high-performance Rust code knowledge graph for LLM agents: tree-sitter extraction, typed relations, mmap snapshots (RGCL v2), blast-radius / Fast-Leiden communities / Hybrid CPG, and JSON-first CLI (`-f json`).
 
 **Your goal when contributing here:** preserve ingest scale, query correctness, memory discipline, and deterministic artifacts under `.rgctl/` — not add convenience at the cost of Tokio blocking, whole-repo clones, or ungated cold regressions.
 
-> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [docs/guides/agent-skill.md](docs/guides/agent-skill.md).
+> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [docs/guides/agent-skill.md](docs/guides/agent-skill.md) and the [CLI command reference](docs/guides/cli-command-reference.md).
 
 ---
 
@@ -30,10 +30,10 @@
 
 ## Context & architecture
 
-- **Discover** walks the tree, runs language plugins (tree-sitter), builds the graph, writes compact caches to `.rgctl/`.
-- **Query** paths are read-oriented and return versioned JSON (`schema_version` on stdout — never scrape stderr).
-- **Analysis** (`rgctl-analysis`) projects CSR / callgraph / centrality / blast-radius / CFG–PDG; see [docs/analysis-architecture.md](docs/analysis-architecture.md).
-- **Languages:** `crates/rgctl-lang-*` + `rgctl-plugin-api`; register in `languages.toml`. See **Grammar bumps** under Must-follow for AST coverage manifests. Adding a language: [docs/language-testing-guide.md](docs/language-testing-guide.md) (where to put tests / what to assert).
+- **Discover** walks the tree, runs language plugins (tree-sitter), builds the graph, writes compact caches to `.rgctl/` (`graph.snapshot.bin`). Optional overlays: `--scip`, `--with-git` (churn / `CoChangesWith`); multi-repo: `rgctl merge`.
+- **Query** paths are read-oriented and return versioned JSON (`schema_version` on stdout — never scrape stderr). Canonical verbs: `find` / `callers` / `callees` / `relations` / `inventory` (see [cli-command-reference.md](docs/guides/cli-command-reference.md)).
+- **Analysis** (`rgctl-analysis`) projects CSR / callgraph / FastPageRank / Fast-Leiden communities / blast-radius / lazy v3 CFG–PDG (`slice`, `cpg flows`); see [docs/analysis-architecture.md](docs/analysis-architecture.md).
+- **Languages:** `crates/rgctl-lang-*` + `rgctl-plugin-api`; register in `languages.toml` (~60 plugins; Tier-1 deep-analysis languages additionally ship `*-ast-coverage.json`). See **Grammar bumps** under Must-follow. Adding a language: [docs/language-testing-guide.md](docs/language-testing-guide.md).
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-In modern applications, control flow and service wiring are often declared through framework annotations, decorators, type extractors, and Dependency Injection (DI) containers rather than explicit function calls. During `discover`, rgctl automatically runs a compiled **Framework & DI extraction pass** (`frameworks.bin`) that turns these declarative patterns into first-class graph edges (`ExposesRoute` and `Injects`) and enriches matched symbols with semantic vocabulary tags (`framework_tags` and `semantic_tags`).
+In modern applications, control flow and service wiring are often declared through framework annotations, decorators, type extractors, and Dependency Injection (DI) containers rather than explicit function calls. During `discover`, rgctl automatically runs a compiled **Framework & DI extraction pass** — build-time **`frameworks.bin` (`RBFW` v2)** catalog covering Spring, JAX-RS, Quarkus, Micronaut, FastAPI, Flask, Django, Express, NestJS, Next.js, Gin, Echo, Actix, Axum, Rails, Laravel, ASP.NET Core, and more — that turns these declarative patterns into first-class graph edges (`ExposesRoute`, `Injects`, `Provides`, `WiredBy`) and enriches matched symbols with semantic vocabulary tags (`framework_tags` and `semantic_tags`).
 
 You can then inspect HTTP/RPC endpoints and DI dependencies deterministically with `relations`, `find`, and `inventory`, or search for architectural roles in plain English with `semantic query` (e.g., *"hey give me all my end points"*, *"give me all my controllers"*, or *"give me all my reflection classes"*).
 
@@ -60,12 +60,12 @@ rgctl -r example/coolstore -f json inventory --by edge | jq '.counts[] | select(
 - **`exposesroute`** -- 6 distinct HTTP route endpoints are exposed by REST controller methods in CoolStore.
 - **`injects`** -- 8 dependency injection edges connect classes/constructors/fields to their injected service providers.
 
-### 2. List All Exposed HTTP Endpoints (`exposes-route`)
+### 2. List All Exposed HTTP Endpoints (`exposesroute`)
 
-Use `relations --edge exposes-route` to list every route handler and the canonical HTTP verb + path it exposes:
+Use `relations --edge exposesroute` (lowercase CLI token) to list every route handler and the canonical HTTP verb + path it exposes:
 
 ```bash
-rgctl -r example/coolstore -f json relations --edge exposes-route --limit 10
+rgctl -r example/coolstore -f json relations --edge exposesroute --limit 10
 ```
 
 **Output (top edges):**
@@ -292,7 +292,7 @@ On the next `rgctl discover`, rgctl hashes `.rgctl/frameworks.d/*.toml` with BLA
 |----------|------------------------------------------|----------------------------------|---------------------------------------------|
 | **Python** | FastAPI (`@app.get`, `@router.post`), Flask (`@app.route`, `add_url_rule`), Django (`path`, `re_path`), Litestar | FastAPI `Depends(...)`, `Security(...)` (`Annotated[T, Depends(...)]`) | `getattr`, `setattr`, `import_module`, `__subclasses__` |
 | **TypeScript / JS** | NestJS (`@Controller` + `@Get`/`@Post`/…), Express / Fastify / Hono (`app.get("/...", handler)`) | NestJS / Angular `@Injectable()`, `@Controller()` constructor DI, `@Inject(TOKEN)` | `@Controller`, `@Injectable`, `Reflect.getMetadata`, `Reflect.defineMetadata` |
-| **Java / Kotlin** | Spring Web (`@RequestMapping`, `@GetMapping`, `@PostMapping`, …), JAX-RS / Quarkus (`@Path`, `@GET`, `@POST`) | Spring / Jakarta / Dagger (`@Autowired`, `@Inject`, `@Resource`, `@Value`, implicit constructor DI on `@Service`/`@RestController`/`@Component`/`@Repository`) | `@RestController`, `@Controller`, `@Service`, `@Repository`, `Class.forName`, `getDeclaredMethod`, `Method.invoke` |
+| **Java / Kotlin** | Spring Web (`@RequestMapping`, `@GetMapping`, `@PostMapping`, …), JAX-RS / Quarkus / Micronaut (`@Path`, `@GET`, `@POST`, `@Controller`) | Spring / Jakarta / Micronaut / Dagger (`@Autowired`, `@Inject`, `@Resource`, `@Value`, implicit constructor DI on `@Service`/`@RestController`/`@Component`/`@Repository`) | `@RestController`, `@Controller`, `@Service`, `@Repository`, `Class.forName`, `getDeclaredMethod`, `Method.invoke` |
 | **Rust** | Axum (`.route("/...", get(handler))`), Actix-Web / Rocket (`#[get("/...")]`, `#[post("/...")]`, `#[route(...)]`) | Axum `State<T>`, `Extension<T>`; Actix `web::Data<T>` (unwrapping `Arc<T>`) | `std::any::Any`, `TypeId::of`, `downcast_ref` |
 | **Go** | Gin / Echo / Chi / Fiber (`r.GET`, `e.POST`, `mux.HandleFunc`) | Uber Fx / Google Wire (`fx.Invoke`, `fx.Provide`, `wire.Build`) | `reflect.TypeOf`, `reflect.ValueOf`, `MethodByName` |
 | **C#** | ASP.NET Core (`[Route]`, `[HttpGet]`, `[HttpPost]`, `MapGet`, `MapPost`) | `[FromServices]`, constructor DI on `[ApiController]` | `[ApiController]`, `System.Reflection`, `Activator.CreateInstance` |
@@ -307,7 +307,7 @@ This section documents the internal design of the declarative framework catalog 
 
 ### 1. Architecture Overview
 
-Rather than hardcoding framework-specific visitor branches inside 20+ language plugins, rgctl compiles declarative `frameworks/<lang>.toml` files into an embedded binary blob (`OUT_DIR/frameworks.bin`) at build time — the same pattern used by `vocab_matrix.bin` in `rgctl-analysis`.
+Rather than hardcoding framework-specific visitor branches inside 20+ language plugins, rgctl compiles declarative `frameworks/<lang>.toml` files into an embedded **`frameworks.bin` (`RBFW` v2)** catalog at build time (`OUT_DIR/frameworks.bin`) — the same pattern used by `vocab_matrix.bin` in `rgctl-analysis`. Repo-local overlays merge into `.rgctl/cache/frameworks.bin`.
 
 ```mermaid
 flowchart TB

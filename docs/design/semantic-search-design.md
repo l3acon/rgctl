@@ -134,6 +134,7 @@ rgctl semantic index --incremental      # reuse unchanged code_hash rows
 rgctl -f json semantic query "shopping cart checkout" --limit 10
 rgctl -f json semantic query "OrderService" --keyword-and
 rgctl -f json semantic query "auth login" --expand neighbors --expand-depth 2
+rgctl -f json semantic query "shopping cart" --scope community
 # Fusion is on by default; use --no-fusion for pure Hamming
 
 rgctl serve --open   # dashboard Search tab + /api/semantic/*
@@ -142,7 +143,7 @@ rgctl serve --open   # dashboard Search tab + /api/semantic/*
 Index-only flags: `--embedder`, `--dimensions`, `--model`, `--tokenizer`, `--embed-bodies`, `--incremental`,
 `--diffuse` / `--no-diffuse`, `--diffuse-alpha`, `--diffuse-iters`, `--diffuse-bidirectional`.
 
-Query flags: `--no-fusion` (fusion is on by default), `--keyword-and`, `--candidate-pool`, `--expand`, `--expand-depth`.
+Query flags: `--no-fusion` (fusion is on by default), `--keyword-and`, `--candidate-pool`, `--expand`, `--expand-depth`, `--scope community` (pool member embeddings over Fast-Leiden clusters).
 
 ```bash
 # Neural extra / hash CI
@@ -196,6 +197,6 @@ DASHBOARD_URL=http://127.0.0.1:8080/ node dashboard/scripts/record-feature-demo.
 ## 10. Related docs
 
 - [Blast radius design](blast-radius-design.md) — fusion blast term + hybrid `--expand blast`
-- [Graph metrics design](graph-metrics-design.md) — PageRank centrality term
+- [Graph metrics design](graph-metrics-design.md) — FastPageRank centrality term + Fast-Leiden communities (`--scope community`)
 - [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md) — `/api/semantic/*`
 - [CLI / JSON API](../json-api.md) — semantic JSON shapes

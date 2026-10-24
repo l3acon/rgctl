@@ -9,8 +9,8 @@ The `clones` command detects duplicated code across your repository. Unlike whol
 | Mode | Target | Technique | Guarantee | Schema |
 |------|--------|-----------|-----------|--------|
 | **`exact`** | Whole function | BLAKE3 `code_hash` equality | Type-1 exact body match | v1 |
-| **`bloom`** | Whole function | 256-bit `token_bloom` LSH bands + Jaccard | Type-2 similarity candidate | v1 |
-| **`fragment`** | Sub-function | CFG SESE hammocks + 1-WL canonical hash | Type-2 structural match ($3 \le |S| \le 15$) | v2 |
+| **`bloom`** | Whole function | 256-bit `token_bloom` LSH bands (64-bit band keys) + Jaccard | Type-2 similarity candidate | v1 |
+| **`fragment`** | Sub-function | SESE hammocks + 2-iter 1-WL canonical hash | Type-3/4 structural match ($3 \le |S| \le 15$) | v2 |
 
 > [!NOTE]
 > **Clone detection vs. Semantic search:** `clones` answers *"Where else is this exact code or control-flow fragment copied?"* by grouping implementations against each other. Conversely, `semantic query` answers *"Which functions implement this natural-language intent?"* via dense embedding nearest neighbors.
@@ -44,7 +44,7 @@ flowchart TD
 2. **Weisfeiler-Lehman (1-WL) Canonical Hashing:** Subgraphs are assigned invariant 64-bit structural hashes using 2 iterations of 1-WL color refinement ([`crates/rgctl-analysis/src/wl_hash.rs`](../../crates/rgctl-analysis/src/wl_hash.rs)). Statements are categorized into normalized kinds (`If`, `Loop`, `Call`, `Assign`, `Decl`, `Return`) and combined with directed edge tags (`Next`, `IfTrue`, `IfFalse`, Def-Use). Renaming variables, adding comments, or reformatting whitespace does not alter the hash.
 3. **Two-Stage Filtering:**
    - **Stage 1 (Bitwise Pre-Filter):** Evaluates `(func.bloom & seed_bloom) == seed_bloom` in $\mathcal{O}(N)$ bitwise time across all functions in `graph.snapshot.bin`, pruning $>95\%$ of functions before any parsing occurs.
-   - **Stage 2 (CFG Matching):** Evaluates candidate functions by reading from `.rgctl/analysis/cfg_pdg.archive.bin` (if built with `--with-cfg`) or performing fast, ephemeral tree-sitter parses.
+   - **Stage 2 (CFG Matching):** Evaluates candidate functions by reading the v3 CFG/PDG archive (`.rgctl/analysis/cfg_pdg.bin` / `cfg_pdg.archive.bin` when pre-built with `discover --with-cfg`) or performing fast, ephemeral tree-sitter parses. Fragment mode does **not** require a whole-repo `--with-cfg` upfront.
 
 ---
 
@@ -55,10 +55,12 @@ flowchart TD
 Clone detection queries the pre-built snapshot. CoolStore examples use `-l java`:
 
 ```bash
-rgctl -r example/coolstore discover . -l java --with-cfg
+rgctl -r example/coolstore discover . -l java
+# Optional: pre-build CFG archive for faster fragment Stage 2
+# rgctl -r example/coolstore discover . -l java --with-cfg
 ```
 
-`--with-cfg` enables fast-path CFG loading from the archive during fragment queries.
+Exact and bloom modes need only the structural snapshot. Fragment Stage 2 prefers the CFG archive when present, otherwise parses on demand.
 
 ---
 

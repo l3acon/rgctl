@@ -1,8 +1,8 @@
 # Community query & naming — Implementation plan
 
-**Goal:** Make label-propagation communities **queryable** and **human-named** (Graphify-style sidebar UX) without writing community labels or membership edges into the topology graph.
+**Goal:** Make **Fast-Leiden** communities **queryable** and **human-named** (Graphify-style sidebar UX) without writing community labels or membership edges into the topology graph.
 
-**Non-goals (this plan):** Leiden algorithm; stamping `community_id` / `MEMBER_OF` into `graph.snapshot.bin`; requiring an LLM for v1.
+**Non-goals (this plan):** Stamping `community_id` / `MEMBER_OF` into `graph.snapshot.bin`; requiring an LLM for v1. (Community **detection** itself ships as Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [graph-metrics-design.md §3.1](graph-metrics-design.md#31-community-detection-naming); this plan covers naming/query overlays only.)
 
 **Related:** [graph-metrics-design.md](graph-metrics-design.md) (community detection naming), [structured-query guide](../guides/structured-query.md), [semantic-search-design.md](semantic-search-design.md), [analysis-architecture.md](../analysis-architecture.md).
 
@@ -54,7 +54,7 @@ Ship P0→P2 before investing in LLM naming.
 ## 3. Phase 0 — Named communities in the dashboard (quick UX win)
 
 ### Problem
-`detect_communities` / `build_dashboard_community` already infer labels (path prefix, token frequency, `"Infrastructure / Common Library"`), but `rgctl_dashboard::communities::summarize_communities` hardcodes `format!("Community {cid}")`.
+`detect_communities` / `build_dashboard_community` already infer labels (path prefix, token frequency, `"Shared / Infrastructure"` for hub-stripped utilities), but historically `rgctl_dashboard::communities::summarize_communities` hardcoded `format!("Community {cid}")`.
 
 ### Steps
 
@@ -67,7 +67,7 @@ Ship P0→P2 before investing in LLM naming.
    - Option B (lighter): compute labels only during dashboard export from graph + assignments (no schema bump) — acceptable for P0 if discover already hydrates for `--with-dashboard`
 3. **Fix export** — In `crates/rgctl-dashboard/src/communities.rs`, set `CommunitySummary.label` from the label builder / analysis, not `Community {id}`.
 4. **UI check** — Graph tab community legend / filters show the new strings; colors unchanged (`community_color_hex`).
-5. **Tests** — Unit test: two clusters with `login`/`logout` vs `get_user`/`list_users` → distinct non-placeholder labels; infra hub → `"Infrastructure / Common Library"`.
+5. **Tests** — Unit test: two clusters with `login`/`logout` vs `get_user`/`list_users` → distinct non-placeholder labels; infra hub → `"Shared / Infrastructure"`.
 6. **Docs** — Note in [dashboard-user-guide.md](../dashboard-user-guide.md) that community names are heuristic.
 
 ### Acceptance

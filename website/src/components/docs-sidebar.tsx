@@ -8,9 +8,11 @@ export const DOCS_NAV: NavSection[] = [
   {
     title: "Start Here & Agent Setup",
     links: [
+      { href: "/docs/guides/cli-command-reference/", label: "CLI command reference" },
       { href: "/docs/guides/discovering-and-indexing/", label: "Discovering and indexing" },
       { href: "/docs/guides/agent-skill/", label: "Agent pack" },
       { href: "/docs/guides/structured-query/", label: "Structured graph queries" },
+      { href: "/docs/guides/dependency-injection-and-frameworks/", label: "DI and frameworks" },
       { href: "/docs/guides/watch-mode/", label: "Watch mode and incremental update" },
     ],
   },

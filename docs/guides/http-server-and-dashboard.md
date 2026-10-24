@@ -20,7 +20,8 @@ This guide uses the **CoolStore** (`example/coolstore`). `rgctl serve` can start
 CoolStore examples use `-l java` to index the Java backend only (skip Angular/bower).
 
 ```bash
-rgctl -r example/coolstore discover -l java --with-cfg --with-dashboard
+rgctl -r example/coolstore discover -l java --with-dashboard
+# Optional: --with-cfg for CFG previews in the dashboard
 rgctl -r example/coolstore serve --no-pipeline --open
 ```
 

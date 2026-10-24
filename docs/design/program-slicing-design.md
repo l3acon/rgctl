@@ -16,8 +16,9 @@
 | CLI automation | `rgctl slice FILE --line N --variable V` |
 | Dashboard exploration | WASM `compute_slice` on exported PDG bundles |
 | Security cross-check | `--taint` mode shares taint engine paths |
+| Lazy archive fill | `ensure_cfg_pdg_for_source` when the function is missing from v3 `cfg_pdg.archive.bin` |
 
-Requires `discover --with-cfg` (and `--with-taint` for discover-time taint) for PDG archives and dashboard export.
+**No upfront `discover --with-cfg` required for `rgctl slice`:** if the target function is absent from `.rgctl/analysis/cfg_pdg.archive.bin`, slice builds that function’s CFG/PDG (lexical `(name, scope_id)` reaching defs) and atomically appends its `TocEntry`. Whole-repo `rgctl taint --sink` and `rgctl cpg mutations` still require `discover --with-cfg`. Dashboard export of slice bundles still benefits from a prior `--with-cfg` / `--with-taint` discover.
 
 ---
 
@@ -25,11 +26,12 @@ Requires `discover --with-cfg` (and `--with-taint` for discover-time taint) for 
 
 ```mermaid
 flowchart LR
-  subgraph discover["discover --with-cfg"]
-    CFG[CFG per function]
-    PDG[PDG per function]
-    ARC[cfg_pdg.archive.bin]
-    CFG --> PDG --> ARC
+  subgraph sources["CFG/PDG sources"]
+    DISC["discover --with-cfg (full archive)"]
+    LAZY["ensure_cfg_pdg_for_source (single fn)"]
+    ARC["cfg_pdg.archive.bin v3 TOC"]
+    DISC --> ARC
+    LAZY --> ARC
   end
 
   subgraph export["Dashboard export"]
@@ -40,9 +42,9 @@ flowchart LR
   end
 
   subgraph runtime["Query"]
-    CLI[slice CLI — reads source + PDG]
+    CLI[slice / cpg flows]
     WASM[worker compute_slice]
-    CLI --> PDG
+    CLI --> ARC
     WASM --> SB
   end
 ```
@@ -56,8 +58,10 @@ flowchart LR
 | `file` | Source path (read from disk at CLI; bundled in dashboard) |
 | `--line` | 1-based line number |
 | `--variable` | Variable name at criterion |
-| `--function` | Enclosing **method** name (disambiguation) |
+| `--function` | Optional enclosing **method** name; when omitted, innermost enclosing function at `file:line` is resolved |
 | `--direction` | `backward` (default) or `forward` |
+| `--with-alias` | Expand criterion via may-alias (copies / field bases) |
+| `--taint` | Taint-aware slice path |
 
 ---
 
@@ -66,9 +70,9 @@ flowchart LR
 | Component | Path |
 |-----------|------|
 | CFG construction | `crates/rgctl-analysis/src/cfg.rs` |
-| PDG + slicing | `crates/rgctl-analysis/src/pdg.rs`, `slicing.rs` |
+| PDG + slicing | `crates/rgctl-analysis/src/pdg.rs`, `slicing.rs`, `dataflow.rs` |
+| Lazy archive append | `crates/rgctl-analysis/src/cfg_pdg_archive.rs` (`ensure_cfg_pdg_for_source`) |
 | CLI | `src/cli/slice.rs` |
-| Archive storage | `crates/rgctl-analysis/src/storage.rs` |
 | Dashboard export | `crates/rgctl-dashboard/src/slice_export.rs` |
 
 ---
@@ -87,10 +91,15 @@ flowchart LR
 ## 6. CLI usage
 
 ```bash
-rgctl discover . --cfg
+# No discover --with-cfg required — lazy single-function append into cfg_pdg.archive.bin
+rgctl slice src/Foo.java --line 42 --variable cart
 rgctl slice src/Foo.java --line 42 --variable cart --function checkOut
 rgctl -f json slice src/Foo.java --line 10 --variable req --direction forward
+rgctl slice src/Foo.java --line 8 --variable input --with-alias
 rgctl slice src/Foo.java --line 8 --variable input --taint
+
+# Optional whole-repo prebuild for dashboard / taint --sink / cpg mutations
+rgctl discover . --with-cfg --with-taint
 ```
 
 ---
