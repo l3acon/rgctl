@@ -10,13 +10,17 @@ static DASHBOARD_DIST_V2: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../dash
 /// Root directory name under `.rgctl/`.
 pub const DASHBOARD_DIR_NAME: &str = "dashboard";
 
-/// Selects the v2 bundle. Temporary and internal: there is deliberately **one** user-facing flag
-/// (`--with-dashboard`), and this exists only while v1 and v2 both ship. It goes away when v2 is what
-/// that flag serves.
-///
-/// An environment variable rather than a CLI flag, because a flag is a promise to users and this is not
-/// one — "run the other dashboard" is a development affordance, not a feature.
+/// Selects the v2 bundle. Kept as a development affordance: the user-facing switch is now
+/// `--with-universe`, and the v2 bundle is what it serves.
 pub const DASHBOARD_V2_ENV: &str = "RGCTL_DASHBOARD_V2";
+
+/// Serves the pre-universe dashboard for one release.
+///
+/// `--with-dashboard` no longer produces v1 — it routes to the universe and says it is deprecated
+/// (issue #61). But v1 is still the only place `Migration` and `Taint` render, so removing it in the
+/// same release as the swap would ship a binary with fewer reachable views than the one before it.
+/// This hatch is documented, is removed next release together with v1's app and bundle.
+pub const DASHBOARD_LEGACY_ENV: &str = "RGCTL_DASHBOARD_LEGACY";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BundleVersion {
@@ -24,16 +28,33 @@ pub enum BundleVersion {
     V2,
 }
 
-/// Pure, so it can be tested without mutating process-global state.
-fn version_from_env(value: Option<&str>) -> BundleVersion {
+fn truthy(value: Option<&str>) -> bool {
     match value {
-        Some(v) if !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false") => BundleVersion::V2,
-        _ => BundleVersion::V1,
+        Some(v) => !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"),
+        None => false,
     }
 }
 
+/// Which bundle to extract.
+///
+/// **The universe is the default**, because both flags now mean it: `--with-universe` is the flag, and
+/// `--with-dashboard` routes to it while warning (issue #61). The only way to get v1 is the documented
+/// one-release hatch, which is checked first so a regression can be worked around without a rebuild.
+///
+/// Pure, so it can be tested without mutating process-global state.
+fn version_from_env(legacy: Option<&str>, universe: Option<&str>) -> BundleVersion {
+    if truthy(legacy) {
+        return BundleVersion::V1;
+    }
+    let _ = universe;
+    BundleVersion::V2
+}
+
 pub fn selected_version() -> BundleVersion {
-    version_from_env(std::env::var(DASHBOARD_V2_ENV).ok().as_deref())
+    version_from_env(
+        std::env::var(DASHBOARD_LEGACY_ENV).ok().as_deref(),
+        std::env::var(DASHBOARD_V2_ENV).ok().as_deref(),
+    )
 }
 
 /// Short tag for the selected bundle, recorded in the manifest so a later run can tell which one produced
@@ -45,10 +66,29 @@ pub fn selected_version_tag() -> &'static str {
     }
 }
 
+/// What the extracted bundle is, recorded as `manifest.mode`.
+pub fn selected_mode() -> &'static str {
+    match selected_version() {
+        BundleVersion::V1 => "dashboard",
+        BundleVersion::V2 => "universe",
+    }
+}
+
 /// Whether the v2 bundle is available to this build (embedded, or on disk in a source checkout).
 pub fn v2_available() -> bool {
     let disk = dist_dir_for(BundleVersion::V2);
     disk_dist_complete(&disk) || embedded_dist_complete(&DASHBOARD_DIST_V2)
+}
+
+/// Say so when the legacy hatch is on, so nobody arrives at the old dashboard by accident.
+pub fn warn_if_legacy_selected() {
+    if selected_version() == BundleVersion::V1 {
+        eprintln!(
+            "note: {} is set, so the pre-universe dashboard is being served.\n  \
+             It is deprecated and is removed in the next release — unset it to get the universe.",
+            DASHBOARD_LEGACY_ENV
+        );
+    }
 }
 
 /// Say so when a bundle was requested that this build cannot serve.
@@ -240,13 +280,16 @@ mod tests {
 
     #[test]
     fn v2_is_opt_in_and_explicit() {
-        assert_eq!(version_from_env(None), BundleVersion::V1);
-        assert_eq!(version_from_env(Some("")), BundleVersion::V1);
-        assert_eq!(version_from_env(Some("0")), BundleVersion::V1);
-        assert_eq!(version_from_env(Some("false")), BundleVersion::V1);
-        assert_eq!(version_from_env(Some("FALSE")), BundleVersion::V1);
-        assert_eq!(version_from_env(Some("1")), BundleVersion::V2);
-        assert_eq!(version_from_env(Some("true")), BundleVersion::V2);
+        // the universe is the default now: neither flag nor variable needs to be set
+        assert_eq!(version_from_env(None, None), BundleVersion::V2);
+        assert_eq!(version_from_env(Some(""), Some("")), BundleVersion::V2);
+        assert_eq!(version_from_env(Some("0"), None), BundleVersion::V2);
+        assert_eq!(version_from_env(Some("false"), Some("0")), BundleVersion::V2);
+        assert_eq!(version_from_env(None, Some("1")), BundleVersion::V2);
+        // the one-release hatch is the only way back, and it wins over everything
+        assert_eq!(version_from_env(Some("1"), None), BundleVersion::V1);
+        assert_eq!(version_from_env(Some("true"), Some("1")), BundleVersion::V1);
+        assert_eq!(version_from_env(Some("TRUE"), None), BundleVersion::V1);
     }
 
     /// The v2 bundle is committed, so a fresh checkout must carry a complete one. The embed is the check.
@@ -302,14 +345,20 @@ mod tests {
         );
     }
 
-    /// Worker bundle must reference a `rgctl_wasm_bg-*.wasm` asset that exists in dist.
+    /// The v1 worker bundle must reference a `rgctl_wasm_bg-*.wasm` asset that exists in its dist.
+    ///
+    /// Pinned to **V1 explicitly**. It used to follow the selected version, which was harmless while v1 was
+    /// the default and became a false failure the moment the universe became what both flags produce: the
+    /// v2 bundle carries no engine worker yet (no v2 surface calls the WASM expander until the L2 drill-down
+    /// lands), so the assertion was asking a bundle for an asset it does not have.
     #[test]
     fn dist_worker_wasm_asset_exists() {
-        if !dist_embedded() {
+        let v1 = dist_dir_for(BundleVersion::V1);
+        if !(disk_dist_complete(&v1) || embedded_dist_complete(&DASHBOARD_DIST)) {
             eprintln!("skip: dashboard/dist not built");
             return;
         }
-        let assets = workspace_dist_dir().join("assets");
+        let assets = v1.join("assets");
         let worker = fs::read_dir(&assets)
             .map_err(|e| e.to_string())
             .unwrap()

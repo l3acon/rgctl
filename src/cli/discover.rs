@@ -34,7 +34,9 @@ pub struct DiscoverArgs {
     pub with_ast_skeleton: bool,
     /// Also write legacy JSON graph files (`graph.db` / `graph.json`).
     pub write_json_graph: bool,
-    /// Export `.rgctl/dashboard/` bundle. Default off.
+    /// Export the universe bundle into `.rgctl/dashboard/`. The v2 dashboard.
+    pub with_universe: bool,
+    /// Deprecated alias for `--with-universe`, routed in `run` and warned about there.
     pub with_dashboard: bool,
     /// Write a migration roadmap JSON after analysis completes.
     pub export_migration_hints: bool,
@@ -196,7 +198,20 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
             with_dfg_loops: args.with_dfg_loops,
             with_ast_skeleton: args.with_ast_skeleton,
             write_json_graph: args.write_json_graph,
-            with_dashboard: args.with_dashboard,
+            // The maintainer's instruction on #61: `--with-dashboard` keeps working, reports itself
+            // deprecated, and routes here. Removal is the next release, not this one — see
+            // docs/design/dashboard-v2.md, "the flag swap".
+            with_dashboard: {
+                if args.with_dashboard && !args.with_universe {
+                    eprintln!(
+                        "warn: `--with-dashboard` is deprecated and now produces the universe bundle.\n  \
+                         Use `--with-universe`. `--with-dashboard` will be removed in the next release.\n  \
+                         For one release the previous dashboard is still reachable with {}=1.",
+                        rgctl_dashboard::DASHBOARD_LEGACY_ENV
+                    );
+                }
+                args.with_dashboard || args.with_universe
+            },
             export_migration_hints: args.export_migration_hints,
             with_harmonic: args.with_harmonic,
             with_kantra: args.with_kantra,

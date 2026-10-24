@@ -21,7 +21,9 @@ mod slice_export;
 mod source_catalog;
 mod taint_export;
 
-pub use bundle::{DASHBOARD_DIR_NAME, default_dashboard_path, dist_embedded};
+pub use bundle::{
+    DASHBOARD_DIR_NAME, DASHBOARD_LEGACY_ENV, DASHBOARD_V2_ENV, default_dashboard_path, dist_embedded,
+};
 pub use communities::{COMMUNITIES_FILE, COMMUNITIES_SCHEMA_VERSION, CommunitiesPayload};
 pub use dataflow_export::{DATAFLOW_INDEX_FILE, DataflowExportSummary};
 pub use export_context::DashboardExportContext;
@@ -105,6 +107,7 @@ pub fn export_dashboard_bundle_if_changed_with_context(
     // Stated before the work rather than after it: a bundle that was requested and cannot be served is
     // worth saying at the start, not at the end of a long discover.
     bundle::warn_if_selection_unavailable();
+    bundle::warn_if_legacy_selected();
 
     let out_dir = bundle::default_dashboard_path(repo_root);
     let manifest_path = out_dir.join("manifest.json");

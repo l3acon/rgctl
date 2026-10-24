@@ -35,7 +35,8 @@
     "preact": "^10.25.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sigma": "^3.0.2"
+    "sigma": "^3.0.2",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.1",
@@ -44,6 +45,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^29.1.1",
     "playwright": "^1.61.1",
