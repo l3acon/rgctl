@@ -218,30 +218,7 @@ fn shorten_path_label(path: &str) -> String {
 }
 
 fn package_label_from_path(file_path: &str) -> String {
-    let path = file_path.replace('\\', "/");
-    if let Some(idx) = path.find("/java/") {
-        let after = &path[idx + 6..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    if let Some(idx) = path.find("/src/") {
-        let after = &path[idx + 5..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    std::path::Path::new(&path)
-        .parent()
-        .map(|p| p.to_string_lossy().replace('/', "."))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "root".into())
+    crate::migration::package_label(file_path)
 }
 
 fn find_common_path_prefix_strings(paths: &[String]) -> Option<String> {

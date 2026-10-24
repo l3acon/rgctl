@@ -209,32 +209,188 @@ struct MacroAgg {
     louvain_votes: HashMap<usize, u32>,
 }
 
-/// Derive a stable package / module label from a source file path.
+/// Derive a stable, host-independent package / module label from a source file path.
+///
+/// - Matches the innermost JVM source root (`src/main/java/`, `src/test/java/`, `src/main/kotlin/`,
+///   `src/test/kotlin/`, `src/main/scala/`, `src/test/scala/`, `java/`) via `rfind`.
+/// - Matches the innermost `src/` directory via `rfind` and qualifies it with the owning
+///   workspace crate/package (e.g. `crates/<pkg>/src/...` -> `<pkg>` or `<pkg>.<subdir>`),
+///   preventing both empty-parent fallthrough on `src/lib.rs` and cross-crate collisions on
+///   shared subdirectory names.
+/// - Anchors non-`src/` paths at workspace/repo markers and never emits leading dots or
+///   host filesystem prefixes (`/Users/...`, `/home/...`).
 pub fn package_label(file_path: &str) -> String {
-    let path = file_path.replace('\\', "/");
-    if let Some(idx) = path.find("/java/") {
-        let after = &path[idx + 6..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
+    const JVM_MARKERS: &[&str] = &[
+        "/src/main/java/",
+        "/src/test/java/",
+        "/src/main/kotlin/",
+        "/src/test/kotlin/",
+        "/src/main/scala/",
+        "/src/test/scala/",
+        "/java/",
+    ];
+    const WORKSPACE_CONTAINERS: &[&str] = &[
+        "crates", "packages", "services", "apps", "modules", "libs", "plugins",
+    ];
+    const SUBPROJECT_DIRS: &[&str] = &[
+        "dashboard",
+        "website",
+        "web",
+        "frontend",
+        "backend",
+        "client",
+        "server",
+        "ui",
+        "cli",
+    ];
+    const REPO_ANCHORS: &[&str] = &[
+        "cmd",
+        "internal",
+        "pkg",
+        "lib",
+        "tests",
+        "benches",
+        "examples",
+        "docs",
+        "content",
+        "dashboard",
+        "website",
+        "scripts",
+        "openspec",
+    ];
+    const OS_ROOT_SEGMENTS: &[&str] = &[
+        "Users", "home", "var", "tmp", "opt", "private", "etc", "usr", "Volumes", "mnt",
+    ];
+
+    let norm = file_path.trim().replace('\\', "/");
+    if norm.is_empty() {
+        return "root".into();
+    }
+
+    let is_windows_abs =
+        norm.len() >= 3 && norm.as_bytes()[1] == b':' && norm.as_bytes()[2] == b'/';
+    let is_abs = norm.starts_with('/') || is_windows_abs;
+
+    let clean = if is_windows_abs {
+        norm[3..].trim_start_matches('/')
+    } else {
+        norm.trim_start_matches('/')
+    };
+    if clean.is_empty() {
+        return "root".into();
+    }
+
+    let slash_path = format!("/{clean}");
+
+    // 1. Innermost JVM / Kotlin / Scala source root
+    let mut best_jvm_end: Option<usize> = None;
+    for marker in JVM_MARKERS {
+        if let Some(idx) = slash_path.rfind(marker) {
+            let end = idx + marker.len();
+            if best_jvm_end.map_or(true, |prev| end > prev) {
+                best_jvm_end = Some(end);
             }
         }
     }
-    if let Some(idx) = path.find("/src/") {
-        let after = &path[idx + 5..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
+    if let Some(end) = best_jvm_end {
+        let after = &slash_path[end..];
+        let segs: Vec<&str> = std::path::Path::new(after)
+            .parent()
+            .map(|p| {
+                p.to_str()
+                    .unwrap_or("")
+                    .split('/')
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !segs.is_empty() {
+            return segs.join(".");
         }
+        return "default".into();
     }
-    std::path::Path::new(&path)
+
+    // 2. Innermost `/src/` directory with crate / package qualification
+    if let Some(idx) = slash_path.rfind("/src/") {
+        let prefix = &slash_path[..idx];
+        let after = &slash_path[idx + 5..];
+        let prefix_segs: Vec<&str> = prefix.split('/').filter(|s| !s.is_empty()).collect();
+        let sub_segs: Vec<&str> = std::path::Path::new(after)
+            .parent()
+            .map(|p| {
+                p.to_str()
+                    .unwrap_or("")
+                    .split('/')
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let owner: Option<&str> = if let Some(c_idx) = prefix_segs
+            .iter()
+            .rposition(|s| WORKSPACE_CONTAINERS.contains(s))
+        {
+            prefix_segs.get(c_idx + 1).copied()
+        } else if let Some(&last) = prefix_segs.last() {
+            if SUBPROJECT_DIRS.contains(&last) || !is_abs {
+                Some(last)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        return match (owner, sub_segs.is_empty()) {
+            (Some(pkg), true) => pkg.to_string(),
+            (Some(pkg), false) => format!("{pkg}.{}", sub_segs.join(".")),
+            (None, true) => "src".into(),
+            (None, false) => format!("src.{}", sub_segs.join(".")),
+        };
+    }
+
+    // 3. Non-`src/` path resolution
+    let parent_segs: Vec<&str> = std::path::Path::new(clean)
         .parent()
-        .map(|p| p.to_string_lossy().replace('/', "."))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "root".into())
+        .map(|p| {
+            p.to_str()
+                .unwrap_or("")
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if parent_segs.is_empty() {
+        return "root".into();
+    }
+
+    if let Some(c_idx) = parent_segs
+        .iter()
+        .rposition(|s| WORKSPACE_CONTAINERS.contains(s))
+    {
+        if c_idx + 1 < parent_segs.len() {
+            return parent_segs[c_idx + 1..].join(".");
+        }
+    }
+
+    if let Some(a_idx) = parent_segs.iter().rposition(|s| REPO_ANCHORS.contains(s)) {
+        return parent_segs[a_idx..].join(".");
+    }
+
+    if !is_abs {
+        return parent_segs.join(".");
+    }
+
+    let filtered: Vec<&str> = parent_segs
+        .into_iter()
+        .filter(|s| !OS_ROOT_SEGMENTS.contains(s))
+        .collect();
+    if filtered.is_empty() {
+        return "root".into();
+    }
+    let start = filtered.len().saturating_sub(2);
+    filtered[start..].join(".")
 }
 
 /// Build the package-level migration macro graph from indexed analysis results.
@@ -700,6 +856,77 @@ mod tests {
         assert_eq!(
             package_label("src/graph/detection/mod.rs"),
             "src.graph.detection"
+        );
+    }
+
+    #[test]
+    fn package_label_issue_134_regression_cases() {
+        // Direct file under crate `src/` (relative and absolute)
+        assert_eq!(
+            package_label("crates/rgctl-analysis/src/lib.rs"),
+            "rgctl-analysis"
+        );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/crates/rgctl-analysis/src/lib.rs"),
+            "rgctl-analysis"
+        );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/crates/rgctl-analysis/src/foo/bar.rs"),
+            "rgctl-analysis.foo"
+        );
+
+        // Two same-named subdirectories across different crates do not collide
+        assert_eq!(package_label("crates/crate-a/src/models/user.rs"), "crate-a.models");
+        assert_eq!(package_label("crates/crate-b/src/models/user.rs"), "crate-b.models");
+
+        // Top-level `src/`
+        assert_eq!(package_label("src/main.rs"), "src");
+        assert_eq!(package_label("/Users/sami/code/rgctl/src/main.rs"), "src");
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/src/cli/mod.rs"),
+            "src.cli"
+        );
+
+        // Nested `/java/` checkout picks innermost JVM source root via rfind
+        assert_eq!(
+            package_label("/Users/dev/java/project/src/main/java/com/acme/orders/Order.java"),
+            "com.acme.orders"
+        );
+
+        // Non-`src/` absolute paths never start with `.` or leak `/Users/...`
+        for path in [
+            "/Users/sami/code/rgctl/dashboard/src/App.tsx",
+            "/Users/sami/code/rgctl/dashboard/src/components/Button.tsx",
+            "/Users/sami/code/rgctl/tests/cold_profile_gates.rs",
+            "/Users/sami/code/rgctl/crates/rgctl-core/tests/unit.rs",
+            "/Users/sami/code/rgctl/custom/dir/file.py",
+        ] {
+            let lbl = package_label(path);
+            assert!(
+                !lbl.starts_with('.'),
+                "label `{lbl}` for `{path}` must not start with '.'"
+            );
+            assert!(
+                !lbl.contains("Users") && !lbl.contains("sami"),
+                "label `{lbl}` for `{path}` must not leak host path segments"
+            );
+        }
+
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/dashboard/src/App.tsx"),
+            "dashboard"
+        );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/dashboard/src/components/Button.tsx"),
+            "dashboard.components"
+        );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/tests/cold_profile_gates.rs"),
+            "tests"
+        );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/crates/rgctl-core/tests/unit.rs"),
+            "rgctl-core.tests"
         );
     }
 

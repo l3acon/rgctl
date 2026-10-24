@@ -37,6 +37,11 @@ impl Default for DiscoveryConfig {
             exclude_patterns: vec![
                 ".rgctl/**".to_string(),
                 ".rbuilder/**".to_string(), // legacy artifact dir
+                "**/dist/**".to_string(),
+                "**/dist-*/**".to_string(),
+                "**/.next/**".to_string(),
+                "**/node_modules/**".to_string(),
+                "**/target/**".to_string(),
             ],
             languages: None,
         }

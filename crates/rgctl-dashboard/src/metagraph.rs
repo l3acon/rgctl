@@ -78,8 +78,24 @@ fn bucket_member_count(bucket: &PackageBucket) -> u32 {
     bucket.functions + bucket.classes + bucket.modules + bucket.files
 }
 
+/// Returns `true` when `file_path` is inside a generated build or frontend bundle directory.
+fn is_generated_bundle_path(file_path: &str) -> bool {
+    let norm = file_path.replace('\\', "/");
+    let slash_path = format!("/{}", norm.trim_start_matches('/'));
+    slash_path.contains("/dist/")
+        || slash_path.contains("/dist-")
+        || slash_path.contains("/node_modules/")
+        || slash_path.contains("/.next/")
+        || slash_path.contains("/target/")
+}
+
 /// Node types included in package metagraph buckets (code + doc structure).
 fn is_metagraph_member(node: &rgctl_graph::schema::Node) -> bool {
+    if let Some(fp) = node.file_path.as_deref() {
+        if is_generated_bundle_path(fp) {
+            return false;
+        }
+    }
     match node.node_type {
         NodeType::Function | NodeType::Class | NodeType::File => true,
         NodeType::Module => module_kind_allowed(node.properties.get("kind").map(|s| s.as_str())),
@@ -440,30 +456,7 @@ fn layout_circle(nodes: &mut [Metanode]) {
 
 /// Derive a stable package / module label from a source file path.
 pub fn package_label(file_path: &str) -> String {
-    let path = file_path.replace('\\', "/");
-    if let Some(idx) = path.find("/java/") {
-        let after = &path[idx + 6..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    if let Some(idx) = path.find("/src/") {
-        let after = &path[idx + 5..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    std::path::Path::new(&path)
-        .parent()
-        .map(|p| p.to_string_lossy().replace('/', "."))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "root".into())
+    rgctl_analysis::migration::package_label(file_path)
 }
 
 fn fs_write(path: std::path::PathBuf, bytes: &[u8]) -> Result<(), String> {
@@ -566,6 +559,27 @@ mod tests {
             package_label("src/graph/detection/mod.rs"),
             "src.graph.detection"
         );
+        assert_eq!(
+            package_label("/Users/sami/code/rgctl/crates/rgctl-dashboard/src/metagraph.rs"),
+            "rgctl-dashboard"
+        );
+        assert_ne!(
+            package_label("crates/a/src/models/m.rs"),
+            package_label("crates/b/src/models/m.rs")
+        );
+    }
+
+    #[test]
+    fn generated_bundle_nodes_excluded_from_metagraph() {
+        let dist_fn = rgctl_graph::schema::Node::new(NodeType::Function, "minified")
+            .with_file_path("/Users/sami/code/rgctl/dashboard/dist/assets/index-abc.js");
+        let dist_v2_fn = rgctl_graph::schema::Node::new(NodeType::Function, "minified2")
+            .with_file_path("dashboard/dist-v2/assets/app.js");
+        let src_fn = rgctl_graph::schema::Node::new(NodeType::Function, "real_fn")
+            .with_file_path("dashboard/src/App.tsx");
+        assert!(!is_metagraph_member(&dist_fn));
+        assert!(!is_metagraph_member(&dist_v2_fn));
+        assert!(is_metagraph_member(&src_fn));
     }
 
     #[test]

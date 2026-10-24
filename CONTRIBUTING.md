@@ -57,6 +57,21 @@ cargo build -p rgctl-wasm --target wasm32-unknown-unknown --release
 
 ---
 
+## Pull request CI (maintainer-gated)
+
+Full GitHub Actions CI does **not** run on every PR. That saves minutes and keeps untrusted fork code from auto-burning the suite.
+
+| Who | How to run CI |
+|-----|----------------|
+| Maintainer | Add the **`ci`** label on the PR (or **Actions → CI → Run workflow**) |
+| Contributor | Wait for a maintainer to label; run the commands above locally |
+
+Without `ci`, the Checks tab shows a single green **awaiting maintainer `ci` label** notice. Adding the label re-runs the workflow and starts cargo check / fmt / clippy / tests.
+
+**Code review “Approve”** (Files changed → Review changes → Approve) is separate from CI. You need write access on `rgctl/rgctl`; it is unrelated to the Actions “Approve and run workflows” button (that only appears for pending *fork* workflow approvals).
+
+---
+
 ## Running tests
 
 ```bash

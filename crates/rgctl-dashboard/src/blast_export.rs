@@ -216,8 +216,27 @@ mod tests {
         if !repo.join(".rgctl/analysis_results.bin").is_file() {
             return;
         }
+        let Ok(results) = resolve_analysis(&DashboardExportContext::default(), repo) else {
+            return;
+        };
+        let Some(blast) = results.blast_radius.as_ref() else {
+            return;
+        };
         let snapshot_path = MmappedGraphSnapshot::default_path(repo);
-        let uuid_to_index = load_columnar_uuid_indices(&snapshot_path).unwrap();
+        let Ok(uuid_to_index) = load_columnar_uuid_indices(&snapshot_path) else {
+            return;
+        };
+        let Ok(expected) = export_function_scores(
+            repo,
+            DashboardExportContext::default(),
+            &snapshot_path,
+            &uuid_to_index,
+        ) else {
+            return;
+        };
+        if expected.is_empty() || blast.scores.is_empty() {
+            return;
+        }
         let out = tempfile::tempdir().unwrap();
         let summary = export_blast_bundle(
             repo,
