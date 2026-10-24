@@ -73,4 +73,4 @@ rgctl does **not** store the knowledge graph in SQLite. The only SQLite usage is
 MemoryBackend / ColumnarGraphMmap → rgctl-analysis::PetGraphView → algorithms
 ```
 
-See also: [analysis-architecture.md](analysis-architecture.md), [cli-io-sanity-qe.md](cli-io-sanity-qe.md), [CLI command reference](guides/cli-command-reference.md).
+See also: [analysis-architecture.md](analysis-architecture.md), [cli-io-sanity-qe.md](cli-io-sanity-qe.md), [CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/).

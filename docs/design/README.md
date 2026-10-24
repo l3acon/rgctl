@@ -15,7 +15,7 @@ Engineering designs for rgctl capabilities. Each doc follows the [migration plan
 | CFG | [cfg-design.md](cfg-design.md) | CFG / PDG Analysis |
 | PDG | [pdg-design.md](pdg-design.md) | Dataflow |
 | Dominance | [dominance-design.md](dominance-design.md) | Dataflow → Dominator Tree |
-| Structured query (agent CLI) | [../guides/structured-query.md](../guides/structured-query.md) | CLI + agent skills |
+| Structured query (agent CLI) | [../guides/structured-query.md](https://rgctl.io/docs/guides/structured-query/) | CLI + agent skills |
 | Community query & naming | [community-query-and-naming-plan.md](community-query-and-naming-plan.md) | Graph Visualization (legend) + `communities list` |
 | Clone detection (exact / bloom / fragment SESE+1-WL) | [clone-detection-design.md](clone-detection-design.md) | CLI-first (`rgctl clones`); dashboard optional later |
 | Hybrid CPG (two-resolution; lazy flows/slice) | [hybrid-cpg-plan.md](hybrid-cpg-plan.md) | CLI/HTTP agent-first (`cpg`); dashboard optional later |

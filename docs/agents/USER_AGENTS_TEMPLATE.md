@@ -8,7 +8,7 @@
 > rgctl -r "$REPO" install --skill --tools cursor,claude,codex,antigravity,agents
 > ```
 >
-> See [Agent pack](../guides/agent-skill.md). This template is a fallback / complementary channel — skills remain the canonical runtime guidance.
+> See [Agent pack](https://rgctl.io/docs/guides/agent-skill/). This template is a fallback / complementary channel — skills remain the canonical runtime guidance.
 >
 > **Not for contributing to rgctl itself.** Contributors: see the repository root [AGENTS.md](../../AGENTS.md).
 
@@ -17,7 +17,7 @@
 rgctl is designed so agents answer **structural questions** from a pre-built graph instead of reading whole files into context.
 
 **Installation:** [installation.md](../installation.md)  
-**Agent pack install:** [agent-skill.md](../guides/agent-skill.md)  
+**Agent pack install:** [Agent Skill](https://rgctl.io/docs/guides/agent-skill/)  
 **Full JSON reference:** [json-api.md](../json-api.md) · [site](https://sshaaf.github.io/rgctl/docs/json-api/)  
 **Copy-paste recipes:** [agent-recipes.md](../agent-recipes.md)  
 **Human walkthrough:** [user-guide.md](../user-guide.md)  
@@ -105,7 +105,7 @@ rgctl -r "$REPO" serve --open
 # rgctl -f json find --type function --limit 5
 ```
 
-See [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md).
+See [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/).
 
 ---
 

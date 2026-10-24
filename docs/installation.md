@@ -40,10 +40,10 @@ Disk space: the `.rgctl/` artifacts directory typically uses 50-500 MB depending
 ### Option A -- One-line installer (macOS / Linux, recommended)
 
 ```bash
-curl -fsSL https://shaaf.dev/rgctl/install.sh | sh
+curl -fsSL https://rgctl.io/install.sh | sh
 ```
 
-Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Source: [`scripts/install.sh`](../scripts/install.sh) (also served as `https://shaaf.dev/rgctl/install.sh`).
+Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Source: [`scripts/install.sh`](../scripts/install.sh) (also served as `https://rgctl.io/install.sh`).
 
 ### Option B -- GitHub release (manual)
 
@@ -215,7 +215,7 @@ curl -s -X POST http://127.0.0.1:8080/api/semantic/query \
 
 **Best for:** repeated queries in one session, team exploration, agent integration over HTTP, visual dashboard browsing.
 
-See the [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md) and [HTTP Server and Dashboard guide](guides/http-server-and-dashboard.md).
+See the [HTTP Server and Dashboard guide](https://rgctl.io/docs/guides/http-server-and-dashboard/) and [HTTP Server and Dashboard guide](https://rgctl.io/docs/guides/http-server-and-dashboard/).
 
 ### Mode comparison
 
@@ -255,7 +255,7 @@ Default **`--tools`** (omit flag) is **`cursor`, `claude`, `codex`, `agents`, `a
 
 Install does **not** run `discover` — index the repo separately (`rgctl discover .`).
 
-**Full reference:** [Agent pack walkthrough](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
+**Full reference:** [Agent pack walkthrough](https://rgctl.io/docs/guides/agent-skill/) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [AGENTS.md](../AGENTS.md) (contribute to rgctl)
 
 ---
 
@@ -278,7 +278,7 @@ rgctl -f json semantic query "checkout flow"  # search
 
 For document section search: `semantic index --scope docs --embedder hash`.
 
-See the [Semantic Search guide](guides/semantic-search.md).
+See the [Semantic Search guide](https://rgctl.io/docs/guides/semantic-search/).
 
 ---
 
@@ -391,9 +391,9 @@ Start with the default mode (no extra flags). Add `--with-cfg`, `--with-taint`, 
 |------|-------------|
 | Full CLI walkthrough | [User Guide](user-guide.md) |
 | Concepts and architecture | [Introduction](Introduction.md) |
-| Use rgctl with agents | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
+| Use rgctl with agents | [Agent pack](https://rgctl.io/docs/guides/agent-skill/) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) |
-| Step-by-step feature guides | [Guides](guides/README.md) |
+| Step-by-step feature guides | [Guides](https://rgctl.io/docs/guides/) |
 | JSON output reference | [JSON API](json-api.md) |
-| HTTP API details | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
+| HTTP API details | [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) |
 | Supported languages | [Languages](languages/README.md) |

@@ -7,7 +7,7 @@ Per-language markdown guides here were removed. **Single source of truth** for w
 | `crates/rgctl-lang-*/{id}-ast-coverage.json` | Named tree-sitter kinds → handlers (`Symbol`, `Relation`, `CfgStatement`, `AstSkeleton`, `Literal`, `Skip`) + grammar pin |
 | [`languages.toml`](../../languages.toml) | Extensions, aliases, plugin / grammar crate metadata |
 
-The **website** builds `/docs/languages/` (and `/docs/languages/{id}/`) from those JSON files at `prebuild` / `predev` via `website/scripts/copy-lang-coverage.mjs`. Do not reintroduce hand-written coverage tables here.
+The **website** ([rgctl-website](https://github.com/sshaaf/rgctl-website)) builds `/docs/languages/` (and `/docs/languages/{id}/`) from those JSON files at `prebuild` / `predev` via `scripts/copy-lang-coverage.mjs` (checks out this repo as `RGCTL_REPO`). Do not reintroduce hand-written coverage tables here.
 
 ## Related
 

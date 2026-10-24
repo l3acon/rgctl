@@ -22,7 +22,7 @@ L_query  = virtual CPG API joins L_repo ⟷ L_proc by function UUID (+ call site
 - Sound points-to / must–may alias as v1 (tier later; see DFG tiers)
 - Claiming absolute “100% safety” against reflection / frameworks / JNI
 
-**Related:** [analysis-architecture.md](../analysis-architecture.md), [cfg-design.md](cfg-design.md), [pdg-design.md](pdg-design.md), [program-slicing-design.md](program-slicing-design.md), [structured-query guide](../guides/structured-query.md), [taint-analysis-design.md](taint-analysis-design.md).
+**Related:** [analysis-architecture.md](../analysis-architecture.md), [cfg-design.md](cfg-design.md), [pdg-design.md](pdg-design.md), [program-slicing-design.md](program-slicing-design.md), [structured-query guide](https://rgctl.io/docs/guides/structured-query/), [taint-analysis-design.md](taint-analysis-design.md).
 
 ---
 

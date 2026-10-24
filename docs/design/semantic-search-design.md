@@ -198,5 +198,5 @@ DASHBOARD_URL=http://127.0.0.1:8080/ node dashboard/scripts/record-feature-demo.
 
 - [Blast radius design](blast-radius-design.md) — fusion blast term + hybrid `--expand blast`
 - [Graph metrics design](graph-metrics-design.md) — FastPageRank centrality term + Fast-Leiden communities (`--scope community`)
-- [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md) — `/api/semantic/*`
+- [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) — `/api/semantic/*`
 - [CLI / JSON API](../json-api.md) — semantic JSON shapes

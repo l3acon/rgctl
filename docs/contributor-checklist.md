@@ -137,7 +137,7 @@ Map **what you touched** → **tests to run**. Design detail lives in [design/RE
 | Hybrid CPG (`cpg` CLI) | `field_write` unit tests · `with_cfg_cli` | [hybrid-cpg-plan.md](design/hybrid-cpg-plan.md) |
 | Migration planner | `cargo test --test migration_plan_cli` · `with_dashboard_cli` | [migration-planner-design.md](design/migration-planner-design.md) |
 | CI policy `check` | subprocess golden paths · `graph_projections` | [ci-policy-checks-design.md](design/ci-policy-checks-design.md) |
-| HTTP `serve` | `cargo test --test http_serve` | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
+| HTTP `serve` | `cargo test --test http_serve` | [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) |
 | Dashboard export / UI | `cargo test dashboard_harness` · `./scripts/test-dashboard-golden.sh` | [dashboard-design.md](dashboard-design.md) |
 | User-guide workflow | `cargo test --test user_guide_scenarios` (needs release `rgctl`, `jq`) | [user-guide.md](user-guide.md) |
 | Core integration | `cargo test --test integration_core_features` · `bundles` | Edge extraction + persistence |
@@ -195,7 +195,7 @@ CLI I/O layer reference: [cli-io-sanity-qe.md](cli-io-sanity-qe.md). Workflow mi
 |-------------|--------|
 | User CLI | [user-guide.md](user-guide.md) · validate with `cargo test --test user_guide_scenarios` |
 | Contribute (agent README) | [AGENTS.md](../AGENTS.md) |
-| Use rgctl / JSON | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [json-api.md](json-api.md) · [agent-recipes.md](agent-recipes.md) · [agent-skill](guides/agent-skill.md) |
+| Use rgctl / JSON | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · [json-api.md](json-api.md) · [agent-recipes.md](agent-recipes.md) · [agent-skill](https://rgctl.io/docs/guides/agent-skill/) |
 | Languages (coverage JSON → website) | [languages/README.md](languages/README.md) |
 | Language tests (new / Tier 1) | [language-testing-guide.md](language-testing-guide.md) |
 | Dashboard UX | [dashboard-user-guide.md](dashboard-user-guide.md) |

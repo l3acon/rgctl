@@ -4,7 +4,7 @@
 
 **Non-goals (this plan):** Stamping `community_id` / `MEMBER_OF` into `graph.snapshot.bin`; requiring an LLM for v1. (Community **detection** itself ships as Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [graph-metrics-design.md §3.1](graph-metrics-design.md#31-community-detection-naming); this plan covers naming/query overlays only.)
 
-**Related:** [graph-metrics-design.md](graph-metrics-design.md) (community detection naming), [structured-query guide](../guides/structured-query.md), [semantic-search-design.md](semantic-search-design.md), [analysis-architecture.md](../analysis-architecture.md).
+**Related:** [graph-metrics-design.md](graph-metrics-design.md) (community detection naming), [structured-query guide](https://rgctl.io/docs/guides/structured-query/), [semantic-search-design.md](semantic-search-design.md), [analysis-architecture.md](../analysis-architecture.md).
 
 ---
 
@@ -105,8 +105,8 @@ Both work after normal `discover` (analysis present). Snapshot size / content di
 ### Steps
 
 1. **Docs**
-   - [structured-query.md](../guides/structured-query.md) + [user-guide.md](../user-guide.md) §6: `communities list`, `inventory --by community`, scoped `find`
-   - [HTTP Server and Dashboard](../guides/http-server-and-dashboard.md): dashboard + semantic HTTP; structural queries stay on CLI
+   - [Structured Query](https://rgctl.io/docs/guides/structured-query/) + [user-guide.md](../user-guide.md) §6: `communities list`, `inventory --by community`, scoped `find`
+   - [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/): dashboard + semantic HTTP; structural queries stay on CLI
 2. **Skills** — the `rgctl` skill calls `communities` / `find`, not graph pattern languages.
 
 ### Acceptance
@@ -157,7 +157,7 @@ Only after P1 + semantic index maturity.
 | Discover write path | `src/cli/discover_impl.rs` (fill labels when community table written) |
 | Structured query | `crates/rgctl-graph/src/structured_query.rs`, `src/cli/structured_query.rs` |
 | Communities CLI | `src/cli/communities.rs` |
-| Docs | `docs/guides/structured-query.md`, `AGENTS.md`, user-guide |
+| Docs | `https://rgctl.io/docs/guides/structured-query/`, `AGENTS.md`, user-guide |
 | Tests | analysis unit tests; `communities` JSON; dashboard harness community label assert |
 
 ---
@@ -177,7 +177,7 @@ Only after P1 + semantic index maturity.
 - [x] Integration tests
 
 ### P2 — Discoverability
-- [x] [structured-query.md](../guides/structured-query.md) + agent skills
+- [x] [Structured Query](https://rgctl.io/docs/guides/structured-query/) + agent skills
 - [x] AGENTS + http-api updates
 
 ### P3 — Naming quality

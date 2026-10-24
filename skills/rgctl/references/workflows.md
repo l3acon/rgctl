@@ -388,7 +388,7 @@ rgctl -r "$REPO" serve --open
 #   rgctl -f json find|callers|relations|inventory|status …
 ```
 
-See docs/guides/http-server-and-dashboard.md (product docs; not bundled in this skill pack). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.
+See https://rgctl.io/docs/guides/http-server-and-dashboard/ (product docs; not bundled in this skill pack). For IDE agents spawn `rgctl -f json` subprocesses; optional `rgctl serve` for a local dashboard on one repo.
 
 
 ---

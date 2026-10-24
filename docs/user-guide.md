@@ -2,7 +2,7 @@
 
 End-to-end guide for installing rgctl, indexing an in-tree example, and querying a codebase from the **command line**. Sample outputs target **`rgctl-tests/ecommerce-java`**. Runnable examples are backed by scenarios under [`user-guide/scenarios/`](user-guide/scenarios/) (see change `docs-agent-first-diataxis`).
 
-**Concepts:** [Introduction](Introduction.md). **Use with agents:** [agent-skill](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md). **Contribute:** [AGENTS.md](../AGENTS.md). **JSON fields:** [json-api.md](json-api.md).
+**Concepts:** [Introduction](Introduction.md). **Use with agents:** [agent-skill](https://rgctl.io/docs/guides/agent-skill/) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md). **Contribute:** [AGENTS.md](../AGENTS.md). **JSON fields:** [json-api.md](json-api.md).
 
 ### How this guide is organized
 
@@ -45,11 +45,11 @@ End-to-end guide for installing rgctl, indexing an in-tree example, and querying
 ### Option A — One-line installer (macOS / Linux, recommended)
 
 ```bash
-curl -fsSL https://shaaf.dev/rgctl/install.sh | sh
+curl -fsSL https://rgctl.io/install.sh | sh
 rgctl --version
 ```
 
-Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Ensure that directory is on your `PATH` (see [§2](#2-add-rgctl-to-your-path)). Source: [`scripts/install.sh`](../scripts/install.sh) (also served as `https://shaaf.dev/rgctl/install.sh`).
+Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Ensure that directory is on your `PATH` (see [§2](#2-add-rgctl-to-your-path)). Source: [`scripts/install.sh`](../scripts/install.sh) (also served as `https://rgctl.io/install.sh`).
 
 ### Option B — GitHub release (manual)
 
@@ -113,7 +113,7 @@ That writes **one skill** named `rgctl` (plus `references/` with command encyclo
 
 **Default (no `--tools`):** `cursor`, `claude`, `codex`, `agents`, `antigravity`. Use **`--tools all`** for the full registry.
 
-Full flag reference: [Installation](installation.md). Walkthrough: [Agent pack](guides/agent-skill.md). Add `--with-policy` for a Cursor structural-rules snippet. Use `-g` for a global install. Exit code **1** if a managed file differs unless you pass `--force`. Install does not run `discover`.
+Full flag reference: [Installation](installation.md). Walkthrough: [Agent pack](https://rgctl.io/docs/guides/agent-skill/). Add `--with-policy` for a Cursor structural-rules snippet. Use `-g` for a global install. Exit code **1** if a managed file differs unless you pass `--force`. Install does not run `discover`.
 
 ---
 
@@ -231,7 +231,7 @@ All commands below assume `REPO` points at `ecommerce-java`, or that you run fro
 | `rgctl discover /path/to/repo` | Same (absolute path positional) |
 | `rgctl -r /path/to/repo discover .` | **Shell cwd only** — `-r` is ignored when `.` is present |
 
-Full table: [Discovering and indexing](guides/discovering-and-indexing.md).
+Full table: [Discovering and indexing](https://rgctl.io/docs/guides/discovering-and-indexing/).
 
 Built-in registry includes **markdown** (`rgctl-lang-markdown`): `.md` and `.mdx` are indexed by default (headings, links, code blocks, frontmatter). See [markdown-context.md](markdown-context.md). Use `-l markdown` or `-l markdown,java` to limit languages.
 
@@ -512,7 +512,7 @@ rgctl -r "$REPO" -f mermaid -o checkout-cfg.mmd inspect checkout cfg
 
 ## 6. Structured graph queries
 
-Use **`find`**, **`callers`**, **`callees`**, **`relations`**, **`inventory`**, and **`status`** against the indexed graph. **Run `discover` first.** Step-by-step guide: [Structured graph queries](guides/structured-query.md). JSON shapes: [json-api.md §5](json-api.md#5-structured-query-verbs).
+Use **`find`**, **`callers`**, **`callees`**, **`relations`**, **`inventory`**, and **`status`** against the indexed graph. **Run `discover` first.** Step-by-step guide: [Structured graph queries](https://rgctl.io/docs/guides/structured-query/). JSON shapes: [json-api.md §5](json-api.md#5-structured-query-verbs).
 
 ### Session check
 
@@ -1000,7 +1000,7 @@ rgctl -r "$REPO" -f json clones --mode fragment --seed process_orders --lines 3-
   | jq '{group_count, seed, groups: .groups[:3]}'
 ```
 
-Guide: [clone-detection.md](guides/clone-detection.md).
+Guide: [Clone Detection](https://rgctl.io/docs/guides/clone-detection/).
 
 ### Multi-repo merge
 
@@ -1141,7 +1141,7 @@ Open `$REPO/vault` in Obsidian (**Open folder as vault**). Each note is one head
 
 Other doc export formats: `--export-format okf` (JSON entity bundle). Full walkthrough: [markdown-context.md](markdown-context.md#obsidian-vault-export).
 
-For structural lookups on docs, use `find` / `relations` — see [markdown context](markdown-context.md). For browsing, use `serve` + the dashboard ([HTTP Server and Dashboard](guides/http-server-and-dashboard.md)).
+For structural lookups on docs, use `find` / `relations` — see [markdown context](markdown-context.md). For browsing, use `serve` + the dashboard ([HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/)).
 
 ---
 
@@ -1151,7 +1151,7 @@ For structural lookups on docs, use `find` / `relations` — see [markdown conte
 
 For **temporal PR gates** (base/head snapshots, `new` / `existing` / `resolved` classification, violation ledger), use **`rgctl review check`** (`pr-check` is a compatibility alias). Also: `rgctl review paths` for structural before/after call-path deltas.
 
-Example policy files: [docs/examples/policy-strict.json](examples/policy-strict.json). Format: [policy-format.md](policy-format.md). Guide: [pr-review.md](guides/pr-review.md).
+Example policy files: [docs/examples/policy-strict.json](examples/policy-strict.json). Format: [policy-format.md](policy-format.md). Guide: [Pr Review](https://rgctl.io/docs/guides/pr-review/).
 
 ```bash
 rgctl -r "$REPO" check --policy-file policy.json
@@ -1194,7 +1194,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/semantic/query \
   -d '{"query":"checkout cart","limit":5}' | jq '.hits[:3]'
 ```
 
-Full reference: [HTTP Server and Dashboard](guides/http-server-and-dashboard.md). CoolStore walkthrough: [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
+Full reference: [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/). CoolStore walkthrough: [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/).
 
 ---
 
@@ -1271,7 +1271,7 @@ Migration hints (with `--export-migration-hints`) land under `.rgctl/migration_p
 | `semantic` | Opt-in semantic index + query (`--scope community`, `docs`, `all`) |
 | `serve` | HTTP dashboard + `/api/query` + `/api/status` (auto full pipeline); `--no-pipeline` fail-fast |
 
-Full taxonomy: [CLI command reference](guides/cli-command-reference.md).
+Full taxonomy: [CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/).
 
 ### `discover` flags
 
@@ -1374,9 +1374,9 @@ RUST_LOG=info,profile=info rgctl discover . -v 2>&1 | grep '\[profile\]'
 
 - [Introduction](Introduction.md) — concepts and feature goals
 - [cli-getting-started.md](cli-getting-started.md) — deprecated stub (use this User Guide)
-- [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) — dashboard HTTP API
+- [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) — dashboard HTTP API
 - [json-api.md](json-api.md) — machine-readable output + field catalogs
 - [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) — paste into consumer repos’ `AGENTS.md`
 - [AGENTS.md](../AGENTS.md) — contributor agent README for this repository
-- [agent-skill](guides/agent-skill.md) — skill install
+- [agent-skill](https://rgctl.io/docs/guides/agent-skill/) — skill install
 - [`rgctl-tests/README.md`](../rgctl-tests/README.md) — all language fixtures + correctness suite

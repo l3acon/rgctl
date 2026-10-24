@@ -289,4 +289,4 @@ rgctl -r "$REPO" -f json <command> …
 rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 ```
 
-Installs the single skill `rgctl` (with `references/`) for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See docs/guides/agent-skill.md (product docs; not bundled in this skill pack). Scenario prose lives in `references/workflows.md`.
+Installs the single skill `rgctl` (with `references/`) for each selected adapter. Omitting `--tools` installs **cursor, claude, codex, agents, antigravity**; use `--tools all` for the full registry. See https://rgctl.io/docs/guides/agent-skill/ (product docs; not bundled in this skill pack). Scenario prose lives in `references/workflows.md`.

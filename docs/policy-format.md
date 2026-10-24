@@ -113,7 +113,7 @@ rgctl -r "$REPO" -f json review check \
 # rgctl -f json pr-check …
 ```
 
-Defaults: delta head synthesis from base artifact; `--base-artifact` = `$RGCTL_BASE_ARTIFACT` or `{repo}/.rgctl-base/`. Use `--full-snapshots` for pre-built dual artifacts. Additional flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`, `--strict-calendar` (treat grace/sunset calendar warnings as failures). Outcomes append to `.rgctl/violation_ledger.jsonl` (ratchet: `new` / `existing` / `resolved` / `regression`). Example workflow: [.github/workflows/rgctl-pr-check.yml](../.github/workflows/rgctl-pr-check.yml). Walkthrough: [CI Policy Checks guide](guides/ci-policy-checks.md) · [PR Review guide](guides/pr-review.md).
+Defaults: delta head synthesis from base artifact; `--base-artifact` = `$RGCTL_BASE_ARTIFACT` or `{repo}/.rgctl-base/`. Use `--full-snapshots` for pre-built dual artifacts. Additional flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`, `--strict-calendar` (treat grace/sunset calendar warnings as failures). Outcomes append to `.rgctl/violation_ledger.jsonl` (ratchet: `new` / `existing` / `resolved` / `regression`). Example workflow: [.github/workflows/rgctl-pr-check.yml](../.github/workflows/rgctl-pr-check.yml). Walkthrough: [CI Policy Checks guide](https://rgctl.io/docs/guides/ci-policy-checks/) · [PR Review guide](https://rgctl.io/docs/guides/pr-review/).
 
 ---
 

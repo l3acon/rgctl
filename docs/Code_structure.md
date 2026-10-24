@@ -323,4 +323,4 @@ When adding or fixing language support:
 
 ---
 
-*Related docs: [`user-guide.md`](user-guide.md), [`json-api.md`](json-api.md), [`guides/cli-command-reference.md`](guides/cli-command-reference.md), [`dashboard-design.md`](dashboard-design.md), [`cli-io-sanity-qe.md`](cli-io-sanity-qe.md), [`graph-storage-architecture.md`](graph-storage-architecture.md), [`CLI_STRUCTURE.txt`](CLI_STRUCTURE.txt).*
+*Related docs: [`user-guide.md`](user-guide.md), [`json-api.md`](json-api.md), [`guides/cli-command-reference.md`](https://rgctl.io/docs/guides/cli-command-reference/), [`dashboard-design.md`](dashboard-design.md), [`cli-io-sanity-qe.md`](cli-io-sanity-qe.md), [`graph-storage-architecture.md`](graph-storage-architecture.md), [`CLI_STRUCTURE.txt`](CLI_STRUCTURE.txt).*

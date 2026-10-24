@@ -167,4 +167,4 @@ Screenshots: `capture-design-screenshots.mjs` → `docs/images/design/graph-metr
 
 - [Migration planner design](migration-planner-design.md)
 - [Blast radius design](blast-radius-design.md)
-- [Structured graph queries](../guides/structured-query.md)
+- [Structured graph queries](https://rgctl.io/docs/guides/structured-query/)

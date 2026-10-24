@@ -2,23 +2,25 @@
 
 Agent-first docs: index once, query with `-f json`, deepen in the User Guide when a human needs the full walkthrough.
 
+> **Feature guides** (`docs/guides/` historically) now live in **[rgctl-website](https://github.com/sshaaf/rgctl-website)** (`docs/guides/`) and are published at [shaaf.dev/rgctl/docs/guides/](https://rgctl.io/docs/guides/). This repo keeps a [pointer stub](guides/README.md).
+
 ## Primary (start here)
 
 | Goal | Canon |
 |------|--------|
 | Install rgctl + choose operating mode | **[Installation](installation.md)** |
-| Step-by-step feature how-tos (CoolStore) | **[Guides](guides/README.md)** |
-| Full CLI taxonomy (canonical vs aliases) | **[CLI command reference](guides/cli-command-reference.md)** |
+| Step-by-step feature how-tos (CoolStore) | **[Guides](https://rgctl.io/docs/guides/)** |
+| Full CLI taxonomy (canonical vs aliases) | **[CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/)** |
 | Per-language AST coverage (website from JSON) | **[Languages](languages/README.md)** · `*-ast-coverage.json` |
 | Contribute to rgctl (agent README) | [AGENTS.md](../AGENTS.md) — rules, cold profiles, tests/benches |
-| Use rgctl with LLM IDEs | [Agent pack](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
+| Use rgctl with LLM IDEs | [Agent pack](https://rgctl.io/docs/guides/agent-skill/) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | JSON shapes (`schema_version`, fields) | [JSON API](json-api.md) |
 | CLI walkthrough (ecommerce-java) | [User Guide](user-guide.md) |
 | Concepts (what / why) | [Introduction](Introduction.md) |
 
-**Use rgctl (consumer agent loop):** install the agent pack (`--skill`) → `discover` once → `find` / `callers` / `blast-radius` / `cpg` with `-f json` ([agent-skill](guides/agent-skill.md)).  
+**Use rgctl (consumer agent loop):** install the agent pack (`--skill`) → `discover` once → `find` / `callers` / `blast-radius` / `cpg` with `-f json` ([agent-skill](https://rgctl.io/docs/guides/agent-skill/)).  
 **Contribute to this repo:** [AGENTS.md](../AGENTS.md).  
-**First hour (human):** [Install](installation.md) → User Guide §1–4 on [ecommerce-java](user-guide.md#3-example-project-ecommerce-java), then a [Guide](guides/README.md) for the feature you need.  
+**First hour (human):** [Install](installation.md) → User Guide §1–4 on [ecommerce-java](user-guide.md#3-example-project-ecommerce-java), then a [Guide](https://rgctl.io/docs/guides/) for the feature you need.  
 **Latest release:** [v0.4.21 release notes](releases/v0.4.21.md).
 
 **Upgrading from v0.4.9:** no breaking changes — PHP is additive (`discover -l php`). Ruby is additive (`discover -l ruby`).
@@ -30,14 +32,14 @@ Agent-first docs: index once, query with `-f json`, deepen in the User Guide whe
 | Goal | Doc |
 |------|-----|
 | Supported languages | [Languages](languages/README.md) (SSOT: coverage JSON) |
-| Dependency Injection & Frameworks | [Dependency Injection and Frameworks](guides/dependency-injection-and-frameworks.md) — routes (`ExposesRoute`), DI (`Injects`), reflection, semantic tags, and `frameworks.bin` |
-| Markdown / doc context graph | [Guide](guides/markdown-context-graph.md) (step-by-step) — `.md` / `.mdx`, structured queries, Obsidian export, doc semantic index |
-| HTTP server + dashboard | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
+| Dependency Injection & Frameworks | [Dependency Injection and Frameworks](https://rgctl.io/docs/guides/dependency-injection-and-frameworks/) — routes (`ExposesRoute`), DI (`Injects`), reflection, semantic tags, and `frameworks.bin` |
+| Markdown / doc context graph | [Guide](https://rgctl.io/docs/guides/markdown-context-graph/) (step-by-step) — `.md` / `.mdx`, structured queries, Obsidian export, doc semantic index |
+| HTTP server + dashboard | [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) |
 | CI blast-radius policy | [Policy format](policy-format.md) |
-| Monolith migration (how-to) | [Migration planning](guides/migration-planning.md) |
+| Monolith migration (how-to) | [Migration planning](https://rgctl.io/docs/guides/migration-planning/) |
 | Research map | [Further reading](further-reading.md) |
 
-Optional browser UI (nice-to-have, not required for agents): [HTTP server and dashboard](guides/http-server-and-dashboard.md) after `discover --with-dashboard`.
+Optional browser UI (nice-to-have, not required for agents): [HTTP server and dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) after `discover --with-dashboard`.
 
 ## For contributors
 
@@ -53,7 +55,7 @@ Internals and contribution bars — not the default agent reading path.
 | [Analysis architecture](analysis-architecture.md) | CFG / PDG / taint |
 | [Graph storage architecture](graph-storage-architecture.md) | Snapshots, blast cache |
 | [Integration test matrix](internal/integration-tests.md) | Tier A/B/C — in-repo artifacts, HTTP serve, CLI subprocess · golden CLI: `tests/cli_output/` |
-| [HTTP server and dashboard](guides/http-server-and-dashboard.md) | Serve / dashboard UI |
+| [HTTP server and dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) | Serve / dashboard UI |
 | [Migration planner design](design/migration-planner-design.md) · [Migration algorithms](migration-algorithms.md) | Migration internals |
 | [Releasing](releasing.md) | Versioned binaries |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Dev setup |

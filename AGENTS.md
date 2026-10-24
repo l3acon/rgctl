@@ -6,7 +6,7 @@
 
 **Your goal when contributing here:** preserve ingest scale, query correctness, memory discipline, and deterministic artifacts under `.rgctl/` — not add convenience at the cost of Tokio blocking, whole-repo clones, or ungated cold regressions.
 
-> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [docs/guides/agent-skill.md](docs/guides/agent-skill.md) and the [CLI command reference](docs/guides/cli-command-reference.md).
+> **Looking for how to *use* rgctl on another codebase?** Install skills (`rgctl install --skill`) or copy [docs/agents/USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into *that* repo’s `AGENTS.md`. See [agent skill](https://rgctl.io/docs/guides/agent-skill/) and the [CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/).
 
 ---
 
@@ -22,7 +22,7 @@
 - **Constrained discover (opt-in):** Prefer `rgctl discover . --with-limits max-mem-mb=4096,threads=1` (or `RGCTL_WITH_LIMITS`) in containers / cgroups — do **not** change default desktop discover for memory. Soft RSS tripwire at ~95%; smaller spill sort-runs and stream channel when `max-mem-mb` is set. Container smoke: `./scripts/run-container-with-limits-smoke.sh` (`tests/Containerfile`, mounts `example/linux`).
 - **Features:** Default semantic embedder is compiled **vocab**. Do not require ONNX / Python ML unless behind an explicit feature (e.g. `semantic-onnx` / code-daemon + Git LFS).
 - **OpenSpec language work:** Still cite [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) (pointer here); follow the sections below.
-- **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The website `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`.
+- **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The [rgctl-website](https://github.com/sshaaf/rgctl-website) `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`. User-facing guides are edited in **rgctl-website** (`docs/guides/`), not here.
 - **Releases:** Follow **Releases** below (and [docs/releasing.md](docs/releasing.md)). Do not hand-edit dozens of crate `version =` lines.
 - **AI-assisted contributions:** Contributors may use AI coding agents freely. The human author must still review every change and is solely responsible for the PR and its content. Do **not** add AI `Co-Authored-By` / `Assisted-By` / `Generated-By` trailers (or agent emails as author/committer) — PR CI enforces this via `scripts/check-no-ai-commit-trailers.py` (see [CONTRIBUTING.md](CONTRIBUTING.md#ai-coding-tools-and-authorship)). Prefer DCO `Signed-off-by` only.
 
@@ -31,7 +31,7 @@
 ## Context & architecture
 
 - **Discover** walks the tree, runs language plugins (tree-sitter), builds the graph, writes compact caches to `.rgctl/` (`graph.snapshot.bin`). Optional overlays: `--scip`, `--with-git` (churn / `CoChangesWith`); multi-repo: `rgctl merge`.
-- **Query** paths are read-oriented and return versioned JSON (`schema_version` on stdout — never scrape stderr). Canonical verbs: `find` / `callers` / `callees` / `relations` / `inventory` (see [cli-command-reference.md](docs/guides/cli-command-reference.md)).
+- **Query** paths are read-oriented and return versioned JSON (`schema_version` on stdout — never scrape stderr). Canonical verbs: `find` / `callers` / `callees` / `relations` / `inventory` (see [Cli Command Reference](https://rgctl.io/docs/guides/cli-command-reference/)).
 - **Analysis** (`rgctl-analysis`) projects CSR / callgraph / FastPageRank / Fast-Leiden communities / blast-radius / lazy v3 CFG–PDG (`slice`, `cpg flows`); see [docs/analysis-architecture.md](docs/analysis-architecture.md).
 - **Languages:** `crates/rgctl-lang-*` + `rgctl-plugin-api`; register in `languages.toml` (~60 plugins; Tier-1 deep-analysis languages additionally ship `*-ast-coverage.json`). See **Grammar bumps** under Must-follow. Adding a language: [docs/language-testing-guide.md](docs/language-testing-guide.md).
 
@@ -161,7 +161,7 @@ Baselines and notes: [docs/internal/profile.md](docs/internal/profile.md#snapsho
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, tests, PR norms |
 | [docs/contributor-checklist.md](docs/contributor-checklist.md) | Language / feature checklist |
 | [docs/language-testing-guide.md](docs/language-testing-guide.md) | New-language test locations, asserts, Tier 1 matrix |
-| [docs/guides/semantic-search.md](docs/guides/semantic-search.md) | Embedders (if touching semantic) |
+| [semantic search](https://rgctl.io/docs/guides/semantic-search/) | Embedders (if touching semantic) |
 | [docs/releasing.md](docs/releasing.md) | Version bump + GitHub Release tags |
 | [openspec/changes/_shared/starting-context.md](openspec/changes/_shared/starting-context.md) | OpenSpec pointer (canonical policy is this file) |
 

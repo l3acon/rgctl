@@ -1,8 +1,6 @@
-# Website — deploy
+# Legacy GitHub Pages site (shaaf.dev/rgctl/) → redirect stub to https://rgctl.io/
 #
-# Builds the static Next.js site under website/ and publishes to GitHub Pages.
-# Allowed deployment branches (github-pages environment): main, docs
-# Triggers: push to main|docs (website paths) or manual workflow_dispatch on either branch.
+# Full site + guides: https://github.com/sshaaf/rgctl-website
 
 name: Website
 
@@ -11,8 +9,7 @@ on:
     branches: [main, docs]
     paths:
       - "website/**"
-      - "docs/**"
-      - "AGENTS.md"
+      - "scripts/install.sh"
       - ".github/workflows/website.yml"
   workflow_dispatch:
 
@@ -28,41 +25,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: website
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: website/pnpm-lock.yaml
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Build static export
-        env:
-          # Custom domain Pages site: https://shaaf.dev/rgctl/
-          NEXT_PUBLIC_BASE_PATH: /rgctl
-          # Optional: repo Settings → Secrets → Actions → NEXT_PUBLIC_GA_MEASUREMENT_ID (G-…)
-          NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
-        run: pnpm build
+      - name: Stage redirect site
+        run: |
+          mkdir -p _pages
+          cp website/index.html website/404.html _pages/
+          cp scripts/install.sh _pages/install.sh
+          # Optional: keep llms.txt pointing at the new host
+          printf '%s\n' \
+            '# rgctl' \
+            '' \
+            '> Code knowledge graph for LLM agents.' \
+            '' \
+            'Website: https://rgctl.io/' \
+            'Repository: https://github.com/sshaaf/rgctl' \
+            'Install: `curl -fsSL https://rgctl.io/install.sh | sh`' \
+            > _pages/llms.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/out
+          path: _pages
 
   deploy:
     needs: build
-    # github-pages environment allows branches: main, docs
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/docs'
     runs-on: ubuntu-latest
     environment:

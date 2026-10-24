@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # rgctl one-line installer — download the latest GitHub Release binary.
-# Usage: curl -fsSL https://shaaf.dev/rgctl/install.sh | sh
+# Usage: curl -fsSL https://rgctl.io/install.sh | sh
 # Override install dir: RGCTL_INSTALL_DIR=/usr/local/bin curl -fsSL ... | sh
 set -eu
 

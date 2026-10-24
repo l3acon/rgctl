@@ -2,8 +2,8 @@
 
 **What rgctl is** and how a **code knowledge graph** works — concepts before commands.
 
-**Hands-on:** [Installation](installation.md) · [Guides](guides/README.md) (CoolStore) · [User Guide](user-guide.md) (ecommerce-java).  
-**Agents:** [agent-skill](guides/agent-skill.md) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill`.  
+**Hands-on:** [Installation](installation.md) · [Guides](https://rgctl.io/docs/guides/) (CoolStore) · [User Guide](user-guide.md) (ecommerce-java).  
+**Agents:** [agent-skill](https://rgctl.io/docs/guides/agent-skill/) · [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) · `rgctl install --skill`.  
 **Contribute to rgctl:** [AGENTS.md](../AGENTS.md). **JSON:** [json-api.md](json-api.md).
 
 ---
@@ -48,9 +48,9 @@ You do not need graph theory to use the CLI: **indexing builds the map; commands
       └── serve                                        (optional HTTP dashboard + semantic API)
 ```
 
-1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](guides/discovering-and-indexing.md) for `-r` vs `.` pitfalls.  
+1. **Once** (or after large changes): `discover` from the repo you mean to index — see [Discovering and indexing](https://rgctl.io/docs/guides/discovering-and-indexing/) for `-r` vs `.` pitfalls.  
 2. **Many times:** query commands read `{repo}/.rgctl/`. Prefer **`-f json`** and never scrape stderr ([JSON API](json-api.md)).  
-3. **Agents:** install the pack (`rgctl install --skill --tools …`) — single skill `rgctl` ([agent-skill](guides/agent-skill.md)).  
+3. **Agents:** install the pack (`rgctl install --skill --tools …`) — single skill `rgctl` ([agent-skill](https://rgctl.io/docs/guides/agent-skill/)).  
 4. **Dashboard:** optional UI after `discover --with-dashboard` + `serve` — not required for structural answers.
 
 Capability designs for contributors: [design/](design/README.md).
@@ -79,7 +79,7 @@ rgctl discover . -e node_modules,target,.git,vendor
 
 ## Capability map (concepts only)
 
-Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[User Guide](user-guide.md)**.
+Step-by-step how-tos: **[Guides](https://rgctl.io/docs/guides/)**. Full CLI walkthrough: **[User Guide](user-guide.md)**.
 
 | Capability | Intent |
 |------------|--------|
@@ -102,7 +102,7 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 | **install** | Bundle agent skills / optional policy into IDEs |
 | **serve** | Foreground HTTP dashboard + semantic HTTP API for one repository |
 
-**Markdown / docs:** `discover` indexes `.md` / `.mdx` by default (headings, links, frontmatter). Use `find` / `relations` on `module` nodes and `references` edges; function semantic search stays separate. See [guide](guides/markdown-context-graph.md).
+**Markdown / docs:** `discover` indexes `.md` / `.mdx` by default (headings, links, frontmatter). Use `find` / `relations` on `module` nodes and `references` edges; function semantic search stays separate. See [guide](https://rgctl.io/docs/guides/markdown-context-graph/).
 
 ---
 
@@ -112,7 +112,7 @@ Step-by-step how-tos: **[Guides](guides/README.md)**. Full CLI walkthrough: **[U
 
 Separately, [`languages.toml`](../languages.toml) registers **~60** language and config/IaC plugins (Tier 1 + generic tree-sitter + regex + formats). Do not equate “Tier 1 deep analysis” with the full plugin catalog count.
 
-The website **`/docs/languages/`** pages are generated from those JSON files at build time — do not maintain parallel hand-written coverage tables. Pointers: [languages/README.md](languages/README.md) · [tier-1-language-support.md](tier-1-language-support.md) · [CLI command reference](guides/cli-command-reference.md).
+The website **`/docs/languages/`** pages are generated from those JSON files at build time — do not maintain parallel hand-written coverage tables. Pointers: [languages/README.md](languages/README.md) · [tier-1-language-support.md](tier-1-language-support.md) · [CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/).
 
 Current Tier-1 deep-analysis ids include C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript (plus markdown as a doc plugin; ERB and others with coverage JSON as they land).
 
@@ -123,13 +123,13 @@ Current Tier-1 deep-analysis ids include C, C++, C#, Go, Groovy, Java, JavaScrip
 | You want… | Go to |
 |-----------|--------|
 | Install / verify the binary | [Installation](installation.md) |
-| Feature how-tos on CoolStore | [Guides](guides/README.md) |
+| Feature how-tos on CoolStore | [Guides](https://rgctl.io/docs/guides/) |
 | Full CLI + ecommerce-java | [User Guide](user-guide.md) |
-| Agent pack (skills) | [agent-skill](guides/agent-skill.md) |
+| Agent pack (skills) | [agent-skill](https://rgctl.io/docs/guides/agent-skill/) |
 | Paste into *another* repo | [USER_AGENTS_TEMPLATE](agents/USER_AGENTS_TEMPLATE.md) |
 | Language support matrix | [languages/README.md](languages/README.md) (JSON SSOT → website) |
 | JSON fields / `schema_version` | [json-api.md](json-api.md) |
-| HTTP `serve` API | [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) |
+| HTTP `serve` API | [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) |
 | Latest release notes | [v0.4.17](releases/v0.4.17.md) |
 | Contribute / cold profiles | [AGENTS.md](../AGENTS.md) · [docs hub — For contributors](README.md#for-contributors) |
 | Research map | [further-reading.md](further-reading.md) |

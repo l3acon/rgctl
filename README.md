@@ -5,13 +5,13 @@
 [![Stars](https://img.shields.io/github/stars/sshaaf/rgctl?style=for-the-badge&logo=github)](https://github.com/sshaaf/rgctl/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
-[![Docs](https://img.shields.io/badge/docs-shaaf.dev%2Frgctl-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://shaaf.dev/rgctl)
-[![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl/website.yml?branch=main&style=flat-square&label=website)](https://shaaf.dev/rgctl)
+[![Docs](https://img.shields.io/badge/docs-rgctl.io-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://rgctl.io/)
+[![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl-website/website.yml?branch=main&style=flat-square&label=website)](https://rgctl.io/)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
-[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex%20%7C%20Antigravity-111827?style=flat-square)](https://shaaf.dev/rgctl/docs/guides/agent-skill/)
-[![Tier 1](https://img.shields.io/badge/languages-Tier%201%20%2B%20catalog-8b5cf6?style=flat-square)](https://shaaf.dev/rgctl/docs/languages/)
+[![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex%20%7C%20Antigravity-111827?style=flat-square)](https://rgctl.io/docs/guides/agent-skill/)
+[![Tier 1](https://img.shields.io/badge/languages-Tier%201%20%2B%20catalog-8b5cf6?style=flat-square)](https://rgctl.io/docs/languages/)
 
 [![C](https://img.shields.io/badge/C-A8B9CC?style=flat-square&logo=c&logoColor=black)](docs/languages/README.md)
 [![C++](https://img.shields.io/badge/C%2B%2B-00599C?style=flat-square&logo=cplusplus&logoColor=white)](docs/languages/README.md)
@@ -27,7 +27,7 @@
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](docs/languages/README.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](docs/languages/README.md)
 [![Puppet](https://img.shields.io/badge/Puppet-FFAE1A?style=flat-square&logo=puppet&logoColor=black)](docs/languages/README.md)
-[![Markdown](https://img.shields.io/badge/Markdown-000000?style=flat-square&logo=markdown&logoColor=white)](docs/guides/markdown-context-graph.md)
+[![Markdown](https://img.shields.io/badge/Markdown-000000?style=flat-square&logo=markdown&logoColor=white)](https://rgctl.io/docs/guides/markdown-context-graph/)
 
 > Index once (`discover`), then ask callers, blast radius, control/data-flow slices, clones, communities, and PR call-path deltas — compact deterministic JSON for agents, not grepping the tree.
 
@@ -76,7 +76,7 @@ https://github.com/user-attachments/assets/15ec6d91-f716-4cbd-a873-e982ba3c6dca
 **One-line release binary** (macOS / Linux):
 
 ```bash
-curl -fsSL https://shaaf.dev/rgctl/install.sh | sh
+curl -fsSL https://rgctl.io/install.sh | sh
 rgctl --version
 ```
 
@@ -146,13 +146,13 @@ rgctl install --skill --tools cursor,claude,codex,antigravity,agents
 - **`rgctl` skill:** Routes natural-language architecture, impact, slicing, clone, community, and migration questions to deterministic `rgctl -f json` commands.
 - **`rgctl-review` skill (`/rgctl:review`):** Runs a local PR/branch structural review (`review paths`, `review check`, blast radius) and writes `REVIEW_REPORT.md` + a four-section verdict without posting to GitHub/GitLab.
 
-See the [Agent pack guide](docs/guides/agent-skill.md). For *your* application repo, you can also copy [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into `AGENTS.md`.
+See the [Agent pack guide](https://rgctl.io/docs/guides/agent-skill/). For *your* application repo, you can also copy [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) into `AGENTS.md`.
 
 ---
 
 ## What it does
 
-Commands are organized into six groups (`rgctl --help`). Full flag tables: **[CLI command reference](docs/guides/cli-command-reference.md)**.
+Commands are organized into six groups (`rgctl --help`). Full flag tables: **[CLI command reference](https://rgctl.io/docs/guides/cli-command-reference/)**.
 
 | Group | You need… | Command |
 |-------|-----------|---------|
@@ -169,8 +169,8 @@ Commands are organized into six groups (`rgctl --help`). Full flag tables: **[CL
 
 Highlights: SCIP overlay (`discover --scip`), git co-change (`discover --with-git` → `metrics --churn` / `relations -e cochangeswith`), cross-language MRO (`relations -e overrides`), park-and-resolve multi-repo merge (`rgctl merge`), Fast-Leiden + $\mu+4\sigma$ hub stripping, pull-based CSR FastPageRank with `NodeRole` filtering, lazy v3 `cfg_pdg.bin` slicing, Type-3/4 fragment clones.
 
-- **CLI command reference:** **[docs/guides/cli-command-reference.md](docs/guides/cli-command-reference.md)**
-- **Step-by-step feature guides:** **[docs/guides](docs/guides/README.md)**
+- **CLI command reference:** **[cli command reference](https://rgctl.io/docs/guides/cli-command-reference/)**
+- **Step-by-step feature guides:** **[Guides](https://rgctl.io/docs/guides/)** ([rgctl-website](https://github.com/sshaaf/rgctl-website))
 - **Concepts & architecture overview:** **[Introduction](docs/Introduction.md)**
 - **Full CLI walkthrough (ecommerce-java):** **[User Guide](docs/user-guide.md)**
 
@@ -180,7 +180,7 @@ Highlights: SCIP overlay (`discover --scip`), git co-change (`discover --with-gi
 
 **Tier-1 deep-extraction & CFG/PDG languages** (single-pass `ScopeStack` + `KindDispatchTable`, 100% grammar-verified `*-ast-coverage.json`): **C, C++, C#, Go, Groovy, Java, JavaScript, Kotlin, PHP, Puppet, Python, Ruby, Rust, TypeScript**, plus **ERB** and **Markdown** (document context graph). The full plugin catalog in [`languages.toml`](languages.toml) also registers additional languages and config/IaC plugins (Bash, Dart, Elixir, HCL, Lua, Scala, SQL, Swift, …).
 
-Each language plugin’s AST coverage is tracked in `crates/rgctl-lang-*/{id}-ast-coverage.json` and rendered at [shaaf.dev/rgctl/docs/languages/](https://shaaf.dev/rgctl/docs/languages/) — see [Languages](docs/languages/README.md).
+Each language plugin’s AST coverage is tracked in `crates/rgctl-lang-*/{id}-ast-coverage.json` and rendered at [rgctl.io/docs/languages/](https://rgctl.io/docs/languages/) — see [Languages](docs/languages/README.md).
 
 ---
 
@@ -189,8 +189,8 @@ Each language plugin’s AST coverage is tracked in `crates/rgctl-lang-*/{id}-as
 We welcome contributors across four tracks — see **[CONTRIBUTING.md](CONTRIBUTING.md)** to get started:
 
 1. **Language Plugins & AST Coverage:** Add or deepen tree-sitter extractors ([contributor-checklist.md](docs/contributor-checklist.md), [language-testing-guide.md](docs/language-testing-guide.md)).
-2. **Declarative Taint & Kantra Rules:** Expand security source/sink/sanitizer rules and migration rule packs ([vulnerability-and-osv-analysis.md](docs/guides/vulnerability-and-osv-analysis.md)).
-3. **Agent Host Adapters & Skills:** Improve agent workflows, slash commands, and IDE host adapters ([agent-skill.md](docs/guides/agent-skill.md)).
+2. **Declarative Taint & Kantra Rules:** Expand security source/sink/sanitizer rules and migration rule packs ([Vulnerability and Osv Analysis](https://rgctl.io/docs/guides/vulnerability-and-osv-analysis/)).
+3. **Agent Host Adapters & Skills:** Improve agent workflows, slash commands, and IDE host adapters ([Agent Skill](https://rgctl.io/docs/guides/agent-skill/)).
 4. **Graph & CPG Algorithms:** Work on CSR projections, reachability, dominance, SESE clone detection, and columnar storage ([analysis-architecture.md](docs/analysis-architecture.md), [graph-storage-architecture.md](docs/graph-storage-architecture.md)).
 
 ---
@@ -201,7 +201,7 @@ We welcome contributors across four tracks — see **[CONTRIBUTING.md](CONTRIBUT
 |-----|-----|
 | [Installation](docs/installation.md) | One-line install, build from source, PATH setup |
 | [Introduction](docs/Introduction.md) | What / why / capability map |
-| [Guides](docs/guides/README.md) · [CLI reference](docs/guides/cli-command-reference.md) | Feature guides + canonical CLI taxonomy |
+| [Guides](https://rgctl.io/docs/guides/) · [CLI reference](https://rgctl.io/docs/guides/cli-command-reference/) | Feature guides + canonical CLI taxonomy |
 | [User Guide](docs/user-guide.md) | `ecommerce-java` + full CLI reference |
 | [JSON API](docs/json-api.md) | `-f json` schemas, `schema_version`, error envelopes |
 | [Docs index](docs/README.md) | Complete documentation map |

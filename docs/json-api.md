@@ -185,7 +185,7 @@ rgctl -f json discover . | jq '.metrics | {nodes: .nodes_generated, ms: .duratio
 
 ## 5. Structured query verbs
 
-Agent-facing graph exploration: `find`, `callers`, `callees`, `relations`, `inventory`, and `status`. Guide: [structured-query.md](guides/structured-query.md).
+Agent-facing graph exploration: `find`, `callers`, `callees`, `relations`, `inventory`, and `status`. Guide: [Structured Query](https://rgctl.io/docs/guides/structured-query/).
 
 **Source:** `crates/rgctl-graph/src/structured_query.rs`, `src/cli/structured_query.rs`, `src/cli/session_status.rs`
 
@@ -358,7 +358,7 @@ interface UpdateQueuedJson {
 }
 ```
 
-When `serve --watch` is live, `update` enqueues to `.rgctl/update_queue.jsonl` and waits for a result (default). See [Watch mode](guides/watch-mode.md).
+When `serve --watch` is live, `update` enqueues to `.rgctl/update_queue.jsonl` and waits for a result (default). See [Watch mode](https://rgctl.io/docs/guides/watch-mode/).
 
 ### jq examples
 
@@ -564,7 +564,7 @@ rgctl -f json pr-check --policy-file rgctl-tests/rgctl-pr-policy.json \
   --base-ref origin/main --head-ref HEAD --strict
 ```
 
-Temporal PR gate: compares base + head graph snapshots, git-scoped entities, classifies violations as `new` | `existing` | `resolved` | `regression`. Default head synthesis builds a delta head from the base artifact; use `--full-snapshots` for pre-built dual artifacts. Flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`. Preferred command name is **`review check`**; `pr-check` remains a synonym. Guide: [pr-review.md](guides/pr-review.md).
+Temporal PR gate: compares base + head graph snapshots, git-scoped entities, classifies violations as `new` | `existing` | `resolved` | `regression`. Default head synthesis builds a delta head from the base artifact; use `--full-snapshots` for pre-built dual artifacts. Flags: `--bisect`, `--synthetic-head worktree`, `--cascade-depth`. Preferred command name is **`review check`**; `pr-check` remains a synonym. Guide: [Pr Review](https://rgctl.io/docs/guides/pr-review/).
 
 ---
 
@@ -575,7 +575,7 @@ rgctl -f json review paths --base-ref origin/main --head-ref HEAD --full-snapsho
 # Optional: --upstream-depth 2 --downstream-depth 1 --symbol submitOrder --fanout 10 --max-symbols 50
 ```
 
-Structural before/after call-path report (not a policy gate). Shares base/head artifact prep with `review check`. Truncation sets flags in JSON but still exits **0** when the report is produced. Ambiguous `--symbol` returns `ambiguous` candidates and exits **2**. Guide: [pr-review.md](guides/pr-review.md).
+Structural before/after call-path report (not a policy gate). Shares base/head artifact prep with `review check`. Truncation sets flags in JSON but still exits **0** when the report is produced. Ambiguous `--symbol` returns `ambiguous` candidates and exits **2**. Guide: [Pr Review](https://rgctl.io/docs/guides/pr-review/).
 
 ### TypeScript shape
 
@@ -1284,7 +1284,7 @@ See also `inventory --by community` (User Guide §6).
 
 ## 16b. `clones`
 
-Clone groups via Function `code_hash` (**exact** Type-1), `token_bloom` Jaccard (**bloom** candidates), or CFG SESE hammock Weisfeiler-Lehman canonical hashing (**fragment** sub-function clones). Query-time / sidecars `.rgctl/clones.json` / `.rgctl/clones.bloom.json` / `.rgctl/clones.fragment.json` — **not** topology edges. Distinct from `semantic query`. Types: `crates/rgctl-analysis/src/clones.rs`, `crates/rgctl-analysis/src/fragment_clones.rs`, CLI `src/cli/clones.rs`. Design: [clone-detection-design.md](design/clone-detection-design.md). Guide: [clone-detection.md](guides/clone-detection.md).
+Clone groups via Function `code_hash` (**exact** Type-1), `token_bloom` Jaccard (**bloom** candidates), or CFG SESE hammock Weisfeiler-Lehman canonical hashing (**fragment** sub-function clones). Query-time / sidecars `.rgctl/clones.json` / `.rgctl/clones.bloom.json` / `.rgctl/clones.fragment.json` — **not** topology edges. Distinct from `semantic query`. Types: `crates/rgctl-analysis/src/clones.rs`, `crates/rgctl-analysis/src/fragment_clones.rs`, CLI `src/cli/clones.rs`. Design: [clone-detection-design.md](design/clone-detection-design.md). Guide: [Clone Detection](https://rgctl.io/docs/guides/clone-detection/).
 
 ```bash
 rgctl -r "$REPO" -f json clones --mode exact [--min-loc N] [--exclude GLOB] [--lang ID]
@@ -1475,7 +1475,7 @@ rgctl -r "$REPO" -f json vuln analyze --osv ./advisory.json --include-jars lib
 
 `deps check` verdict: `not_affected` | `affected_candidate`. Analyze `exploitability`: `not_affected` | `not_exploitable` | `exploitable` | `under_investigation`. Bundled JAR / `node_modules` scans are **opt-in**. Sink-first requires CFG artifacts.
 
-Human guide: [Vulnerability and OSV Supply-Chain Analysis](guides/vulnerability-and-osv-analysis.md) · [Agent pack](guides/agent-skill.md) · skill workflow `vuln`.
+Human guide: [Vulnerability and OSV Supply-Chain Analysis](https://rgctl.io/docs/guides/vulnerability-and-osv-analysis/) · [Agent pack](https://rgctl.io/docs/guides/agent-skill/) · skill workflow `vuln`.
 
 ---
 
@@ -1483,7 +1483,7 @@ Human guide: [Vulnerability and OSV Supply-Chain Analysis](guides/vulnerability-
 
 Install the embedded **agent pack** (meta skill `rgctl`, companion skills such as `rgctl-review`, slash commands such as `/rgctl:review` for commands-enabled adapters, optional policy). Does **not** require a prior `discover` and does **not** run `discover`. Types: `src/cli/install_output.rs`. `schema_version` is **3** (`writes[].kind` may be `skill` | `meta` | `command` | `policy`).
 
-Human-readable install reference: [Agent pack walkthrough](guides/agent-skill.md).
+Human-readable install reference: [Agent pack walkthrough](https://rgctl.io/docs/guides/agent-skill/).
 
 ```bash
 rgctl -r "$REPO" -f json install --skill [] [--with-policy] \
@@ -1556,7 +1556,7 @@ See [cli-io-sanity-qe.md](cli-io-sanity-qe.md) for the full coverage matrix.
 
 - [user-guide.md](user-guide.md) — install, ecommerce-java walkthrough (CoolStore dual API), CLI examples
 - Field catalogs — exhaustive tables later in this document (formerly `cli-output-schemas.md`)
-- [HTTP Server and Dashboard](guides/http-server-and-dashboard.md) — `rgctl serve`, dashboard, semantic HTTP API
+- [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/) — `rgctl serve`, dashboard, semantic HTTP API
 - [cli-io-sanity-qe.md](cli-io-sanity-qe.md) — subprocess JSON contract and release perf gates
 
 ---
@@ -1608,7 +1608,7 @@ rgctl -f json blast-radius <SYMBOL> [--depth N] [--policy-file PATH] [--with-sli
 | `--with-slices` | Populate `gatekeeping.handoffs` (requires full graph path) |
 | `--class` / `--file` | Disambiguate overloads |
 
-**Optional warm path:** foreground `rgctl serve` is `POST /api/query` on `127.0.0.1:8080`. Daemon HTTP uses `/{reponame}/api/query`. See [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
+**Optional warm path:** foreground `rgctl serve` is `POST /api/query` on `127.0.0.1:8080`. Daemon HTTP uses `/{reponame}/api/query`. See [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/).
 
 **Source:** `src/cli/blast_radius_output.rs`  
 **Cache enrichment:** `crates/rgctl-analysis/src/macro_call_index.rs`, `macro_call_lookup.rs`
@@ -1776,7 +1776,7 @@ rgctl -f json blast-radius <SYMBOL> [--depth N] [--policy-file PATH] [--with-sli
 rgctl serve -r REPO [--open]
 ```
 
-Binds `http://127.0.0.1:8080/` — dashboard at `/`, semantic search at `POST /api/semantic/query`. See [HTTP Server and Dashboard](guides/http-server-and-dashboard.md).
+Binds `http://127.0.0.1:8080/` — dashboard at `/`, semantic search at `POST /api/semantic/query`. See [HTTP Server and Dashboard](https://rgctl.io/docs/guides/http-server-and-dashboard/).
 
 **Requires:** prior `discover` producing `graph.snapshot.bin` under `{repo}/.rgctl/`.
 

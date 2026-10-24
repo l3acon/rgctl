@@ -520,7 +520,7 @@ fn resolve_base_artifact_root_impl(repo: &Path, base_artifact: Option<&Path>) ->
         return Ok(conventional);
     }
     Err(Error::Other(format!(
-        "base graph snapshot not configured: pass --base-artifact, set {RGCTL_BASE_ARTIFACT_ENV}, or create {}/.rgctl/ (see docs/guides/ci-policy-checks.md)",
+        "base graph snapshot not configured: pass --base-artifact, set {RGCTL_BASE_ARTIFACT_ENV}, or create {}/.rgctl/ (see https://rgctl.io/docs/guides/ci-policy-checks/)",
         DEFAULT_BASE_ARTIFACT_SUBDIR
     )))
 }

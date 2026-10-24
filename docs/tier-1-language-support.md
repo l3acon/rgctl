@@ -22,7 +22,7 @@ rgctl uses a **hybrid tiering** model:
 
 **Single-pass extraction (required hot path):** Tier-1 `extract_all` uses `ScopeStack` + `KindDispatchTable` (O(1) `kind_id` dispatch) + thread-local `parse_with_pool` / `with_thread_local_parser` — no per-file `Parser::new()` on the ingest path. Grammar coverage is gated by `*-ast-coverage.json`; `cargo check -p rgctl-languages` warns on drift, and `RGCTL_AST_COVERAGE_STRICT=1` fails the build. Runtime hit tracking: `RGCTL_AST_COVERAGE_TRACK=1`.
 
-**Cross-language MRO / DI:** Tier-1 OOP languages should emit inheritance / mixin edges that `MroIndex` can linearize into `Overrides`, and framework DI/route edges (`Injects`, `ExposesRoute`, …) where applicable — see [dependency-injection-and-frameworks.md](guides/dependency-injection-and-frameworks.md).
+**Cross-language MRO / DI:** Tier-1 OOP languages should emit inheritance / mixin edges that `MroIndex` can linearize into `Overrides`, and framework DI/route edges (`Injects`, `ExposesRoute`, …) where applicable — see [Dependency Injection and Frameworks](https://rgctl.io/docs/guides/dependency-injection-and-frameworks/).
 
 **Markdown** is a separate **custom markup plugin** (`rgctl-lang-markdown`): documentation context graph only — not Tier 1 and not generic Tier 2. See [markdown-context.md](markdown-context.md).
 
