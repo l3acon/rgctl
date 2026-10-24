@@ -142,8 +142,8 @@ export function ArchitectureRoom() {
           why="`communities.json` is missing or empty, so there is no community to show as colour, as a list, or as an aggregate. The packages and their coupling are unaffected — this is not 'one big community'."
         />
       )}
-      <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[420px] overflow-hidden rounded-lg border border-white/8 bg-[#060a12]">
+      <div className="grid min-h-0 flex-1 gap-2 md:grid-cols-[1fr_300px]">
+        <div className="relative min-h-[280px] overflow-hidden rounded-lg border border-white/8 bg-[#060a12]">
           <div ref={hostRef} className="absolute inset-0" data-testid="universe-canvas" />
           {sceneFailed && (
             <div className="absolute inset-0 flex items-center justify-center p-4">

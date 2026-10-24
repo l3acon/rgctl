@@ -101,7 +101,11 @@ export class UniverseScene {
     const height = Math.max(1, container.clientHeight);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    // `updateStyle` must stay on (the default). With `false`, three sets the *backing store* to width x dpr
+    // and never writes `style.width/height`, so the element's CSS size falls back to its attribute size: on a
+    // 2x display the canvas renders at twice the size of its container, is clipped by the panel's
+    // `overflow: hidden`, and the model ends up parked in the bottom-right of the viewport.
+    this.renderer.setSize(width, height);
   }
 
   /** Rebuild the scene for a new view. Cheap enough (256 solids, 6,524 segments) to do on every toggle. */
@@ -446,16 +450,25 @@ export class UniverseScene {
     for (const object of this.coreObjects) box.expandByObject(object);
     if (box.isEmpty()) box.setFromObject(this.world);
     if (box.isEmpty()) return;
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    const centre = sphere.center.clone();
-    const radius = Math.max(sphere.radius, 1);
+    // A tight bound, not the box's circumscribed sphere: the diagonal of a wide, flat box is up to sqrt(3)
+    // longer than the geometry it holds, which framed this disc at about two-thirds of the panel height and
+    // read as an empty screen. Each object's own sphere, measured from the box centre, is the real extent.
+    const centre = box.getCenter(new THREE.Vector3());
+    let radius = 0;
+    for (const object of this.coreObjects) {
+      const own = new THREE.Box3().setFromObject(object).getBoundingSphere(new THREE.Sphere());
+      if (Number.isFinite(own.radius)) radius = Math.max(radius, own.center.distanceTo(centre) + own.radius);
+    }
+    radius = Math.max(radius, 1);
 
     this.controls.target.copy(centre);
     // OrbitControls clamps maxDistance silently, so the ceiling has to admit this framing
     this.controls.maxDistance = Math.max(9000, radius * 10);
 
+    // 1.25, not 1.0: a flat disc seen from above needs room toward its near edge, and a sphere fit does not
+    // know about the tilt — at 1.02 the near rim touched the bottom of the panel.
     const fov = (this.camera.fov * Math.PI) / 180;
-    const distance = (radius / Math.sin(fov / 2)) * 1.05;
+    const distance = (radius / Math.sin(fov / 2)) * 1.25;
     const direction = new THREE.Vector3(0.55, 0.62, 0.75).normalize();
     this.camera.position.copy(centre).addScaledVector(direction, distance);
     this.camera.near = Math.max(1, radius / 500);
