@@ -59,12 +59,19 @@ export function resolveFocus<T extends { function_id: string }>(key: Focus, entr
   return entries.find((e) => e.function_id === key) ?? null;
 }
 
+/**
+ * The rooms, in the order they are offered.
+ *
+ * `architecture` leads: it is the surface this dashboard is being built around (the universe view), and the
+ * question it answers — *how is it structured?* — is the one a reader asks before "what does this symbol do?".
+ * The order is presentation only; every route works regardless.
+ */
 export const ROOMS = [
+  { id: "architecture", label: "Architecture", blurb: "how is it structured?" },
   { id: "repo", label: "Repo", blurb: "where do I start?" },
   { id: "understand", label: "Understand", blurb: "what does this symbol do?" },
   { id: "review", label: "Review", blurb: "what changed, what does it touch?" },
   { id: "security", label: "Security", blurb: "what is reachable and dangerous?" },
-  { id: "architecture", label: "Architecture", blurb: "how is it structured?" },
   { id: "migration", label: "Migration", blurb: "what order should we move it?" },
   { id: "proof", label: "Proof", blurb: "why should I believe any of this?" },
 ] as const;
