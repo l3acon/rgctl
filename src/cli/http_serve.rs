@@ -12,7 +12,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::State,
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{HeaderMap, Method, Request, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
@@ -321,6 +321,95 @@ async fn api_pipeline_status(State(state): State<Arc<AppState>>) -> impl IntoRes
     Json(status)
 }
 
+/// Whether a URL belongs to the **client** router rather than to a file on disk.
+///
+/// v2 is the first dashboard with real paths: v1 was tabs, so its URL never changed and a reload always asked
+/// for `/`. v2's routes are `/$roomId` with `?lens=…&focus=…` as search params, so a reload asks the server
+/// for `/understand` — and a static file server has no such file. It answered `404` with an empty body, which
+/// is a blank page: the shell never loaded, and the router that would have read the URL never ran.
+///
+/// The rule is deliberately narrow, because a fallback that answers *everything* is worse than a 404 — it
+/// turns a missing asset into a MIME error and a missing endpoint into a 200:
+///
+///   * only `GET`/`HEAD`: a `POST` is a method error, not a page (`ServeDir` answers `405`, a truer answer
+///     than `404` — the path exists, the method does not);
+///   * never `/api/…` or `/graphql`, which answer for themselves;
+///   * never a last segment containing `.` — `/assets/index-abc.js` and `/favicon.ico` are *file*
+///     requests, and handing one the HTML shell is how a page renders blank a second way.
+fn is_client_route(method: &Method, path: &str) -> bool {
+    if method != Method::GET && method != Method::HEAD {
+        return false;
+    }
+    if path.starts_with("/api/") || path == "/graphql" {
+        return false;
+    }
+    !path.rsplit('/').next().unwrap_or("").contains('.')
+}
+
+/// `/understand/` → `/understand`, query preserved.
+///
+/// Not cosmetic. The shell references its assets relatively (`./assets/index-abc.js`, because the build uses
+/// `base: "./"`), so a document served at `/understand/` resolves them against `/understand/assets/…`, where
+/// nothing exists — the same blank page arriving by a different door. Canonicalising the URL is what keeps
+/// relative asset resolution correct for a route that is one path segment deep.
+fn without_trailing_slash(path: &str, query: Option<&str>) -> Option<String> {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed.len() == path.len() {
+        return None;
+    }
+    Some(match query {
+        Some(q) if !q.is_empty() => format!("{trimmed}?{q}"),
+        _ => trimmed.to_string(),
+    })
+}
+
+/// The shell, for a URL the client router owns: `200`, because the route exists and the server simply has no
+/// file for it. A 404 here would be a lie about the route, not a report about the filesystem.
+async fn spa_index(dir: &Path) -> Response {
+    match tokio::fs::read(dir.join("index.html")).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("cannot read dashboard index.html: {err}"),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod client_route_tests {
+    use super::*;
+
+    #[test]
+    fn a_room_url_gets_the_shell_but_a_file_url_does_not() {
+        assert!(is_client_route(&Method::GET, "/architecture"));
+        assert!(is_client_route(&Method::GET, "/understand"));
+        assert!(is_client_route(&Method::GET, "/"));
+        // files, endpoint paths and non-GET methods are not the router's business
+        assert!(!is_client_route(&Method::GET, "/assets/index-abc.js"));
+        assert!(!is_client_route(&Method::GET, "/favicon.ico"));
+        assert!(!is_client_route(&Method::GET, "/api/status"));
+        assert!(!is_client_route(&Method::GET, "/graphql"));
+        assert!(!is_client_route(&Method::POST, "/architecture"));
+        assert!(!is_client_route(&Method::DELETE, "/review"));
+    }
+
+    #[test]
+    fn a_trailing_slash_is_canonicalised_with_its_query() {
+        assert_eq!(
+            without_trailing_slash("/understand/", Some("lens=spine")),
+            Some("/understand?lens=spine".to_string())
+        );
+        assert_eq!(
+            without_trailing_slash("/understand/", None),
+            Some("/understand".to_string())
+        );
+        // nothing to do for the root or for a path that is already canonical
+        assert_eq!(without_trailing_slash("/", None), None);
+        assert_eq!(without_trailing_slash("/understand", None), None);
+    }
+}
+
 async fn dashboard_fallback(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -328,8 +417,25 @@ async fn dashboard_fallback(
 ) -> Response {
     let index = state.dashboard_dir.join("index.html");
     if index.is_file() {
+        let method = req.method().clone();
+        let path = req.uri().path().to_string();
+        let query = req.uri().query().map(str::to_string);
+
+        // Redirect before serving: a trailing slash would otherwise serve the shell at a depth where its own
+        // relative asset URLs do not resolve.
+        if is_client_route(&method, &path) {
+            if let Some(target) = without_trailing_slash(&path, query.as_deref()) {
+                return (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, target)])
+                    .into_response();
+            }
+        }
+
         let svc = ServeDir::new(&state.dashboard_dir).append_index_html_on_directories(true);
-        return svc.oneshot(req).await.into_response();
+        let response = svc.oneshot(req).await.into_response();
+        if response.status() == StatusCode::NOT_FOUND && is_client_route(&method, &path) {
+            return spa_index(&state.dashboard_dir).await;
+        }
+        return response;
     }
     let wants_json = headers
         .get(header::ACCEPT)

@@ -20,10 +20,32 @@ fn rgctl_bin() -> std::path::PathBuf {
         })
 }
 
+/// A repo that already has a dashboard bundle, or `None`.
+///
+/// This used to be the absolute path of one developer's checkout, so on every other machine the only
+/// dashboard test here skipped while reporting success — the same defect `0211f97` fixed in
+/// `test-dashboard-golden.sh`. Order: an explicit override, then this workspace (kept out of git), then any
+/// indexed corpus under `example/`.
 fn repo_with_dashboard() -> Option<std::path::PathBuf> {
-    let repo = std::path::PathBuf::from("/Users/sshaaf/git/java/gbuilder");
-    if repo.join(".rgctl/dashboard/index.html").is_file() {
-        return Some(repo);
+    let has_bundle = |dir: &std::path::Path| dir.join(".rgctl/dashboard/index.html").is_file();
+
+    if let Some(explicit) = std::env::var_os("RGCTL_HTTP_SERVE_REPO") {
+        let dir = std::path::PathBuf::from(explicit);
+        if has_bundle(&dir) {
+            return Some(dir);
+        }
+    }
+    let workspace = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if has_bundle(&workspace) {
+        return Some(workspace);
+    }
+    if let Ok(entries) = std::fs::read_dir(workspace.join("example")) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if has_bundle(&dir) {
+                return Some(dir);
+            }
+        }
     }
     None
 }
@@ -56,7 +78,7 @@ fn wait_for_health(base: &str, timeout: Duration) -> bool {
 #[test]
 fn http_serve_serves_dashboard_and_query_api() {
     let Some(repo) = repo_with_dashboard() else {
-        eprintln!("skip: gbuilder dashboard bundle not present");
+        eprintln!("skip: no repo with a dashboard bundle (set RGCTL_HTTP_SERVE_REPO)");
         return;
     };
     let bin = rgctl_bin();
@@ -150,4 +172,81 @@ fn http_serve_serves_dashboard_and_query_api() {
             );
         }
     }
+}
+
+/// A v2 URL is a *client* route: the server has no file for `/architecture`, and answering `404` produced a
+/// blank page because the shell that would have read the URL never loaded. The fallback is deliberately
+/// narrow, and each of the narrowings is asserted here — a fallback that answers everything hides missing
+/// assets and turns an unknown endpoint into a 200.
+#[test]
+fn spa_fallback_serves_the_shell_for_client_routes_only() {
+    let Some(repo) = repo_with_dashboard() else {
+        eprintln!("skip: no repo with a dashboard bundle (set RGCTL_HTTP_SERVE_REPO)");
+        return;
+    };
+    let bin = rgctl_bin();
+    assert!(bin.is_file(), "missing rgctl binary at {}", bin.display());
+
+    let port = pick_port();
+    let base = format!("http://127.0.0.1:{port}");
+    let child = Command::new(&bin)
+        .args([
+            "-r",
+            repo.to_str().unwrap(),
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port.to_string(),
+            "--no-pipeline",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn rgctl serve");
+    let _guard = ServerGuard { child };
+    assert!(
+        wait_for_health(&base, Duration::from_secs(20)),
+        "server did not become healthy"
+    );
+
+    let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("client");
+
+    // the room URL, which no file answers
+    let room = client.get(format!("{base}/architecture")).send().expect("GET /architecture");
+    assert_eq!(room.status(), 200, "a client route must serve the shell, not a 404");
+    let content_type = room
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(content_type.contains("text/html"), "got content-type {content_type:?}");
+    // Vite emits `<!DOCTYPE html>` in caps, and the shell mounts into a `#root` div — accept either marker
+    let shell_body = room.text().unwrap_or_default().to_lowercase();
+    assert!(
+        shell_body.contains("<!doctype html") || shell_body.contains("id=\"root\""),
+        "the shell, not an empty body"
+    );
+
+    // the same route with a trailing slash resolves its assets against the wrong directory, so it redirects
+    let slash = client.get(format!("{base}/architecture/")).send().expect("GET /architecture/");
+    assert_eq!(slash.status(), 308, "a trailing slash must be canonicalised");
+    assert_eq!(
+        slash.headers().get("location").and_then(|v| v.to_str().ok()),
+        Some("/architecture")
+    );
+
+    // a file request is not a client route: this is how a page renders blank a second way
+    let missing = client
+        .get(format!("{base}/assets/does-not-exist.js"))
+        .send()
+        .expect("GET missing asset");
+    assert_eq!(missing.status(), 404, "a missing asset must stay a 404");
+
+    // and the API answers for itself
+    let api = client.get(format!("{base}/api/status")).send().expect("GET /api/status");
+    assert!(api.status().is_success(), "api/status should answer for itself");
 }
