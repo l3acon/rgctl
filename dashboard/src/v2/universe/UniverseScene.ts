@@ -17,7 +17,7 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { hueFor, layoutVolumes, sunflower } from "../architectureLayers";
+import { footprintScale, heightScale, hueFor, layoutVolumes, sunflower } from "../architectureLayers";
 import type { ArchitectureView, CommunityGroup, PackageNode } from "../architectureTypes";
 
 export type UniverseLayer = "packages" | "communities";
@@ -108,15 +108,12 @@ export class UniverseScene {
   update(input: UniverseInput): void {
     this.clear();
     this.pickables.length = 0;
-    const extent = input.layer === "packages" ? this.drawPackages(input) : this.drawCommunities(input);
-    // maxDistance clamps silently, so the ceiling has to admit the framing this scene asks for
-    this.controls.maxDistance = Math.max(9000, extent.full * 8);
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
-    this.fitCamera(extent.core * 1.5);
+    if (input.layer === "packages") this.drawPackages(input);
+    else this.drawCommunities(input);
+    this.frameWorld();
   }
 
-  private drawPackages(input: UniverseInput): { core: number; full: number; refit: boolean } {
+  private drawPackages(input: UniverseInput): void {
     const { view, height, footprint } = input;
     const seat = (n: number) => (20 / 2.4) * Math.sqrt(n);
     const layout = layoutVolumes(view.volumes, view.standalone.length, { seatRadius: seat, pad: 16 });
@@ -132,6 +129,7 @@ export class UniverseScene {
       }));
       shell.position.set(placed.centre[0], top / 2 - 4, placed.centre[1]);
       this.add(shell);
+      this.coreObjects.push(shell);
       const wire = new THREE.LineSegments(
         new THREE.EdgesGeometry(box),
         new THREE.LineBasicMaterial({ color: 0xa8dcff, transparent: true, opacity: 0.5 }),
@@ -176,12 +174,15 @@ export class UniverseScene {
     }
 
     if (input.edges) this.web(drawn, positions, view);
-    return { core: layout.coreRadius, full: layout.extentRadius, refit: true };
   }
 
-  private drawCommunities(input: UniverseInput): { core: number; full: number; refit: boolean } {
-    const { view, height, footprint } = input;
+  private drawCommunities(input: UniverseInput): void {
+    const { view } = input;
     const groups = view.communities;
+    // The aggregated layer has its own distribution — a community holds the *sum* of its packages' members,
+    // so reusing the package height scale would push every solid past the top of it.
+    const height = heightScale(groups.map((g) => g.members));
+    const footprint = footprintScale(groups.map((g) => g.functions));
     const positions = new Map<number, [number, number, number]>();
     const extent = 70 * Math.sqrt(Math.max(1, groups.length));
 
@@ -198,34 +199,47 @@ export class UniverseScene {
       }));
       mesh.position.set(pos[0], height(group.members) / 2, pos[2]);
       this.add(mesh);
+      this.coreObjects.push(mesh);
       this.pickables.push({ mesh, entry: this.communityEntry(group) });
     });
 
     if (input.edges) {
+      // Same anchoring rule as the package layer: leave each solid part-way up, or the web hides at the
+      // base of the very solids it connects.
+      const lift = new Map(groups.map((g) => [g.id, Math.min(height(g.members) * 0.5, 46)]));
       const pairs = this.communityPairs(view);
       this.webSegments(pairs.flatMap(([a, b, weight]) => {
         const from = positions.get(a);
         const to = positions.get(b);
-        return from && to ? ([[from, to, weight]] as Segment[]) : [];
+        if (!from || !to) return [];
+        const segment: Segment = [
+          [from[0], lift.get(a) ?? 6, from[2]],
+          [to[0], lift.get(b) ?? 6, to[2]],
+          weight,
+        ];
+        return [segment];
       }));
     }
-    return { core: extent, full: extent + 260, refit: true };
+    void extent;
   }
 
+  /**
+   * The aggregate layer's edges: the exported package edges, collapsed to community pairs.
+   *
+   * Read from the exported edge list rather than from `incidence`, which only the package layer fills — so
+   * this layer no longer depends on the other one having been drawn first (opening the room on the
+   * aggregated view drew no edges at all).
+   */
   private communityPairs(view: ArchitectureView): [number, number, number][] {
-    // aggregated from the package edges the view already carries, so the aggregate layer is never a second
-    // source of truth — it is the same edges, collapsed
     const byId = new Map(view.packages.map((p) => [p.id, p]));
     const pairs = new Map<string, number>();
-    for (const pkg of view.packages) {
-      for (const other of this.incidence.get(pkg.id) ?? []) {
-        const a = byId.get(pkg.id);
-        const b = byId.get(other.id);
-        if (!a || !b || a.communityId === b.communityId) continue;
-        const key = a.communityId < b.communityId
-          ? `${a.communityId}|${b.communityId}` : `${b.communityId}|${a.communityId}`;
-        pairs.set(key, (pairs.get(key) ?? 0) + other.weight);
-      }
+    for (const edge of view.edgeList) {
+      const a = byId.get(edge.source);
+      const b = byId.get(edge.target);
+      if (!a || !b || a.communityId === b.communityId) continue;
+      const key = a.communityId < b.communityId
+        ? `${a.communityId}|${b.communityId}` : `${b.communityId}|${a.communityId}`;
+      pairs.set(key, (pairs.get(key) ?? 0) + edge.weight);
     }
     return [...pairs.entries()].map(([key, weight]) => {
       const [from, to] = key.split("|").map(Number);
@@ -235,6 +249,18 @@ export class UniverseScene {
 
   /** Filled by `web()` so the aggregate layer can reuse the same edges. */
   private readonly incidence = new Map<number, { id: number; weight: number }[]>();
+
+  /** Solid height per node, so an edge can leave a solid part-way up instead of at the floor. */
+  private readonly heights = new Map<number, number>();
+
+  /**
+   * What the camera frames: the mapped structure, not the artifact band.
+   *
+   * The band holds the producer's buckets and the path fallbacks — on a repo whose labels all resolve to
+   * absolute paths it is the *majority* of the geometry, and framing it would shrink the architecture to a
+   * thumbnail in the middle of its own viewport.
+   */
+  private readonly coreObjects: THREE.Object3D[] = [];
 
   private solid(
     pkg: PackageNode, pos: [number, number, number], height: number, side: number,
@@ -251,6 +277,8 @@ export class UniverseScene {
     }));
     mesh.position.set(pos[0], height / 2, pos[2]);
     this.add(mesh);
+    this.heights.set(pkg.id, height);
+    if (pkg.kind === "package") this.coreObjects.push(mesh);
     if (isBucket) {
       const wire = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
@@ -308,7 +336,11 @@ export class UniverseScene {
       const pair = this.incidence.get(edge.source) ?? [];
       pair.push({ id: edge.target, weight: edge.weight });
       this.incidence.set(edge.source, pair);
-      segments.push([from, to, edge.weight]);
+      // Leave each solid part-way up, capped: an edge at y=0 hides behind the solids it connects, and one
+      // anchored to the top of a 126-unit tower sweeps the whole scene.
+      const ha = Math.min((this.heights.get(edge.source) ?? 10) * 0.5, 46);
+      const hb = Math.min((this.heights.get(edge.target) ?? 10) * 0.5, 46);
+      segments.push([[from[0], ha, from[2]], [to[0], hb, to[2]], edge.weight]);
     }
     void nodes;
     this.webSegments(segments);
@@ -326,7 +358,7 @@ export class UniverseScene {
     const tint = new THREE.Color();
     segments.forEach(([from, to, weight], index) => {
       const t = (Math.log(weight) - low) / span;
-      position.set([from[0], 6, from[2], to[0], 6, to[2]], index * 6);
+      position.set([from[0], from[1], from[2], to[0], to[1], to[2]], index * 6);
       tint.setHSL(0.09 + 0.03 * t, 0.85, 0.1 + 0.3 * t);
       colour.set([tint.r, tint.g, tint.b, tint.r, tint.g, tint.b], index * 6);
     });
@@ -334,7 +366,7 @@ export class UniverseScene {
     geo.setAttribute("position", new THREE.BufferAttribute(position, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(colour, 3));
     const material = new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, opacity: 0.12,
+      vertexColors: true, transparent: true, opacity: 0.18,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     this.add(new THREE.LineSegments(geo, material));
@@ -393,14 +425,42 @@ export class UniverseScene {
     this.disposables.length = 0;
     this.pickables.length = 0;
     this.incidence.clear();
+    this.heights.clear();
+    this.coreObjects.length = 0;
   }
 
-  private fitCamera(radius: number): void {
-    // OrbitControls clamps silently, so the ceiling has to admit the framing asked for here
-    this.controls.maxDistance = Math.max(this.controls.maxDistance, radius * 8);
+  /**
+   * Frame what was actually built.
+   *
+   * This used to frame a disc of radius `core` centred on the origin — an assumption about the geometry
+   * rather than a measurement of it. It was wrong in two ways at once: the aggregated layer's solids are
+   * as tall as their *summed* members, which is far outside the height scale the packages were fitted to,
+   * so the model grew upward past the assumption; and a camera placed on an un-normalised direction vector
+   * sat 1.19x further out than the solve said. The visible result was a map parked in the lower-right of
+   * the viewport.
+   *
+   * `Box3.setFromObject` costs one traversal of ~260 meshes and is immune to both.
+   */
+  private frameWorld(): void {
+    const box = new THREE.Box3();
+    for (const object of this.coreObjects) box.expandByObject(object);
+    if (box.isEmpty()) box.setFromObject(this.world);
+    if (box.isEmpty()) return;
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const centre = sphere.center.clone();
+    const radius = Math.max(sphere.radius, 1);
+
+    this.controls.target.copy(centre);
+    // OrbitControls clamps maxDistance silently, so the ceiling has to admit this framing
+    this.controls.maxDistance = Math.max(9000, radius * 10);
+
     const fov = (this.camera.fov * Math.PI) / 180;
-    const distance = (radius / Math.sin(fov / 2)) * 0.95;
-    this.camera.position.set(distance * 0.55, distance * 0.62, distance * 0.75);
+    const distance = (radius / Math.sin(fov / 2)) * 1.05;
+    const direction = new THREE.Vector3(0.55, 0.62, 0.75).normalize();
+    this.camera.position.copy(centre).addScaledVector(direction, distance);
+    this.camera.near = Math.max(1, radius / 500);
+    this.camera.far = Math.max(90000, radius * 40);
+    this.camera.updateProjectionMatrix();
     this.controls.update();
   }
 
