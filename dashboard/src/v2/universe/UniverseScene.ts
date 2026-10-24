@@ -88,35 +88,6 @@ export class UniverseScene {
     this.loop();
   }
 
-  /**
-   * The axes as the camera currently sees them, for a Maya-style orientation gnomon.
-   *
-   * Projected through the camera's *rotation* only (an orthographic view-space read), which is the whole point
-   * of a gnomon: it says which way is which, not where things are. `depth` is the view-space z, so a label can
-   * be dimmed when its axis points away — the same cue Maya gives by drawing the far half of an axis thinner.
-   */
-  axisVectors(): { axis: "x" | "y" | "z"; label: string; x: number; y: number; depth: number }[] {
-    const inverse = this.camera.quaternion.clone().invert();
-    const axes: { axis: "x" | "y" | "z"; label: string; x: number; y: number; depth: number }[] = [];
-    for (const [axis, label, vector] of [
-      ["x", "X", new THREE.Vector3(1, 0, 0)],
-      ["y", "Y", new THREE.Vector3(0, 1, 0)],
-      ["z", "Z", new THREE.Vector3(0, 0, 1)],
-    ] as const) {
-      const view = vector.clone().applyQuaternion(inverse);
-      axes.push({ axis, label, x: view.x, y: view.y, depth: view.z });
-    }
-    return axes;
-  }
-
-  /** Called once per frame while the camera turns, with the gnomon's axes. */
-  onAxesChange(fn: (axes: ReturnType<UniverseScene["axisVectors"]>) => void): void {
-    this.onAxes = fn;
-  }
-
-  private onAxes: ((axes: ReturnType<UniverseScene["axisVectors"]>) => void) | null = null;
-  private lastQuaternion = new THREE.Quaternion();
-
   onHoverChange(fn: (entry: HoverEntry | null) => void): void {
     this.onHover = fn;
   }
@@ -138,13 +109,14 @@ export class UniverseScene {
   }
 
   /** Rebuild the scene for a new view. Cheap enough (256 solids, 6,524 segments) to do on every toggle. */
-  /** Which layer is currently drawn, so an unrelated update (edges on/off) does not re-frame the view. */
+  /** Which layer is currently drawn. Only the first build frames the camera. */
   private currentLayer: UniverseLayer | null = null;
 
   update(input: UniverseInput): void {
-    // Re-framing on every call threw away the reader's own orbit whenever they toggled the web. The frame is
-    // rebuilt when the *layer* changes — different geometry, different extent — and otherwise left alone.
-    const refit = this.currentLayer !== input.layer;
+    // Frame **once**, on the first build. Every later update — switching the layer, toggling the web — now
+    // leaves the camera exactly where the reader put it. Re-framing on a layer change was still a recentre,
+    // and the reader who had just orientated the view did not ask for a new one.
+    const refit = this.currentLayer === null;
     this.currentLayer = input.layer;
     this.clear();
     this.pickables.length = 0;
@@ -546,10 +518,6 @@ export class UniverseScene {
     if (!this.mounted) return;
     this.frame = requestAnimationFrame(this.loop);
     this.controls.update();
-    if (this.onAxes && !this.camera.quaternion.equals(this.lastQuaternion)) {
-      this.lastQuaternion.copy(this.camera.quaternion);
-      this.onAxes(this.axisVectors());
-    }
     this.renderer.render(this.scene, this.camera);
   };
 
