@@ -440,6 +440,36 @@ fn resolve_source_file(repo_root: &Path, file: &str) -> Result<PathBuf> {
     )))
 }
 
+fn line_start_byte_one_based(source: &str, line: usize) -> Option<usize> {
+    if line == 0 {
+        return None;
+    }
+    if line == 1 {
+        return Some(0);
+    }
+    let mut current = 1;
+    for (i, b) in source.bytes().enumerate() {
+        if b == b'\n' {
+            current += 1;
+            if current == line {
+                return Some(i + 1);
+            }
+        }
+    }
+    None
+}
+
+fn function_containing_byte(
+    locations: &std::collections::HashMap<String, crate::cfg_builder::FunctionLocation>,
+    offset: usize,
+) -> Option<String> {
+    locations
+        .iter()
+        .filter(|(_, loc)| loc.start_byte <= offset && offset < loc.end_byte)
+        .min_by_key(|(_, loc)| loc.end_byte - loc.start_byte)
+        .map(|(name, _)| name.clone())
+}
+
 /// Compute a forward/backward data+control slice (OrderDTO Turn 5).
 pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
     let path = resolve_source_file(&args.repo_root, &args.file)?;
@@ -449,9 +479,27 @@ pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".into())
     });
-    let (start_byte, end_byte) = crate::cfg_builder::index_function_locations(&lang, source.as_bytes())
+    let locs = crate::cfg_builder::index_function_locations(&lang, source.as_bytes())
         .ok()
-        .and_then(|(_, locs)| locs.get(&args.function).copied())
+        .map(|(_, l)| l);
+    let resolved_fn = if args.function.trim().is_empty() {
+        locs.as_ref()
+            .and_then(|l| {
+                line_start_byte_one_based(&source, args.line)
+                    .and_then(|off| function_containing_byte(l, off))
+            })
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("main")
+                    .to_string()
+            })
+    } else {
+        args.function.clone()
+    };
+    let (start_byte, end_byte) = locs
+        .as_ref()
+        .and_then(|l| l.get(&resolved_fn).copied())
         .map(|loc| (Some(loc.start_byte), Some(loc.end_byte)))
         .unwrap_or((None, None));
     let record = crate::cfg_pdg_archive::ensure_cfg_pdg_for_source(
@@ -459,7 +507,7 @@ pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
             repo_root: &args.repo_root,
             language: &lang,
             source: &source,
-            function_name: &args.function,
+            function_name: &resolved_fn,
             file_path: Some(&args.file),
             start_byte,
             end_byte,
@@ -502,7 +550,7 @@ pub fn cpg_flows(args: CpgFlowsArgs) -> Result<CpgFlowsResult> {
     Ok(CpgFlowsResult {
         schema_version: 1,
         file: path.display().to_string(),
-        function: args.function,
+        function: resolved_fn,
         variable: args.variable,
         line: args.line,
         direction: match args.direction {

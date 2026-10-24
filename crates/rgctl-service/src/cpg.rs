@@ -70,7 +70,7 @@ fn require<'a>(value: Option<&'a str>, name: &str) -> Result<&'a str> {
 fn run_flows(repo: &Path, args: &CpgArgs) -> Result<Value> {
     let file = require(args.file.as_deref(), "file")?;
     let variable = require(args.variable.as_deref(), "variable")?;
-    let function = require(args.function.as_deref(), "function")?;
+    let function = args.function.as_deref().map(str::trim).unwrap_or("");
     let line = args
         .line
         .ok_or_else(|| ServiceError::InvalidParams("`line` is required".into()))?;

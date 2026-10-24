@@ -433,7 +433,7 @@ pub enum Commands {
         #[arg(value_name = "SYMBOL")]
         symbol: Option<String>,
 
-        /// Edge type (calls, uses, extends, implements, annotatedwith, …)
+        /// Edge type (calls, uses, extends, implements, overrides, cochangeswith, annotatedwith, exposesroute, injects, …)
         #[arg(short = 'e', long = "edge", value_name = "TYPE")]
         edge: String,
 
@@ -573,13 +573,13 @@ pub enum Commands {
     },
 
     /// Alias namespace for structured query verbs (`query find`, `query callers`, …)
-    #[command(display_order = 15)]
+    #[command(display_order = 15, hide = true)]
     Query {
         #[command(subcommand)]
         action: QueryCommands,
     },
 
-    /// Line-level program slice or taint trace
+    /// Line-level program slice or taint trace (builds & caches single-function CFG/PDG lazily on demand)
     #[command(display_order = 21)]
     Slice {
         file: String,
@@ -590,6 +590,7 @@ pub enum Commands {
         #[arg(long)]
         variable: String,
 
+        /// Enclosing function/method name (auto-resolved from `file:line` when omitted)
         #[arg(long)]
         function: Option<String>,
 
@@ -604,6 +605,10 @@ pub enum Commands {
 
         #[arg(long, value_enum, default_value = "text")]
         view: SliceView,
+
+        /// Expand criterion via intra-procedural may-alias heuristics (copies / field bases)
+        #[arg(long = "with-alias")]
+        with_alias: bool,
     },
 
     /// Macro impact / blast radius for a symbol
@@ -674,7 +679,7 @@ pub enum Commands {
         layer: InspectLayer,
     },
 
-    /// Network analytics (PageRank, betweenness, communities)
+    /// Network & churn analytics (PageRank, betweenness, communities, git churn)
     #[command(display_order = 24)]
     Metrics {
         #[arg(long)]
@@ -712,12 +717,14 @@ pub enum Commands {
         action: CommunitiesCommands,
     },
 
-    /// Clone groups: exact Type-1 (`code_hash`) or bloom candidates — not semantic search
+    /// Clone detection: exact Type-1 (`code_hash`), Type-2 Bloom LSH, or Type-3/4 SESE+1-WL fragments
     #[command(
         display_order = 26,
-        long_about = "Find duplicate function implementations (clone groups).\n\
-                      Modes: exact (Type-1 code_hash groups) | bloom (token_bloom Jaccard candidates).\n\
-                      Bloom results are candidates (high false-positive risk), not Type-1 clones.\n\
+        long_about = "Find duplicate function or sub-function implementations (clone groups).\n\
+                      Modes:\n  \
+                        exact    — Type-1 identical code_hash groups\n  \
+                        bloom    — Type-2 64-bit token_bloom Jaccard LSH candidates\n  \
+                        fragment — Type-3/4 sub-function SESE hammock + 1-WL canonical subgraph clones (--seed)\n\
                       Distinct from `semantic query` (NL/embedding nearest neighbors)."
     )]
     Clones {
@@ -821,7 +828,7 @@ pub enum Commands {
     },
 
     /// Compatibility alias for `rgctl review check` (prefer `review check`)
-    #[command(display_order = 52)]
+    #[command(display_order = 52, hide = true)]
     PrCheck {
         #[arg(long)]
         policy_file: String,
@@ -1533,16 +1540,16 @@ pub enum CpgCommands {
         #[arg(long, default_value_t = false)]
         include_unresolved: bool,
     },
-    /// Data/control flows from a variable at a line (wraps slice)
+    /// Data/control flows from a variable at a line (lazy single-fn CFG/PDG build on demand)
     Flows {
         file: String,
         #[arg(long)]
         line: usize,
         #[arg(long)]
         variable: String,
-        /// Enclosing method / function name
+        /// Enclosing method / function name (auto-resolved from `file:line` when omitted)
         #[arg(long)]
-        function: String,
+        function: Option<String>,
         #[arg(long)]
         language: Option<String>,
         #[arg(long, value_enum, default_value = "forward")]
@@ -1586,7 +1593,7 @@ pub enum CpgCommands {
         #[arg(long)]
         def_use: bool,
     },
-    /// Line-level slice (wraps `slice`)
+    /// Line-level slice (alias for top-level `rgctl slice`)
     Slice {
         file: String,
         #[arg(long)]
@@ -1603,6 +1610,9 @@ pub enum CpgCommands {
         taint: bool,
         #[arg(long, value_enum, default_value = "text")]
         view: SliceView,
+        /// Expand criterion via intra-procedural may-alias heuristics (copies / field bases)
+        #[arg(long = "with-alias")]
+        with_alias: bool,
     },
 }
 
@@ -1733,6 +1743,7 @@ impl Cli {
                 direction,
                 taint,
                 view,
+                with_alias,
             } => slice::run(
                 &ctx,
                 slice::SliceArgs {
@@ -1744,6 +1755,7 @@ impl Cli {
                     direction,
                     taint,
                     view,
+                    with_alias,
                 },
             ),
             Commands::BlastRadius {
@@ -2358,6 +2370,7 @@ impl Cli {
                         direction,
                         taint,
                         view,
+                        with_alias,
                     } => cpg::CpgAction::Slice {
                         file,
                         line,
@@ -2367,6 +2380,7 @@ impl Cli {
                         direction,
                         taint,
                         view,
+                        with_alias,
                     },
                 };
                 cpg::run(&ctx, mapped)

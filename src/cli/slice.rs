@@ -7,8 +7,9 @@ use super::slice_output::{
     cfg_topology_json, pdg_topology_json, taint_slice_json, text_slice_json,
 };
 use crate::analysis::{
-    BackwardSlicer, EnsureCfgPdgOpts, ForwardSlicer, FunctionLocation, ProgramDependenceGraph,
-    SliceCriterion, TaintAnalyzer, ensure_cfg_pdg_for_source, index_function_locations,
+    EnsureCfgPdgOpts, FunctionLocation, ProgramDependenceGraph, SliceCriterion,
+    SliceDirection as AnalysisSliceDirection, SliceOptions, TaintAnalyzer,
+    compute_slice_with_options, ensure_cfg_pdg_for_source, index_function_locations,
 };
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
@@ -104,6 +105,7 @@ pub struct SliceArgs {
     pub direction: SliceDirection,
     pub taint: bool,
     pub view: SliceView,
+    pub with_alias: bool,
 }
 
 /// Normalize `Class::method` / `Class.method` to a name that exists in `locations` when possible.
@@ -224,10 +226,19 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
         return Ok(());
     }
 
-    let slice = match args.direction {
-        SliceDirection::Backward => BackwardSlicer::new(pdg, &cfg).slice(criterion.clone()),
-        SliceDirection::Forward => ForwardSlicer::new(pdg, &cfg).slice(criterion.clone()),
-    }
+    let analysis_dir = match args.direction {
+        SliceDirection::Backward => AnalysisSliceDirection::Backward,
+        SliceDirection::Forward => AnalysisSliceDirection::Forward,
+    };
+    let slice = compute_slice_with_options(
+        pdg,
+        &cfg,
+        criterion.clone(),
+        analysis_dir,
+        SliceOptions {
+            with_alias: args.with_alias,
+        },
+    )
     .map_err(|e| name_the_function_searched(e.into(), &fn_name, &locations, explicit_function))?;
 
     match args.view {

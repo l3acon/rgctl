@@ -40,7 +40,7 @@ pub enum CpgAction {
         file: String,
         line: usize,
         variable: String,
-        function: String,
+        function: Option<String>,
         language: Option<String>,
         direction: SliceDirection,
         with_alias: bool,
@@ -75,6 +75,7 @@ pub enum CpgAction {
         direction: SliceDirection,
         taint: bool,
         view: SliceView,
+        with_alias: bool,
     },
 }
 
@@ -161,7 +162,7 @@ fn cpg_action_to_service(action: &CpgAction) -> rgctl_service::CpgArgs {
             file: Some(file.clone()),
             line: Some(*line),
             variable: Some(variable.clone()),
-            function: Some(function.clone()),
+            function: function.clone(),
             exclude_ctors: false,
             member: None,
             include_unresolved: false,
@@ -202,6 +203,7 @@ fn cpg_action_to_service(action: &CpgAction) -> rgctl_service::CpgArgs {
             variable,
             function,
             direction,
+            with_alias,
             ..
         } => CpgArgs {
             op: CpgOp::Slice,
@@ -215,7 +217,7 @@ fn cpg_action_to_service(action: &CpgAction) -> rgctl_service::CpgArgs {
             member: None,
             include_unresolved: false,
             direction: dir(direction),
-            with_alias: false,
+            with_alias: *with_alias,
         },
         CpgAction::Export { .. } => unreachable!("export stays on CLI path"),
     }
@@ -331,6 +333,7 @@ pub fn run(ctx: &CliContext, action: CpgAction) -> Result<()> {
             direction,
             taint,
             view,
+            with_alias,
         } => slice::run(
             ctx,
             SliceArgs {
@@ -342,6 +345,7 @@ pub fn run(ctx: &CliContext, action: CpgAction) -> Result<()> {
                 direction,
                 taint,
                 view,
+                with_alias,
             },
         ),
     }
@@ -423,7 +427,7 @@ fn run_flows(
     file: String,
     line: usize,
     variable: String,
-    function: String,
+    function: Option<String>,
     language: Option<String>,
     direction: SliceDirection,
     with_alias: bool,
@@ -436,7 +440,11 @@ fn run_flows(
         SliceDirection::Backward => AnalysisSliceDirection::Backward,
     };
     // Prefer Class::method / Class.method as-is; analysis also accepts bare trailing name.
-    let function = normalize_function_selector(&function, None);
+    // When omitted, cpg_flows resolves the function containing `line`.
+    let function = function
+        .as_deref()
+        .map(|f| normalize_function_selector(f, None))
+        .unwrap_or_default();
     let result = cpg_flows(CpgFlowsArgs {
         repo_root: ctx.repo.clone(),
         file,

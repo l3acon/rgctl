@@ -18,7 +18,15 @@ Options:\n\
 const GROUPS: &[(&str, &[&str])] = &[
     (
         "Lifecycle",
-        &["discover", "status", "update", "serve", "diff"],
+        &[
+            "discover",
+            "status",
+            "update",
+            "watch",
+            "merge",
+            "serve",
+            "diff",
+        ],
     ),
     (
         "Query",
@@ -71,6 +79,9 @@ pub fn render_grouped_commands(cmd: &Command) -> String {
     let mut abouts: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut width = 12usize;
     for sub in cmd.get_subcommands() {
+        if sub.is_hide_set() {
+            continue;
+        }
         let name = sub.get_name().to_string();
         width = width.max(name.len());
         let about = sub
