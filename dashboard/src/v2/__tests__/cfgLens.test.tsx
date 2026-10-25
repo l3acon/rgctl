@@ -15,7 +15,7 @@ import { installFetchStub, OTHER, SUBJECT } from "./fixture";
 
 function renderLens(functionId = SUBJECT) {
   const history = createMemoryHistory({
-    initialEntries: [`/understand?lens=cfgpddg&focus=${functionId}`],
+    initialEntries: [`/understand?lens=cfgpdg&focus=${functionId}`],
   });
   const router = createAppRouter(history);
   const { container } = render(
