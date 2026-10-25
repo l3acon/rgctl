@@ -42,7 +42,7 @@ pub struct Metanode {
     /// Columnar row indices in `graph_payload.bin` for WASM LOD drill-down.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub member_indices: Vec<u32>,
-    /// Louvain community id (majority vote of member nodes).
+    /// Fast-Leiden community id (majority vote of member nodes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub community_id: Option<usize>,
 }

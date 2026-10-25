@@ -1066,7 +1066,7 @@ Incremental filecontent results are cached under `.rgctl/kantra_cache/` (content
 | `violations[].symbol` | string? | Import or symbol name when resolved by referenced rules |
 | `violations[].enrichment` | object? | Graph linkage + metrics (after blast engine build) |
 | `violations[].enrichment.node_id` | string? | UUID of matched graph node (used for `VIOLATES` edges) |
-| `violations[].enrichment.community_id` | number? | Fast-Leiden community id (field may still be named `louvain_community_id` in older sidecars) |
+| `violations[].enrichment.community_id` | number? | Fast-Leiden community id |
 | `violations[].enrichment.pagerank` | number? | PageRank centrality |
 | `violations[].enrichment.blast_radius_score` | number? | Blast-radius score for the node |
 | `violations[].enrichment.impact_zone_size` | number? | Transitive impact zone size |
@@ -1253,7 +1253,7 @@ rgctl -r "$REPO" -f json semantic query "cart" --scope community --limit 5 \
 
 ## 16. `communities`
 
-List / refresh heuristic labels over **Fast-Leiden** clusters ($\mu+4\sigma$ hub strip; `louvain_community_id` is a historical schema field name only). Types: `src/cli/communities.rs`.
+List / refresh heuristic labels over **Fast-Leiden** clusters ($\mu+4\sigma$ hub strip). Types: `src/cli/communities.rs`.
 
 ```bash
 rgctl -r "$REPO" -f json communities list

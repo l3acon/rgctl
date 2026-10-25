@@ -100,8 +100,6 @@ Semantic search is **opt-in** (`rgctl semantic index`, default `vocab-accumulate
 3. **Phase 2 — Leiden refinement (`refine_partition`)**: Splits any disconnected community into connected sub-communities via BFS (`verify_community_connectedness`), guaranteeing 0 disconnected communities.
 4. **Phase 3 — Coarsening (`coarsen_graph`)**: Aggregates refined communities into weighted super-nodes and repeats for up to `max_levels` until modularity converges.
 
-> Note: Legacy serialization fields named `louvain_community_id` in dashboard/migration payloads store the Fast-Leiden community IDs for schema compatibility.
-
 ## Running tests and benchmarks
 
 ```bash

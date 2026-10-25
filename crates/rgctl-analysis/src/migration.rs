@@ -125,9 +125,9 @@ pub struct MigrationCommunityNode {
     pub avg_betweenness: f64,
     /// Maximum blast radius among member functions.
     pub max_blast: f64,
-    /// Majority Louvain / label-propagation community of member functions (for layout clustering).
+    /// Majority Fast-Leiden community of member functions (for layout clustering).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub louvain_community_id: Option<usize>,
+    pub community_id: Option<usize>,
 }
 
 /// Directed inter-package call edge (caller macro node → callee macro node).
@@ -148,9 +148,9 @@ pub struct MigrationCommunityEdge {
 pub struct MigrationGraphPayload {
     /// Payload schema version.
     pub schema_version: u32,
-    /// `package_macro` — one node per package/module (not raw Louvain community).
+    /// `package_macro` — one node per package/module (not raw Fast-Leiden community).
     pub mode: String,
-    /// Modularity of the underlying label-propagation partition.
+    /// Modularity of the underlying Fast-Leiden partition.
     pub modularity: f64,
     /// Macro nodes (packages/modules).
     pub communities: Vec<MigrationCommunityNode>,
@@ -206,7 +206,7 @@ struct MacroAgg {
     harmonic_sum: f64,
     betweenness_sum: f64,
     max_blast: f64,
-    louvain_votes: HashMap<usize, u32>,
+    community_votes: HashMap<usize, u32>,
 }
 
 /// Derive a stable, host-independent package / module label from a source file path.
@@ -440,7 +440,7 @@ pub fn build_migration_graph(
         }
         if let Some(table) = community_table {
             if let Some(cid) = table.get(compact_id) {
-                *entry.louvain_votes.entry(cid).or_insert(0) += 1;
+                *entry.community_votes.entry(cid).or_insert(0) += 1;
             }
         }
     });
@@ -479,8 +479,8 @@ pub fn build_migration_graph(
             merged.harmonic_sum += b.harmonic_sum;
             merged.betweenness_sum += b.betweenness_sum;
             merged.max_blast = merged.max_blast.max(b.max_blast);
-            for (cid, votes) in b.louvain_votes {
-                *merged.louvain_votes.entry(cid).or_insert(0) += votes;
+            for (cid, votes) in b.community_votes {
+                *merged.community_votes.entry(cid).or_insert(0) += votes;
             }
         }
         label_to_id.insert(merged.label.clone(), id);
@@ -537,8 +537,8 @@ pub fn build_migration_graph(
 
 fn macro_to_node(id: usize, bucket: MacroAgg) -> MigrationCommunityNode {
     let count = bucket.member_count.max(1) as f64;
-    let louvain_community_id = bucket
-        .louvain_votes
+    let community_id = bucket
+        .community_votes
         .into_iter()
         .max_by_key(|(_, votes)| *votes)
         .map(|(cid, _)| cid);
@@ -550,7 +550,7 @@ fn macro_to_node(id: usize, bucket: MacroAgg) -> MigrationCommunityNode {
         avg_harmonic: bucket.harmonic_sum / count,
         avg_betweenness: bucket.betweenness_sum / count,
         max_blast: bucket.max_blast,
-        louvain_community_id,
+        community_id,
     }
 }
 
@@ -994,7 +994,7 @@ mod tests {
                     avg_harmonic: 0.1,
                     avg_betweenness: 0.0,
                     max_blast: 10.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
                 MigrationCommunityNode {
                     id: 1,
@@ -1004,7 +1004,7 @@ mod tests {
                     avg_harmonic: 0.1,
                     avg_betweenness: 0.0,
                     max_blast: 10.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
             ],
             edges: vec![],
@@ -1034,7 +1034,7 @@ mod tests {
                     avg_harmonic: 0.5,
                     avg_betweenness: 0.0,
                     max_blast: 0.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
                 MigrationCommunityNode {
                     id: 2,
@@ -1044,7 +1044,7 @@ mod tests {
                     avg_harmonic: 0.5,
                     avg_betweenness: 0.0,
                     max_blast: 0.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
             ],
             edges: vec![],

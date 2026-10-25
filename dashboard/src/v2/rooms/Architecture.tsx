@@ -316,7 +316,7 @@ function Communities({ view, sharedOnly }: { view: ArchitectureView; sharedOnly:
       subtitle={
         view.modularity === null
           ? `${view.communities.length} · modularity not exported`
-          : `${view.communities.length} · Louvain, modularity ${view.modularity.toFixed(3)}`
+          : `${view.communities.length} · Fast-Leiden, modularity ${view.modularity.toFixed(3)}`
       }
     >
       <ul className="flex flex-col gap-1 text-[11px]">

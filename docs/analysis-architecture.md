@@ -63,7 +63,7 @@ a new snapshot header to “preserve” those caches.
 | Analysis | Primary graph | Algorithm |
 |----------|---------------|-----------|
 | Centrality | `PetGraphView` → `FlatGraphIndex` | Pull-based CSR **`FastPageRank`** (dual-track `Calls` vs `STRUCTURAL_EDGE_TYPES`); **`NodeRole`** filter (`Production` / `Test` / `Generated` / `ExternalStub` / `Entrypoint` — non-production excluded from default hotspots; `--include-tests` to include); **`SampledBetweenness`** ($K=256$ degree-stratified Brandes pivots); **`HyperBallHarmonic`** (`discover --with-harmonic`) |
-| Community | `PetGraphView` (undirected filter) | **Fast-Leiden** (local moving queue + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ **`HubStripPolicy`** → `"Shared / Infrastructure"` (`infrastructure_community_id`). JSON field `louvain_community_id` is historical schema name only |
+| Community | `PetGraphView` (undirected filter) | **Fast-Leiden** (local moving queue + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ **`HubStripPolicy`** → `"Shared / Infrastructure"` (`infrastructure_community_id`) |
 | Blast radius (engine) | CSR Calls filter + kosaraju | Kosaraju SCC → on-demand reachability (flat graphs) or bitset rows |
 | Blast radius (analyzer) | `PetGraphView` Calls filter | Reverse BFS |
 | Dependencies | `PetGraphView` directed | Kosaraju SCC, reverse BFS impact |

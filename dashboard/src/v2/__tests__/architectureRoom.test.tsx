@@ -84,10 +84,10 @@ describe("the Architecture room", () => {
     expect(screen.getAllByText(/could not be established/i).length).toBeGreaterThan(0);
   });
 
-  it("attributes the modularity to Louvain and keeps the producer's labels verbatim", async () => {
+  it("attributes the modularity to Fast-Leiden and keeps the producer's labels verbatim", async () => {
     stubBundle({ "metagraph.json": metagraphJson, "communities.json": summaryJson });
     render(<ArchitectureRoom />);
-    await waitFor(() => expect(screen.getByText(/Louvain/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Fast-Leiden/)).toBeTruthy());
     // "Mutable" is a Java modifier used as a community label — shown as-is, never cleaned up
     expect(screen.getByText("Mutable")).toBeTruthy();
   });

@@ -63,7 +63,7 @@ export interface CommunityEntry {
 
 export interface CommunitySummary {
   schema_version?: number;
-  /** Louvain modularity. The only file that carries it. */
+  /** Fast-Leiden modularity. The only file that carries it. */
   modularity?: number | null;
   communities: CommunityEntry[];
 }

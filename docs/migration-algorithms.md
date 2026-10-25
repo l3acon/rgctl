@@ -51,7 +51,7 @@ To decide *where* to draw service boundaries when breaking apart a monolith, res
 * **Louvain & Girvan-Newman Algorithms:** These optimize modularity by grouping code nodes that have dense internal connections (high cohesion) but sparse external connections (low coupling).
 * **Spectral Clustering:** Operates on the Laplacian matrix of the Program Dependence Graph to find optimal cut points that minimize the data flow and inter-process communication (IPC) overhead between newly generated microservices.
 
-**What rgctl ships:** community detection is **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` — not Louvain and not label propagation. The serialized / JSON field name `louvain_community_id` is retained only for schema compatibility. Centrality uses pull-based CSR `FastPageRank`, `SampledBetweenness` ($K=256$), and `HyperBallHarmonic`. See [analysis-architecture.md](analysis-architecture.md) and [further-reading.md](further-reading.md).
+**What rgctl ships:** community detection is **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` — not Louvain and not label propagation. Centrality uses pull-based CSR `FastPageRank`, `SampledBetweenness` ($K=256$), and `HyperBallHarmonic`. See [analysis-architecture.md](analysis-architecture.md) and [further-reading.md](further-reading.md).
 
 ---
 
