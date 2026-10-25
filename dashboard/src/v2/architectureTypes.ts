@@ -90,6 +90,8 @@ export interface PackageNode {
   functions: number;
   classes: number;
   communityId: number;
+  /** Producer community label from `communities.json` (falls back to the id string). */
+  communityLabel: string;
   /** Derived namespace key — see `namespaceOf`. */
   namespace: string;
   /** A package, the producer's remainder bucket, or a path-heuristic bucket. */

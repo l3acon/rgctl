@@ -142,7 +142,7 @@ where
                 }
             }
             if let Some(p) = &path {
-                packages.push(path_to_package(p));
+                packages.push(crate::migration::package_label(p));
                 paths.push(p.clone());
             }
             names.push(name);
@@ -160,33 +160,6 @@ where
     labeled.sort_by_key(|(id, _)| *id);
     dedupe_community_labels(&mut labeled);
     labeled.into_iter().collect()
-}
-
-fn path_to_package(file_path: &str) -> String {
-    let path = file_path.replace('\\', "/");
-    if let Some(idx) = path.find("/java/") {
-        let after = &path[idx + 6..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    if let Some(idx) = path.find("/src/") {
-        let after = &path[idx + 5..];
-        if let Some(parent) = std::path::Path::new(after).parent() {
-            let pkg = parent.to_string_lossy().replace('/', ".");
-            if !pkg.is_empty() {
-                return pkg;
-            }
-        }
-    }
-    std::path::Path::new(&path)
-        .parent()
-        .map(|p| p.to_string_lossy().replace('/', "."))
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "root".into())
 }
 
 /// True when a binding node is a virtual community.

@@ -178,7 +178,9 @@ export class UniverseScene {
       ]);
     });
 
-    const drawn = [...view.packages, ...view.standalone, ...buckets];
+    // `view.packages` already includes every standalone package (kind === "package");
+    // do not spread `view.standalone` again or we double-mesh those solids.
+    const drawn = [...view.packages, ...buckets];
     for (const pkg of drawn) {
       const pos = positions.get(pkg.id);
       if (!pos) continue;
@@ -206,7 +208,7 @@ export class UniverseScene {
       const side = footprint(group.functions);
       const geo = new THREE.BoxGeometry(side, height(group.members), side);
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(hueFor(index) / 360, group.shared ? 0.72 : 0.08, group.shared ? 0.58 : 0.42),
+        color: new THREE.Color().setHSL(hueFor(group.id % 97) / 360, group.shared ? 0.72 : 0.08, group.shared ? 0.58 : 0.42),
         roughness: 0.55, metalness: 0.12,
       }));
       mesh.position.set(pos[0], height(group.members) / 2, pos[2]);
@@ -310,7 +312,9 @@ export class UniverseScene {
             : `package · ${pkg.size.toLocaleString()} members · ${pkg.functions.toLocaleString()} functions`,
           isBucket
             ? `${pkg.size.toLocaleString()} members · ${pkg.functions.toLocaleString()} functions`
-            : `namespace ${pkg.namespace} · community ${pkg.communityId}`,
+            : pkg.communityLabel && pkg.communityLabel !== String(pkg.communityId)
+              ? `namespace ${pkg.namespace} · community ${pkg.communityId} (${pkg.communityLabel})`
+              : `namespace ${pkg.namespace} · community ${pkg.communityId}`,
           isBucket
             ? "its coupling is aggregated over unrelated files, so it is not drawn"
             : pkg.sharesCommunity ? "shares its community" : "alone in its community",

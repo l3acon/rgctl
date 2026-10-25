@@ -73,13 +73,12 @@ export function toPackages(metagraph: Metagraph, summary: CommunitySummary): Pac
       functions: node.functions,
       classes: node.classes,
       communityId: node.community_id,
+      communityLabel: communityLabel(summary, node.community_id),
       namespace: kind === "package" ? key : kind === "remainder" ? REMAINDER_LABEL : key,
       kind,
       sharesCommunity: (perCommunity.get(node.community_id) ?? 0) > 1,
     };
   });
-  // `summary` is accepted so callers cannot forget the join; the count above is the bundle's own node data.
-  void summary;
 }
 
 /** Namespace volumes — only where a rule-consistent group actually holds ≥2 packages. */
