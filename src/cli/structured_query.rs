@@ -1,12 +1,12 @@
 //! Structured query CLI: `find`, `callers`, `callees`, `relations`, `inventory`.
 
-use super::context::CliContext;
 use super::OutputFormat;
+use super::context::CliContext;
 use anyhow::{Context, Result};
 use rgctl_error::Error as GraphError;
 use rgctl_graph::{
-    parse_edge_type, parse_node_type, InventoryBy, QueryFilters, RelationDirection, ScopeMode,
-    STRUCTURED_QUERY_SCHEMA_VERSION, StructuredQuery,
+    InventoryBy, QueryFilters, RelationDirection, STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode,
+    StructuredQuery, parse_edge_type, parse_node_type,
 };
 
 /// Shared filter flags for structured query verbs.
@@ -27,7 +27,10 @@ pub struct SharedQueryArgs {
 }
 
 impl SharedQueryArgs {
-    fn into_filters(self, node_type: Option<rgctl_graph::schema::NodeType>) -> Result<QueryFilters> {
+    fn into_filters(
+        self,
+        node_type: Option<rgctl_graph::schema::NodeType>,
+    ) -> Result<QueryFilters> {
         let scope_mode = if self.exclude_scope {
             ScopeMode::Outside
         } else if let Some(m) = self.scope_mode.as_deref() {
@@ -59,7 +62,9 @@ fn open_store(ctx: &CliContext) -> Result<std::sync::Arc<rgctl_graph::SnapshotNo
 }
 
 /// Load `.rgctl/annotation_args.json` into a lookup keyed by `source_id\0annotation`.
-fn load_annotation_arg_index(repo: &std::path::Path) -> Option<std::collections::HashMap<String, String>> {
+fn load_annotation_arg_index(
+    repo: &std::path::Path,
+) -> Option<std::collections::HashMap<String, String>> {
     let path = rgctl_graph::paths::artifact_path(repo, "annotation_args.json");
     let bytes = std::fs::read(&path).ok()?;
     let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
@@ -75,11 +80,7 @@ fn load_annotation_arg_index(repo: &std::path::Path) -> Option<std::collections:
             .unwrap_or_else(|| annotation.to_string());
         map.insert(format!("{source_id}\0{simple}"), arguments.to_string());
     }
-    if map.is_empty() {
-        None
-    } else {
-        Some(map)
-    }
+    if map.is_empty() { None } else { Some(map) }
 }
 
 fn emit_json<T: serde::Serialize>(ctx: &CliContext, value: &T) -> Result<()> {
@@ -144,9 +145,8 @@ fn map_sq_err(ctx: &CliContext, err: GraphError) -> anyhow::Error {
         } => {
             if ctx.format == OutputFormat::Json {
                 let msg = format!("Ambiguous symbol '{name}': {count} matches");
-                let recovery = format!(
-                    "rgctl find {name} --file <PATH> --class <CLASS> --line <N>"
-                );
+                let recovery =
+                    format!("rgctl find {name} --file <PATH> --class <CLASS> --line <N>");
                 let _ = ctx.emit_json_error(
                     "ambiguous_symbol",
                     "AMBIGUOUS_SYMBOL",
@@ -159,10 +159,7 @@ fn map_sq_err(ctx: &CliContext, err: GraphError) -> anyhow::Error {
                 eprintln!("Ambiguous symbol '{name}': {count} matches. Candidates:");
                 for c in candidates.iter().take(20) {
                     let file = c.file.as_deref().unwrap_or("?");
-                    let line = c
-                        .line
-                        .map(|n| n.to_string())
-                        .unwrap_or_else(|| "?".into());
+                    let line = c.line.map(|n| n.to_string()).unwrap_or_else(|| "?".into());
                     let qn = c.qualified_name.as_deref().unwrap_or("");
                     eprintln!(
                         "  - id={} type={} file={file}:{line} name={} {qn}",
@@ -264,8 +261,8 @@ pub fn run_find(
     let mut shared = shared;
     let mut package_resolution = None;
     if let Some(ref coords) = package_coords {
-        let resolved = rgctl_security::resolve_package(coords)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let resolved =
+            rgctl_security::resolve_package(coords).map_err(|e| anyhow::anyhow!("{e}"))?;
         if pattern.is_none() {
             // Prefer first import prefix as find pattern (glob-friendly).
             if let Some(prefix) = resolved.import_prefixes.first() {
@@ -352,8 +349,8 @@ pub fn run_call_neighbors(
     let mut symbols = vec![symbol];
 
     if let Some(ref coords) = package_coords {
-        let resolved = rgctl_security::resolve_package(coords)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let resolved =
+            rgctl_security::resolve_package(coords).map_err(|e| anyhow::anyhow!("{e}"))?;
         if shared.scope.is_none() {
             if let Some(prefix) = resolved.import_prefixes.first() {
                 shared.scope = Some(prefix.clone());
@@ -437,7 +434,9 @@ pub fn run_relations(
     }
     if symbol.is_none() && from_ty.is_none() && to_ty.is_none() && filters.scope.is_none() {
         // Allow but warn via stderr — still run (seedless full scan).
-        eprintln!("note: seedless relations without --from-type/--to-type/--scope may return a large edge set");
+        eprintln!(
+            "note: seedless relations without --from-type/--to-type/--scope may return a large edge set"
+        );
     }
     let q = StructuredQuery::new(store.as_ref());
     let result = q
@@ -487,18 +486,12 @@ pub fn run_relations(
 }
 
 /// `rgctl inventory`
-pub fn run_inventory(
-    ctx: &CliContext,
-    by: String,
-    shared: SharedQueryArgs,
-) -> Result<()> {
+pub fn run_inventory(ctx: &CliContext, by: String, shared: SharedQueryArgs) -> Result<()> {
     let store = open_store(ctx)?;
     let dim = InventoryBy::parse(&by).map_err(|e| anyhow::anyhow!("{e}"))?;
     let filters = shared.into_filters(None)?;
     let q = StructuredQuery::new(store.as_ref());
-    let result = q
-        .inventory(dim, &filters)
-        .map_err(|e| map_sq_err(ctx, e))?;
+    let result = q.inventory(dim, &filters).map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         return emit_json(ctx, &result);
     }

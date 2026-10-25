@@ -48,10 +48,9 @@ mod tests {
             result.symbols
         );
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name == "cl-lib" && s.symbol_type == rgctl_plugin_api::SymbolType::Import),
+            result.symbols.iter().any(
+                |s| s.name == "cl-lib" && s.symbol_type == rgctl_plugin_api::SymbolType::Import
+            ),
             "expected import 'cl-lib', got {:?}",
             result.symbols
         );

@@ -1,7 +1,7 @@
 # Expected-facts schema (`expected-facts.json`)
 
 Hand-labeled graph facts checked by `cargo test --test graph_correctness` (approach **A**) plus
-cross-feature invariants (approach **B**). See [sshaaf/rgctl#26](https://github.com/sshaaf/rgctl/issues/26)
+cross-feature invariants (approach **B**). See [sshaaf/rgctl#26](https://github.com/rgctl/rgctl/issues/26)
 and [QE.md](./QE.md) for required-red policy (option B).
 
 ## Location

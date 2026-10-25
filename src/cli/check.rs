@@ -6,8 +6,8 @@ use super::context::CliContext;
 use super::policy_file::PolicyFile;
 use crate::analysis::{BlastRadiusEngine, CentralityAnalyzer, PetGraphView, PolicyViolation};
 use anyhow::Result;
-use serde_json::json;
 use rgctl_incremental::changed_function_symbols;
+use serde_json::json;
 use std::path::Path;
 
 pub struct CheckArgs {
@@ -135,4 +135,3 @@ pub fn run(ctx: &CliContext, args: CheckArgs) -> Result<()> {
     }
     Ok(())
 }
-

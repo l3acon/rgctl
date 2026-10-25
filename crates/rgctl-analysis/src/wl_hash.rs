@@ -5,7 +5,7 @@
 //! renaming (Type-2 clones), whitespace formatting, and comment insertion.
 
 use crate::cfg::{BasicBlock, CfgEdgeType, ControlFlowGraph, Statement, StatementKind};
-use crate::sese::{is_comment, SeseRegion};
+use crate::sese::{SeseRegion, is_comment};
 use std::collections::{HashMap, HashSet};
 
 /// Normalized statement kinds for canonical color refinement.
@@ -48,11 +48,7 @@ impl CanonicalStatementKind {
                         .edges
                         .iter()
                         .any(|e| e.from == blk.id && e.edge_type == CfgEdgeType::Jump);
-                    if has_back_edge {
-                        Self::Loop
-                    } else {
-                        Self::If
-                    }
+                    if has_back_edge { Self::Loop } else { Self::If }
                 } else {
                     Self::If
                 }

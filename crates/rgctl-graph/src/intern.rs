@@ -55,10 +55,7 @@ impl StringInterner {
 
     /// Number of unique interned strings.
     pub fn len(&self) -> usize {
-        self.pool
-            .read()
-            .map(|pool| pool.len())
-            .unwrap_or_default()
+        self.pool.read().map(|pool| pool.len()).unwrap_or_default()
     }
 
     /// Whether the interner is empty.

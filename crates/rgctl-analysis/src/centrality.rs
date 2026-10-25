@@ -411,7 +411,10 @@ impl FastPageRank {
                     .map(|&sink_idx| current_ranks[sink_idx])
                     .sum()
             } else {
-                sink_nodes.iter().map(|&sink_idx| current_ranks[sink_idx]).sum()
+                sink_nodes
+                    .iter()
+                    .map(|&sink_idx| current_ranks[sink_idx])
+                    .sum()
             };
             let dangling_allocation = (damping * dangling_mass) / node_count as f64;
             for score in next_ranks.iter_mut() {

@@ -138,10 +138,7 @@ fn extract_heading(node: Node<'_>, ctx: &mut ExtractCtx<'_>) -> rgctl_plugin_api
     Ok(())
 }
 
-fn extract_code_block(
-    node: Node<'_>,
-    ctx: &mut ExtractCtx<'_>,
-) -> rgctl_plugin_api::Result<()> {
+fn extract_code_block(node: Node<'_>, ctx: &mut ExtractCtx<'_>) -> rgctl_plugin_api::Result<()> {
     let lang = info_string(node, ctx.source);
     let name = format!("code_block_{}", ctx.code_index);
     let qn = format!("{}#{name}", ctx.file);

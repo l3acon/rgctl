@@ -293,8 +293,7 @@ fn resolve_target_uuid_impl(
 
     let lookup_db = MacroCallLookupDb::default_path(&ctx.repo);
     if MacroCallLookupDb::is_valid_for_repo(&lookup_db, &ctx.repo)? {
-        let mut candidates =
-            MacroCallLookupDb::get_candidates(&lookup_db, &parsed.target_name)?;
+        let mut candidates = MacroCallLookupDb::get_candidates(&lookup_db, &parsed.target_name)?;
         filter_candidates_by_line(&mut candidates, line, backend, store);
         if !candidates.is_empty() {
             let id = map_resolve_err(ctx, resolve_symbol_uuid(&candidates, parsed), parsed)?;
@@ -330,14 +329,8 @@ fn resolve_target_uuid_impl(
                 "rgctl blast-radius {} --file <PATH> --class <CLASS> --line <N>",
                 parsed.target_name
             );
-            let _ = ctx.emit_json_error(
-                "not_found",
-                "NOT_FOUND",
-                &msg,
-                None,
-                None,
-                Some(&recovery),
-            );
+            let _ =
+                ctx.emit_json_error("not_found", "NOT_FOUND", &msg, None, None, Some(&recovery));
         }
         return Err(rgctl_error::Error::NodeNotFound(parsed.target_name.clone()).into());
     }
@@ -363,10 +356,13 @@ fn map_resolve_err(
 ) -> Result<Uuid> {
     match result {
         Ok(id) => Ok(id),
-        Err(rgctl_error::Error::AmbiguousSymbol { name, count, candidates }) => {
-            let recovery = format!(
-                "rgctl blast-radius {name} --file <PATH> --class <CLASS> --line <N>"
-            );
+        Err(rgctl_error::Error::AmbiguousSymbol {
+            name,
+            count,
+            candidates,
+        }) => {
+            let recovery =
+                format!("rgctl blast-radius {name} --file <PATH> --class <CLASS> --line <N>");
             if ctx.format == OutputFormat::Json {
                 let _ = ctx.emit_json_error(
                     "ambiguous_symbol",
@@ -471,7 +467,11 @@ fn resolve_blast_result(
     Ok(engine.analyze(symbol_id)?)
 }
 
-fn emit_output(ctx: &CliContext, args: &BlastRadiusArgs, mut response: BlastRadiusResponse) -> Result<()> {
+fn emit_output(
+    ctx: &CliContext,
+    args: &BlastRadiusArgs,
+    mut response: BlastRadiusResponse,
+) -> Result<()> {
     if args.classify_boundary {
         enrich_boundaries(&mut response, &args.boundary);
     }
@@ -482,7 +482,7 @@ fn emit_output(ctx: &CliContext, args: &BlastRadiusArgs, mut response: BlastRadi
 }
 
 fn enrich_boundaries(response: &mut BlastRadiusResponse, allowlist: &[String]) {
-    use rgctl_analysis::{bundled_boundary_catalogs, classify_boundaries, BoundaryNodeRef};
+    use rgctl_analysis::{BoundaryNodeRef, bundled_boundary_catalogs, classify_boundaries};
     let catalogs = bundled_boundary_catalogs();
     let empty: Vec<String> = Vec::new();
     let nodes: Vec<BoundaryNodeRef<'_>> = response

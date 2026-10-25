@@ -10,7 +10,5 @@ pub use drift::{
     ConfigDiffEntry, ConfigDiffKind, ConfigDriftReport, compare_configs, format_drift_report,
 };
 pub use project::{HooksConfig, RgctlConfig, RiskLevel, WatchConfig};
-pub use rgctl_extraction::usage_detector::{
-    ConfigConfidence, ConfigUsage, ConfigUsageDetector,
-};
+pub use rgctl_extraction::usage_detector::{ConfigConfidence, ConfigUsage, ConfigUsageDetector};
 pub use secret_detector::{DetectedSecret, SecretDetector, Severity as SecretSeverity};

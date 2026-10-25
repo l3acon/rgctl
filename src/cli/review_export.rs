@@ -52,9 +52,7 @@ pub struct TruncationAggregate {
 }
 
 impl TruncationAggregate {
-    fn from_sections(
-        report: &crate::analysis::ReviewPathsReport,
-    ) -> Self {
+    fn from_sections(report: &crate::analysis::ReviewPathsReport) -> Self {
         let mut agg = Self {
             symbols: report.truncation.symbols,
             fanout: report.truncation.fanout,
@@ -127,8 +125,8 @@ fn read_timeline(repo: &Path) -> Result<Option<Vec<ViolationLedgerEntry>>> {
     if !path.exists() {
         return Ok(None);
     }
-    let file = std::fs::File::open(&path)
-        .with_context(|| format!("open ledger {}", path.display()))?;
+    let file =
+        std::fs::File::open(&path).with_context(|| format!("open ledger {}", path.display()))?;
     let mut entries = Vec::new();
     for (lineno, line) in std::io::BufReader::new(file).lines().enumerate() {
         let line = line.with_context(|| format!("read ledger line {}", lineno + 1))?;
@@ -369,7 +367,10 @@ mod tests {
 
         let entries = read_timeline(temp.path()).unwrap().expect("ledger present");
         assert_eq!(entries.len(), 2, "malformed and blank lines are skipped");
-        assert_eq!(entries[0].stable_key, 1, "entries are deterministically sorted");
+        assert_eq!(
+            entries[0].stable_key, 1,
+            "entries are deterministically sorted"
+        );
         assert_eq!(entries[1].stable_key, 2);
     }
 

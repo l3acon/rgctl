@@ -3,7 +3,8 @@
 use crate::command::MetricsArgs;
 use crate::error::{Result, ServiceError};
 use crate::metrics_json::{
-    MetricsCommunitiesSection, MetricsPagerankSection, build_metrics_response, metrics_response_to_json,
+    MetricsCommunitiesSection, MetricsPagerankSection, build_metrics_response,
+    metrics_response_to_json,
 };
 use rgctl_analysis::{
     BetweennessCentrality, CommunityDetector, FastPageRank, NodeRole, PetGraphView,
@@ -58,10 +59,7 @@ pub fn run_metrics(graph: &CodeGraph, args: &MetricsArgs) -> Result<Value> {
                 .flatten()
                 .map(|n| {
                     let stub = n.get_property("is_external_stub") == Some("true");
-                    let name = n
-                        .qualified_name
-                        .as_deref()
-                        .unwrap_or(n.name.as_str());
+                    let name = n.qualified_name.as_deref().unwrap_or(n.name.as_str());
                     classify_node_role(name, n.file_path.as_deref(), stub)
                 })
                 .unwrap_or(NodeRole::Production)

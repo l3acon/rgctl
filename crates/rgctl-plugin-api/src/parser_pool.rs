@@ -40,9 +40,7 @@ pub fn with_thread_local_parser<R>(
             );
         }
         let entry = map.get_mut(lang_id).expect("parser entry just ensured");
-        if entry.grammar.as_ref() != Some(&grammar)
-            && entry.parser.set_language(&grammar).is_ok()
-        {
+        if entry.grammar.as_ref() != Some(&grammar) && entry.parser.set_language(&grammar).is_ok() {
             entry.grammar = Some(grammar);
         }
         f(&mut entry.parser)
@@ -50,11 +48,7 @@ pub fn with_thread_local_parser<R>(
 }
 
 /// Parse `source` using the thread-local pool.
-pub fn parse_with_pool(
-    lang_id: &str,
-    grammar: Language,
-    source: &[u8],
-) -> Result<Tree, String> {
+pub fn parse_with_pool(lang_id: &str, grammar: Language, source: &[u8]) -> Result<Tree, String> {
     PARSERS.with(|cell| {
         let mut map = cell.borrow_mut();
         if !map.contains_key(lang_id) {

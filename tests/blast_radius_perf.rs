@@ -22,10 +22,7 @@ fn bench_repo_root() -> Option<PathBuf> {
         return None;
     }
     let default = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/metasfresh-4.9.8b");
-    if default
-        .join(".rgctl/blast_engine.snapshot.bin")
-        .exists()
-    {
+    if default.join(".rgctl/blast_engine.snapshot.bin").exists() {
         Some(default)
     } else {
         None
@@ -264,9 +261,7 @@ fn bench_repo_engine_snapshot_lazy_load_under_5s() {
 #[test]
 fn bench_repo_lite_analyze_under_3s() {
     let Some(repo) = bench_repo_root() else {
-        eprintln!(
-            "skip bench_repo_lite_analyze_under_3s: no RGCTL_BENCH_REPO or metasfresh cache"
-        );
+        eprintln!("skip bench_repo_lite_analyze_under_3s: no RGCTL_BENCH_REPO or metasfresh cache");
         return;
     };
     let graph_path = repo.join(".rgctl/graph.snapshot.bin");
@@ -285,8 +280,7 @@ fn bench_repo_lite_analyze_under_3s() {
         "bench repo engine should use lazy ReachabilityStore"
     );
 
-    let target_name =
-        std::env::var("RGCTL_BENCH_SYMBOL").unwrap_or_else(|_| "saveError".into());
+    let target_name = std::env::var("RGCTL_BENCH_SYMBOL").unwrap_or_else(|_| "saveError".into());
     let nodes = store.find_nodes_by_name(&target_name).expect("name lookup");
     assert!(
         !nodes.is_empty(),

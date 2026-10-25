@@ -44,8 +44,7 @@ impl CodeGraph {
     pub fn from_repository(root: &Path) -> Result<Self> {
         let _ = root;
         Err(Error::Other(
-            "Use rgctl_pipeline::code_graph_from_repository from the workspace root crate"
-                .into(),
+            "Use rgctl_pipeline::code_graph_from_repository from the workspace root crate".into(),
         ))
     }
 

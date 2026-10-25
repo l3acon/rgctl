@@ -325,10 +325,7 @@ fn seed_review_symbols(
 }
 
 /// Rank seeds so Calls-delta-touched symbols come first (for max-symbol truncation).
-fn rank_seeds(
-    seeds: &[StableNodeKey],
-    edge_events: &[EdgeDeltaEvent],
-) -> Vec<StableNodeKey> {
+fn rank_seeds(seeds: &[StableNodeKey], edge_events: &[EdgeDeltaEvent]) -> Vec<StableNodeKey> {
     let mut touched: HashSet<StableNodeKey> = HashSet::new();
     for e in edge_events {
         if e.edge_type == EdgeType::Calls {
@@ -574,7 +571,8 @@ fn build_spine(
             trunc.fanout = true;
             break;
         }
-        let (picked, hit) = preferred_neighbor_keys(outs, prefer, side, fanout.min(*neighbor_budget));
+        let (picked, hit) =
+            preferred_neighbor_keys(outs, prefer, side, fanout.min(*neighbor_budget));
         if hit || outs.len() > fanout {
             trunc.fanout = true;
         }
@@ -615,7 +613,8 @@ fn build_spine(
             best_leaf = Some(best_leaf.unwrap_or(node));
             break;
         }
-        let (picked, hit) = preferred_neighbor_keys(ins, prefer, side, fanout.min(*neighbor_budget));
+        let (picked, hit) =
+            preferred_neighbor_keys(ins, prefer, side, fanout.min(*neighbor_budget));
         if hit || ins.len() > fanout {
             trunc.fanout = true;
         }
@@ -656,7 +655,10 @@ fn build_spine(
     (path, trunc)
 }
 
-fn prefer_keys_from_deltas(edge_events: &[EdgeDeltaEvent], seed: StableNodeKey) -> HashSet<StableNodeKey> {
+fn prefer_keys_from_deltas(
+    edge_events: &[EdgeDeltaEvent],
+    seed: StableNodeKey,
+) -> HashSet<StableNodeKey> {
     let mut prefer = HashSet::new();
     for e in edge_events {
         if e.edge_type != EdgeType::Calls {
@@ -818,7 +820,11 @@ fn build_for_seeds(
 
     let unscored_files = files_in_scope
         .iter()
-        .filter(|p| !seeded_files.iter().any(|s| s == *p || s.ends_with(p.as_str())))
+        .filter(|p| {
+            !seeded_files
+                .iter()
+                .any(|s| s == *p || s.ends_with(p.as_str()))
+        })
         .map(|p| UnscoredFile {
             path: p.clone(),
             reason: if is_code_path(p) {
@@ -866,7 +872,9 @@ mod tests {
         path
     }
 
-    fn rewired_fixture(tmp: &TempDir) -> (SnapshotNodeStore, SnapshotNodeStore, Vec<EdgeDeltaEvent>) {
+    fn rewired_fixture(
+        tmp: &TempDir,
+    ) -> (SnapshotNodeStore, SnapshotNodeStore, Vec<EdgeDeltaEvent>) {
         // Base: handle → submitOrder → chargeCard
         let handle = Node::new(NodeType::Function, "CheckoutController.handle")
             .with_file_path("src/Checkout.java");
@@ -915,8 +923,12 @@ mod tests {
     fn rewired_callee_emits_retargeted_delta() {
         let tmp = TempDir::new().unwrap();
         let (base, head, edges) = rewired_fixture(&tmp);
-        let submit_key =
-            stable_key_from_facets(Some("src/Order.java"), "submitOrder", NodeType::Function, None);
+        let submit_key = stable_key_from_facets(
+            Some("src/Order.java"),
+            "submitOrder",
+            NodeType::Function,
+            None,
+        );
         let report = build_review_paths_report(
             &base,
             &head,
@@ -1015,16 +1027,9 @@ mod tests {
         let mut opts = ReviewPathsOptions::default();
         opts.fanout_cap = 3;
         opts.upstream_depth = 1;
-        let report = build_review_paths_report(
-            &store,
-            &store,
-            &[key],
-            &[],
-            &[],
-            &["t.rs".into()],
-            &opts,
-        )
-        .unwrap();
+        let report =
+            build_review_paths_report(&store, &store, &[key], &[], &[], &["t.rs".into()], &opts)
+                .unwrap();
         let sym = &report.symbols[0];
         assert!(sym.truncation.fanout || report.truncation.fanout);
     }
@@ -1060,16 +1065,7 @@ mod tests {
         let store = SnapshotNodeStore::open(&path).unwrap();
         let mut opts = ReviewPathsOptions::default();
         opts.symbol_filter = Some("dup".into());
-        let report = build_review_paths_report(
-            &store,
-            &store,
-            &[],
-            &[],
-            &[],
-            &[],
-            &opts,
-        )
-        .unwrap();
+        let report = build_review_paths_report(&store, &store, &[], &[], &[], &[], &opts).unwrap();
         assert!(report.symbols.is_empty());
         assert!(report.ambiguous.len() >= 2);
     }

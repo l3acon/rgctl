@@ -43,10 +43,10 @@ Pure QE find — fix in a separate PR.
 | Suite | Command |
 |-------|---------|
 | Map collisions | `cargo test --test map_collision_qe` |
-| GraphBuilder collision unit | `cargo test -p rgctl-extraction qe_` — ambiguous FQN/suffix resolve fixed in [#27](https://github.com/sshaaf/rgctl/issues/27) |
+| GraphBuilder collision unit | `cargo test -p rgctl-extraction qe_` — ambiguous FQN/suffix resolve fixed in [#27](https://github.com/rgctl/rgctl/issues/27) |
 | Graph correctness | `cargo test --test graph_correctness` |
 | Semantic search | `cargo test --test semantic_search_qe` |
-| Cross-feature consistency | `cargo test --test cross_feature_qe` (CALLS ↔ blast ↔ CFG; analysis_results/macro blast caches may be empty on flat graphs — [#28](https://github.com/sshaaf/rgctl/issues/28) won't-fix) |
+| Cross-feature consistency | `cargo test --test cross_feature_qe` (CALLS ↔ blast ↔ CFG; analysis_results/macro blast caches may be empty on flat graphs — [#28](https://github.com/rgctl/rgctl/issues/28) won't-fix) |
 
 ## CI
 

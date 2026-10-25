@@ -761,7 +761,10 @@ fn visit_kotlin(
     let mut now_in = in_target;
     if matches!(
         kind,
-        "function_declaration" | "primary_constructor" | "secondary_constructor" | "anonymous_function"
+        "function_declaration"
+            | "primary_constructor"
+            | "secondary_constructor"
+            | "anonymous_function"
     ) {
         let name = if matches!(kind, "primary_constructor" | "secondary_constructor") {
             find_ancestor_name(node, source, "class_declaration")
@@ -993,10 +996,7 @@ fn visit_puppet(
                                 pname = text_of(part, source)
                                     .map(|s| s.trim_start_matches('$').to_string());
                             }
-                            "type"
-                            | "builtin_type"
-                            | "array_type"
-                            | "composite_type"
+                            "type" | "builtin_type" | "array_type" | "composite_type"
                             | "attribute_type" => {
                                 if pty.is_none() {
                                     pty = text_of(part, source);

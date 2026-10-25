@@ -32,11 +32,14 @@ fn run_json(dir: &Path, args: &[&str]) -> Value {
         "rgctl {:?} failed:\nstdout={}\nstderr={}",
         args, stdout, stderr
     );
-    let json_start = stdout.find('{').unwrap_or_else(|| {
-        panic!("expected JSON object on stdout, got:\n{}", stdout)
-    });
+    let json_start = stdout
+        .find('{')
+        .unwrap_or_else(|| panic!("expected JSON object on stdout, got:\n{}", stdout));
     serde_json::from_str(stdout[json_start..].trim()).unwrap_or_else(|e| {
-        panic!("failed to parse JSON from stdout: {e}\noutput was:\n{}", &stdout[json_start..])
+        panic!(
+            "failed to parse JSON from stdout: {e}\noutput was:\n{}",
+            &stdout[json_start..]
+        )
     })
 }
 
@@ -141,13 +144,7 @@ pub fn audit_orders(orders: &[i32], verbose: bool) -> i32 {
 
     let (ambig_ok, _, ambig_err) = run_cmd(
         repo_dir,
-        &[
-            "clones",
-            "--mode",
-            "fragment",
-            "--seed",
-            "process_orders",
-        ],
+        &["clones", "--mode", "fragment", "--seed", "process_orders"],
     );
     assert!(
         !ambig_ok,
@@ -178,21 +175,15 @@ pub fn audit_orders(orders: &[i32], verbose: bool) -> i32 {
     assert_eq!(disambiguated["group_count"], 1);
 
     // 4. Full-repo unseeded discovery with sidecar caching
-    let unseeded = run_json(
-        repo_dir,
-        &[
-            "-f",
-            "json",
-            "clones",
-            "--mode",
-            "fragment",
-        ],
-    );
+    let unseeded = run_json(repo_dir, &["-f", "json", "clones", "--mode", "fragment"]);
     assert_eq!(unseeded["schema_version"], 2);
     assert_eq!(unseeded["mode"], "fragment");
     assert!(unseeded["seed"].is_null());
     assert!(unseeded["group_count"].as_u64().unwrap() >= 1);
 
     let sidecar_file = repo_dir.join(".rgctl/clones.fragment.json");
-    assert!(sidecar_file.is_file(), "expected .rgctl/clones.fragment.json sidecar file to exist");
+    assert!(
+        sidecar_file.is_file(),
+        "expected .rgctl/clones.fragment.json sidecar file to exist"
+    );
 }

@@ -81,7 +81,8 @@ pub fn eval_java_referenced(
                     out.push(violation(
                         rule_id,
                         "java.referenced",
-                        &MatchSite::new(edge.file_path.clone(), edge.line).with_symbol(&edge.from_name),
+                        &MatchSite::new(edge.file_path.clone(), edge.line)
+                            .with_symbol(&edge.from_name),
                     ));
                 }
             }
@@ -102,7 +103,8 @@ pub fn eval_java_referenced(
                     out.push(violation(
                         rule_id,
                         "java.referenced",
-                        &MatchSite::new(edge.file_path.clone(), edge.line).with_symbol(&edge.from_name),
+                        &MatchSite::new(edge.file_path.clone(), edge.line)
+                            .with_symbol(&edge.from_name),
                     ));
                 }
             }
@@ -129,7 +131,13 @@ pub fn eval_java_referenced(
     Ok(out)
 }
 
-fn push_node_hit(out: &mut Vec<KantraViolation>, rule_id: &str, matched_by: &str, node: &EvalNode, _loc: &str) {
+fn push_node_hit(
+    out: &mut Vec<KantraViolation>,
+    rule_id: &str,
+    matched_by: &str,
+    node: &EvalNode,
+    _loc: &str,
+) {
     let file = node.file_path.clone().unwrap_or_default();
     let line = node.start_line.unwrap_or(1);
     let sym = node.qualified_name.as_deref().unwrap_or(&node.name);
@@ -148,7 +156,7 @@ fn filecontent_fallback(
     matched_by: &str,
 ) -> Result<Vec<KantraViolation>, regex::Error> {
     let _ = (rule_id, re, repo_root, sources, matched_by);
-  // Fallback: scan java sources for pattern when graph match insufficient.
+    // Fallback: scan java sources for pattern when graph match insufficient.
     let mut out = Vec::new();
     for (path, content) in sources {
         if !is_code_file(Some(path)) {

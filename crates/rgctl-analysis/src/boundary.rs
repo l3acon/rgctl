@@ -117,7 +117,12 @@ pub fn classify_boundaries(
         .unwrap_or(&[])
         .iter()
         .map(|s| s.trim().to_ascii_uppercase())
-        .filter(|s| matches!(s.as_str(), "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD"))
+        .filter(|s| {
+            matches!(
+                s.as_str(),
+                "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD"
+            )
+        })
         .collect();
 
     let mut out = Vec::new();
@@ -127,10 +132,9 @@ pub fn classify_boundaries(
         for cat in catalogs {
             if !cat.languages.is_empty()
                 && !lang.is_empty()
-                && !cat
-                    .languages
-                    .iter()
-                    .any(|l| l.eq_ignore_ascii_case(lang) || (lang == "typescript" && l == "javascript"))
+                && !cat.languages.iter().any(|l| {
+                    l.eq_ignore_ascii_case(lang) || (lang == "typescript" && l == "javascript")
+                })
             {
                 continue;
             }

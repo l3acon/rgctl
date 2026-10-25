@@ -3,9 +3,9 @@
 use rgctl_registry::LanguageRegistry;
 use std::sync::Arc;
 
-mod extract_depth;
 #[cfg(test)]
 mod ast_coverage;
+mod extract_depth;
 mod plugin;
 mod single_pass;
 pub use plugin::RustPlugin;

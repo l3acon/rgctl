@@ -1,7 +1,7 @@
 //! `rgctl update` — incremental structural graph patch (not full discover).
 
-use super::context::CliContext;
 use super::OutputFormat;
+use super::context::CliContext;
 use crate::discovery::DiscoveryConfig;
 use crate::languages::registry::LanguageRegistry;
 use anyhow::{Context, Result, bail};
@@ -112,12 +112,7 @@ pub fn run(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_queued(
-    ctx: &CliContext,
-    root: &Path,
-    args: &UpdateArgs,
-    watcher_pid: u32,
-) -> Result<()> {
+fn run_queued(ctx: &CliContext, root: &Path, args: &UpdateArgs, watcher_pid: u32) -> Result<()> {
     if args.force {
         bail!(
             "rgctl update --force cannot run while serve --watch is active (pid {watcher_pid}).\n\
@@ -142,9 +137,7 @@ fn run_queued(
             };
             ctx.emit_json_value(&serde_json::to_value(&payload)?)?;
         } else {
-            println!(
-                "Queued update request {request_id} for serve --watch (pid {watcher_pid})"
-            );
+            println!("Queued update request {request_id} for serve --watch (pid {watcher_pid})");
         }
         return Ok(());
     }
@@ -250,7 +243,11 @@ pub fn run_update_at(
 }
 
 /// Incremental update for an explicit path list (watch path; lock already held by serve).
-pub fn update_paths(root: &Path, relative_paths: &[String], cascade_depth: usize) -> Result<UpdateResult> {
+pub fn update_paths(
+    root: &Path,
+    relative_paths: &[String],
+    cascade_depth: usize,
+) -> Result<UpdateResult> {
     let args = UpdateArgs {
         files: Some(relative_paths.to_vec()),
         cascade_depth,

@@ -2,20 +2,19 @@
 
 use super::args::OutputFormat;
 use super::context::CliContext;
-use rgctl_pipeline::with_large_pool;
 use super::discover_cfg::{
     CfgAnalysisOptions, FileSourceCache, preload_file_sources, run_cfg_analysis_batch,
 };
-use super::discover_limits::{check_memory_budget, DiscoverLimits};
+use super::discover_limits::{DiscoverLimits, check_memory_budget};
 use super::discover_output::{DiscoverArtifacts, build_discover_response};
 use super::stage_profile::{DiscoverStageReport, secs};
 use crate::analysis::graph_utils::PetGraphView;
 use crate::analysis::{
-    AnalysisResults, AnalysisStorage, AstSkeletonArchive, BlastEngineSnapshot, BlastRadiusEngine,
-    CentralityAnalyzer, CfgPdgArchive, CommunityDetector, ComplexityAnalyzer, DependencyAnalyzer,
-    FIELD_WRITE_INDEX_VERSION, FieldWriteIndex, MacroCallIndex, MacroCallLookupDb, NodeLookup,
-    NodeRole, build_and_save_field_write_index, cfg_language_list, classify_node_role,
-    AST_SKELETON_VERSION,
+    AST_SKELETON_VERSION, AnalysisResults, AnalysisStorage, AstSkeletonArchive,
+    BlastEngineSnapshot, BlastRadiusEngine, CentralityAnalyzer, CfgPdgArchive, CommunityDetector,
+    ComplexityAnalyzer, DependencyAnalyzer, FIELD_WRITE_INDEX_VERSION, FieldWriteIndex,
+    MacroCallIndex, MacroCallLookupDb, NodeLookup, NodeRole, build_and_save_field_write_index,
+    cfg_language_list, classify_node_role,
 };
 use crate::config::secret_detector::{DetectedSecret, SecretDetector};
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
@@ -26,6 +25,7 @@ use anyhow::Result;
 use rayon::prelude::*;
 use rgctl_core::memory::MemoryMonitor;
 use rgctl_graph::schema::NodeType;
+use rgctl_pipeline::with_large_pool;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -256,7 +256,8 @@ pub(crate) fn run_full_analysis(
         (stats, digest)
     } else {
         std::fs::create_dir_all(rgctl_graph::paths::artifact_dir(store))?;
-        let (stats, digest) = pipeline.process_repository_to_snapshot(root, &snapshot_path, Some(store))?;
+        let (stats, digest) =
+            pipeline.process_repository_to_snapshot(root, &snapshot_path, Some(store))?;
         if verbose {
             debug!(
                 path = %snapshot_path.display(),
@@ -321,8 +322,9 @@ pub(crate) fn run_full_analysis(
             since: git_since.clone(),
             ..rgctl_analysis::GitChurnConfig::default()
         };
-        let report = rgctl_analysis::compute_and_apply_git_churn(root, graph.backend_mut(), &config)
-            .map_err(|e| anyhow::anyhow!("git churn failed: {e}"))?;
+        let report =
+            rgctl_analysis::compute_and_apply_git_churn(root, graph.backend_mut(), &config)
+                .map_err(|e| anyhow::anyhow!("git churn failed: {e}"))?;
         if report.edges_emitted > 0 || report.commits_used > 0 {
             graph_digest =
                 rgctl_graph::write_columnar_from_backend(graph.backend(), &snapshot_path)?;
@@ -595,10 +597,7 @@ pub(crate) fn run_full_analysis(
                 .find_map(|(id, score)| {
                     let node = cold.get_node(*id).ok().flatten()?;
                     let stub = node.get_property("is_external_stub") == Some("true");
-                    let name = node
-                        .qualified_name
-                        .as_deref()
-                        .unwrap_or(node.name.as_str());
+                    let name = node.qualified_name.as_deref().unwrap_or(node.name.as_str());
                     if classify_node_role(name, node.file_path.as_deref(), stub)
                         == NodeRole::Production
                     {
@@ -683,7 +682,8 @@ pub(crate) fn run_full_analysis(
 
     // Kantra rule evaluation (opt-in with --with-kantra). Index runs later after all
     // `cold` mmap use — rewriting `graph.snapshot.bin` while ColdMetadataDb is open corrupts reads.
-    let kantra_rules_path = with_kantra.then(|| kantra_rules.as_ref().map(std::path::PathBuf::from));
+    let kantra_rules_path =
+        with_kantra.then(|| kantra_rules.as_ref().map(std::path::PathBuf::from));
     let kantra_catalog_path =
         with_kantra.then(|| kantra_catalog.as_ref().map(std::path::PathBuf::from));
     let mut kantra_eval_graph = None;
@@ -691,9 +691,7 @@ pub(crate) fn run_full_analysis(
         if petgraph_view.is_none() {
             petgraph_view = Some(PetGraphView::from_snapshot_store(cold.store())?);
         }
-        let view = petgraph_view
-            .as_ref()
-            .expect("petgraph view for kantra");
+        let view = petgraph_view.as_ref().expect("petgraph view for kantra");
         let kantra_start = Instant::now();
         let (_findings, graph) = super::kantra_discover::run_kantra_stage(
             root,
@@ -885,11 +883,8 @@ pub(crate) fn run_full_analysis(
             let mut writes = batch.field_writes;
             if batch.cache_hits > 0 {
                 if let Ok(Some(existing)) = FieldWriteIndex::open_if_exists(store) {
-                    let recomputed_ids: std::collections::HashSet<_> = batch
-                        .index_entries
-                        .iter()
-                        .map(|e| e.function_id)
-                        .collect();
+                    let recomputed_ids: std::collections::HashSet<_> =
+                        batch.index_entries.iter().map(|e| e.function_id).collect();
                     for w in existing.writes {
                         if !recomputed_ids.contains(&w.function_id) {
                             writes.push(w);
@@ -956,10 +951,8 @@ pub(crate) fn run_full_analysis(
             let mut records = batch.skeletons;
             if batch.cache_hits > 0 && records.len() < success_count {
                 if let Ok(Some(existing)) = AstSkeletonArchive::open_if_exists(store) {
-                    let seen: std::collections::HashSet<_> = records
-                        .iter()
-                        .filter_map(|r| r.function_id)
-                        .collect();
+                    let seen: std::collections::HashSet<_> =
+                        records.iter().filter_map(|r| r.function_id).collect();
                     for rec in existing.records {
                         let keep = match rec.function_id {
                             Some(id) => !seen.contains(&id),
@@ -1125,20 +1118,20 @@ pub(crate) fn run_full_analysis(
                 "Flat graph — skipping bulk blast-radius scan (use `blast-radius` for on-demand queries; #28)"
             );
         }
-        let blast_results: Vec<(uuid::Uuid, crate::analysis::BlastRadiusResult)> = if skip_bulk_blast
-        {
-            Vec::new()
-        } else {
-            functions
-                .par_iter()
-                .filter_map(|func_node| {
-                    engine
-                        .analyze(func_node.id)
-                        .ok()
-                        .map(|result| (func_node.id, result))
-                })
-                .collect()
-        };
+        let blast_results: Vec<(uuid::Uuid, crate::analysis::BlastRadiusResult)> =
+            if skip_bulk_blast {
+                Vec::new()
+            } else {
+                functions
+                    .par_iter()
+                    .filter_map(|func_node| {
+                        engine
+                            .analyze(func_node.id)
+                            .ok()
+                            .map(|result| (func_node.id, result))
+                    })
+                    .collect()
+            };
 
         for (func_id, result) in &blast_results {
             if result.scc_size > 1 {
@@ -1387,9 +1380,7 @@ pub(crate) fn run_full_analysis(
             if kantra_index_only {
                 info!("[✓] Kantra rules indexed into graph (eval skipped)");
             } else {
-                info!(
-                    "[✓] Kantra rules indexed into graph ({violates_count} VIOLATES edges)"
-                );
+                info!("[✓] Kantra rules indexed into graph ({violates_count} VIOLATES edges)");
             }
         }
     }
@@ -1474,8 +1465,7 @@ pub(crate) fn run_full_analysis(
             rgctl_analysis::MigrationOrderMode::parse(migration_order),
         ) {
             Ok(plan) => {
-                written_artifacts.migration_plan =
-                    Some(plan_path.to_string_lossy().into_owned());
+                written_artifacts.migration_plan = Some(plan_path.to_string_lossy().into_owned());
                 if json_output && ctx.output.is_none() && emit_cli_summary {
                     ctx.emit_json_value(&serde_json::to_value(&plan)?)?;
                     return Ok(discover_outcome(
@@ -1518,7 +1508,10 @@ pub(crate) fn run_full_analysis(
     mem_monitor.stop_periodic_sampling();
     profile.analysis_peak_rss_mb = mem_monitor.seal_phase().unwrap_or(0.0);
     if let Some(limit) = limits.as_ref().and_then(|l| l.max_mem_mb) {
-        check_memory_budget(profile.analysis_peak_rss_mb.max(profile.ingest_peak_rss_mb), limit)?;
+        check_memory_budget(
+            profile.analysis_peak_rss_mb.max(profile.ingest_peak_rss_mb),
+            limit,
+        )?;
     }
     let snapshot = mem_monitor.snapshot()?;
     profile.wall_total.secs = secs(run_start.elapsed());
@@ -1530,8 +1523,7 @@ pub(crate) fn run_full_analysis(
     if with_kantra {
         let findings = rgctl_graph::paths::artifact_path(store, "kantra_findings.json");
         if findings.is_file() {
-            written_artifacts.kantra_findings =
-                Some(findings.to_string_lossy().into_owned());
+            written_artifacts.kantra_findings = Some(findings.to_string_lossy().into_owned());
         }
     }
 

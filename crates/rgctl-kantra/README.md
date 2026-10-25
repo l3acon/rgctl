@@ -1,6 +1,6 @@
 # rgctl-kantra
 
-Native Konveyor Kantra rule evaluator for [rgctl](https://github.com/sshaaf/rgctl).
+Native Konveyor Kantra rule evaluator for [rgctl](https://github.com/rgctl/rgctl).
 
 ## Embedded rules catalog
 

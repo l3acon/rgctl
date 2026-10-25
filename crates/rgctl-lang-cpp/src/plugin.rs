@@ -134,14 +134,7 @@ impl CppPlugin {
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
         let mut relations = Vec::new();
-        walk_cpp_calls(
-            root,
-            source,
-            file_path,
-            symbols,
-            &mut relations,
-            None,
-        );
+        walk_cpp_calls(root, source, file_path, symbols, &mut relations, None);
         self.extract_inheritance(root, source, file_path, &mut relations)?;
         self.extract_instantiations(root, source, file_path, symbols, &mut relations)?;
         Ok(relations)
@@ -187,8 +180,8 @@ impl CppPlugin {
 
             match node.kind() {
                 "function_definition" | "declaration" => {
-                    let is_prototype = node.kind() == "declaration"
-                        && node.child_by_field_name("body").is_none();
+                    let is_prototype =
+                        node.kind() == "declaration" && node.child_by_field_name("body").is_none();
                     if !is_prototype {
                         if let Some(mut sym) =
                             self.extract_function(node, source, file_path, active_scope)?
@@ -384,7 +377,8 @@ impl CppPlugin {
                         .unwrap_or_else(|| from_fn.name.clone());
                     if let Some(type_node) = node.child_by_field_name("type") {
                         if let Some(target) = type_name_from_type_node(type_node, source) {
-                            let scoped = scoped_type_name(type_node, source).unwrap_or(target.clone());
+                            let scoped =
+                                scoped_type_name(type_node, source).unwrap_or(target.clone());
                             relations.push(Relation {
                                 from,
                                 to: target,
@@ -507,14 +501,20 @@ fn access_label(node: Node, source: &[u8]) -> &'static str {
 
 fn base_type_name(node: Node, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "type_identifier" => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
-        "qualified_identifier" | "qualified_type_identifier" => last_named_child_by_field(node, "name")
-            .and_then(|n| base_type_name(n, source))
-            .or_else(|| {
-                node.utf8_text(source).ok().and_then(|text| {
-                    text.rsplit("::").next().map(str::trim).map(str::to_string)
+        "type_identifier" => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
+        "qualified_identifier" | "qualified_type_identifier" => {
+            last_named_child_by_field(node, "name")
+                .and_then(|n| base_type_name(n, source))
+                .or_else(|| {
+                    node.utf8_text(source).ok().and_then(|text| {
+                        text.rsplit("::").next().map(str::trim).map(str::to_string)
+                    })
                 })
-            }),
+        }
         "template_type" => node
             .child_by_field_name("name")
             .and_then(|n| base_type_name(n, source)),
@@ -524,7 +524,11 @@ fn base_type_name(node: Node, source: &[u8]) -> Option<String> {
 
 pub(crate) fn scoped_type_name(node: Node, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "type_identifier" => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
+        "type_identifier" => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
         "qualified_identifier" | "qualified_type_identifier" => {
             let scope = node
                 .child_by_field_name("scope")
@@ -542,7 +546,11 @@ pub(crate) fn scoped_type_name(node: Node, source: &[u8]) -> Option<String> {
         "type_specifier" | "primitive_type" => node
             .named_child(0)
             .and_then(|n| scoped_type_name(n, source)),
-        _ => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
+        _ => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
     }
 }
 

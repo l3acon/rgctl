@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_toml_ng::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_toml_ng::LANGUAGE.into())
+                .expect("compile");
         let source = br###"[package]
 name = "rgctl"
 version = "0.1.0"

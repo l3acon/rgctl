@@ -91,12 +91,12 @@ pub fn coverage_handler_entries(manifest_json: &str) -> Vec<(String, String)> {
 }
 
 /// Build [`KindDispatchTable`] only from a coverage manifest (jump table).
-pub fn dispatch_table_from_manifest(
-    grammar: &Language,
-    manifest_json: &str,
-) -> KindDispatchTable {
+pub fn dispatch_table_from_manifest(grammar: &Language, manifest_json: &str) -> KindDispatchTable {
     let entries = coverage_handler_entries(manifest_json);
-    KindDispatchTable::from_coverage(grammar, entries.iter().map(|(n, l)| (n.as_str(), l.as_str())))
+    KindDispatchTable::from_coverage(
+        grammar,
+        entries.iter().map(|(n, l)| (n.as_str(), l.as_str())),
+    )
 }
 
 /// Build [`AstHandlerTable`] from the plugin's actual handled kinds (not the JSON).
@@ -131,8 +131,10 @@ pub fn coverage_tables_from_manifest(
         grammar,
         entries.iter().map(|(n, l)| (n.as_str(), l.as_str())),
     );
-    let dispatch =
-        KindDispatchTable::from_coverage(grammar, entries.iter().map(|(n, l)| (n.as_str(), l.as_str())));
+    let dispatch = KindDispatchTable::from_coverage(
+        grammar,
+        entries.iter().map(|(n, l)| (n.as_str(), l.as_str())),
+    );
     (handlers, dispatch)
 }
 

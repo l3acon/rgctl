@@ -426,10 +426,8 @@ mod tests {
             show_progress: false,
             ..PipelineConfig::default()
         };
-        let pipeline = ProcessingPipeline::with_config(
-            Arc::new(rgctl_languages::default_registry()),
-            config,
-        );
+        let pipeline =
+            ProcessingPipeline::with_config(Arc::new(rgctl_languages::default_registry()), config);
         let (graph, stats) = pipeline.process_repository(temp.path()).unwrap();
 
         assert_eq!(stats.files_processed, 10);

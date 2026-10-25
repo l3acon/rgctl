@@ -72,7 +72,11 @@ mod tests {
             );
         }
 
-        for must_symbol in ["class_declaration", "function_declaration", "object_declaration"] {
+        for must_symbol in [
+            "class_declaration",
+            "function_declaration",
+            "object_declaration",
+        ] {
             assert_eq!(
                 manifest.get(must_symbol).map(String::as_str),
                 Some("Symbol"),

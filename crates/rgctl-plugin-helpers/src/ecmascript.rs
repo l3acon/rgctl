@@ -1,8 +1,6 @@
 //! Shared ECMAScript module and class-heritage extraction for JS/TS plugins.
 
-use rgctl_plugin_api::{
-    Relation, RelationType, SourceLocation, Symbol, SymbolType,
-};
+use rgctl_plugin_api::{Relation, RelationType, SourceLocation, Symbol, SymbolType};
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -57,7 +55,16 @@ pub fn extract_import_symbols(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        collect_import_clause_children(child, source, &name, file_path, language, is_type_only, module.as_deref(), &mut symbols);
+        collect_import_clause_children(
+            child,
+            source,
+            &name,
+            file_path,
+            language,
+            is_type_only,
+            module.as_deref(),
+            &mut symbols,
+        );
     }
 
     symbols
@@ -112,7 +119,14 @@ fn collect_import_clause_children(
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 collect_import_clause_children(
-                    child, source, name, file_path, language, is_type_only, module, symbols,
+                    child,
+                    source,
+                    name,
+                    file_path,
+                    language,
+                    is_type_only,
+                    module,
+                    symbols,
                 );
             }
         }
@@ -418,9 +432,8 @@ pub fn ecmascript_function_symbol_name(node: Node<'_>, source: &[u8]) -> Option<
 
     if is_expr {
         return Some(
-            bound_function_expression_name(node, source).unwrap_or_else(|| {
-                format!("anonymous@L{}", node.start_position().row + 1)
-            }),
+            bound_function_expression_name(node, source)
+                .unwrap_or_else(|| format!("anonymous@L{}", node.start_position().row + 1)),
         );
     }
 
@@ -472,9 +485,12 @@ pub fn bound_function_expression_name(node: Node, source: &[u8]) -> Option<Strin
                 return identifier_text(parent.child_by_field_name("name")?, source);
             }
             "pair" => {
-                let key = parent
-                    .child_by_field_name("key")
-                    .or_else(|| find_direct_child_kinds(parent, &["property_identifier", "identifier", "string", "number"]))?;
+                let key = parent.child_by_field_name("key").or_else(|| {
+                    find_direct_child_kinds(
+                        parent,
+                        &["property_identifier", "identifier", "string", "number"],
+                    )
+                })?;
                 return property_key_text(key, source);
             }
             "public_field_definition" | "field_definition" | "property_definition" => {
@@ -527,7 +543,10 @@ fn find_direct_child_kinds<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a
 }
 
 fn identifier_text(node: Node, source: &[u8]) -> Option<String> {
-    node.utf8_text(source).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    node.utf8_text(source)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn property_key_text(node: Node, source: &[u8]) -> Option<String> {
@@ -643,12 +662,8 @@ mod tests {
     fn test_js_require_import() {
         let source = "const fs = require('fs');";
         let tree = parse_js(source);
-        let symbols = extract_cjs_require_symbols(
-            tree.root_node(),
-            source.as_bytes(),
-            "a.js",
-            "javascript",
-        );
+        let symbols =
+            extract_cjs_require_symbols(tree.root_node(), source.as_bytes(), "a.js", "javascript");
         assert!(symbols.iter().any(|s| s.name == "fs"));
         assert_eq!(
             symbols[0]
@@ -731,7 +746,10 @@ mod tests {
         let source = "[1].map(x => x + 1);";
         let tree = parse_js(source);
         let arrow = find_kind(tree.root_node(), "arrow_function").unwrap();
-        assert_eq!(bound_function_expression_name(arrow, source.as_bytes()), None);
+        assert_eq!(
+            bound_function_expression_name(arrow, source.as_bytes()),
+            None
+        );
     }
 
     #[test]

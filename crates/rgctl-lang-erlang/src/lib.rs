@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_erlang::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_erlang::LANGUAGE.into())
+                .expect("compile");
         let source = br###"-module(math).
 -export([add/2]).
 -record(state, {count = 0}).
@@ -73,10 +74,12 @@ add(A, B) -> helper(A, ok) + lists:sum([B]).
             result.relations
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "add" && r.to == "add"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "add" && r.to == "add"),
             "must not emit self-call add -> add: {:?}",
             result.relations
         );
-
     }
 }

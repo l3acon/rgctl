@@ -27,8 +27,9 @@ pub fn run_impact(graph: &CodeGraph, repo: &Path, args: &ImpactArgs) -> Result<V
     let (id, _) = resolve_target(backend, repo, &parsed)?;
     let result = resolve_blast_result(backend, repo, id, digest.as_deref())?;
     let view = PetGraphView::from_backend(backend).map_err(ServiceError::from)?;
-    let function_impact = BlastRadiusEngine::filter_function_impact(backend, &result.impact_zone_ids)
-        .map_err(ServiceError::from)?;
+    let function_impact =
+        BlastRadiusEngine::filter_function_impact(backend, &result.impact_zone_ids)
+            .map_err(ServiceError::from)?;
     let max_depth = args.depth.unwrap_or(usize::MAX);
     let impact_ids = if max_depth == usize::MAX {
         function_impact

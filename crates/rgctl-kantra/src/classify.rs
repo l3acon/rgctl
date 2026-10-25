@@ -12,10 +12,8 @@ pub struct ClassifiedRule {
     pub clause: WhenClause,
 }
 
-const UNSUPPORTED_PROVIDERS: &[&str] = &[
-    "annotated.elements",
-    "java.referenced.annotated.elements",
-];
+const UNSUPPORTED_PROVIDERS: &[&str] =
+    &["annotated.elements", "java.referenced.annotated.elements"];
 
 /// Classify all rules in a ruleset.
 pub fn classify_rules(rules: &[KantraRule]) -> Vec<ClassifiedRule> {
@@ -113,17 +111,13 @@ mod tests {
 
     #[test]
     fn filecontent_supported() {
-        let c = classify_rules(&[rule(
-            "builtin.filecontent:\n  pattern: x\n",
-        )]);
+        let c = classify_rules(&[rule("builtin.filecontent:\n  pattern: x\n")]);
         assert_eq!(c[0].support, RuleSupport::Supported);
     }
 
     #[test]
     fn java_dependency_supported() {
-        let c = classify_rules(&[rule(
-            "java.dependency:\n  name: foo\n",
-        )]);
+        let c = classify_rules(&[rule("java.dependency:\n  name: foo\n")]);
         assert_eq!(c[0].support, RuleSupport::Supported);
     }
 

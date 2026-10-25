@@ -94,11 +94,7 @@ fn discover_java_cfg(repo: &Path) {
 
 fn assert_keys(v: &Value, keys: &[&str]) {
     for k in keys {
-        assert!(
-            v.get(*k).is_some(),
-            "missing key `{k}` in {}",
-            v
-        );
+        assert!(v.get(*k).is_some(), "missing key `{k}` in {}", v);
     }
 }
 
@@ -119,7 +115,10 @@ fn ecommerce_java_guide_commands_schema_and_keys() {
 
     let status = cli_json(&repo, &["status"]);
     assert_eq!(status["schema_version"], 3);
-    assert_keys(&status, &["nodes", "edges", "command", "status", "capabilities"]);
+    assert_keys(
+        &status,
+        &["nodes", "edges", "command", "status", "capabilities"],
+    );
 
     let find = cli_json(&repo, &["find", "--type", "function", "--count-only"]);
     assert_eq!(find["schema_version"], 2);
@@ -128,16 +127,10 @@ fn ecommerce_java_guide_commands_schema_and_keys() {
     let inventory = cli_json(&repo, &["inventory"]);
     assert!(inventory["counts"].is_array());
 
-    let callers = cli_json(
-        &repo,
-        &["callers", "clearCart", "--class", "CartService"],
-    );
+    let callers = cli_json(&repo, &["callers", "clearCart", "--class", "CartService"]);
     assert!(callers["callers"].is_array());
 
-    let callees = cli_json(
-        &repo,
-        &["callees", "clearCart", "--class", "CartService"],
-    );
+    let callees = cli_json(&repo, &["callees", "clearCart", "--class", "CartService"]);
     assert!(callees["callees"].is_array());
 
     let blast = cli_json(
@@ -160,7 +153,10 @@ fn ecommerce_java_guide_commands_schema_and_keys() {
         &repo,
         &["inspect", "checkout", "--class", "OrderService", "pdg"],
     );
-    assert_keys(&pdg, &["nodes", "edges", "data_deps", "control_deps", "layer"]);
+    assert_keys(
+        &pdg,
+        &["nodes", "edges", "data_deps", "control_deps", "layer"],
+    );
 
     let dom = cli_json(
         &repo,
@@ -210,13 +206,7 @@ fn ecommerce_java_guide_commands_schema_and_keys() {
     // --export-migration-hints → migration plan on stdout + artifact
     let mig = cli_json(
         &repo,
-        &[
-            "discover",
-            ".",
-            "-l",
-            "java",
-            "--export-migration-hints",
-        ],
+        &["discover", ".", "-l", "java", "--export-migration-hints"],
     );
     assert_eq!(mig["schema_version"], 2);
     assert!(mig["steps"].is_array());

@@ -243,18 +243,9 @@ fn facts_cache_and_incremental_update_match_cold_discover() {
         &root.join("src/file_a.rs"),
         "pub fn alpha() -> i32 { 1 }\npub fn unused_a() {}\n",
     );
-    write(
-        &root.join("src/file_b.rs"),
-        "pub fn beta() -> i32 { 2 }\n",
-    );
-    write(
-        &root.join("src/file_c.rs"),
-        "pub fn gamma() -> i32 { 3 }\n",
-    );
-    write(
-        &root.join("src/file_d.rs"),
-        "pub fn delta() -> i32 { 4 }\n",
-    );
+    write(&root.join("src/file_b.rs"), "pub fn beta() -> i32 { 2 }\n");
+    write(&root.join("src/file_c.rs"), "pub fn gamma() -> i32 { 3 }\n");
+    write(&root.join("src/file_d.rs"), "pub fn delta() -> i32 { 4 }\n");
 
     let registry = LanguageRegistry::new().into();
     let pipeline = ProcessingPipeline::with_config(

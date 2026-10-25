@@ -265,8 +265,8 @@ struct AgentRegistryFile {
 
 fn load_agents(agents_dir: &Path) -> Result<Vec<AgentDef>, String> {
     let registry = agents_dir.join("registry.toml");
-    let s = fs::read_to_string(&registry)
-        .map_err(|e| format!("read {}: {}", registry.display(), e))?;
+    let s =
+        fs::read_to_string(&registry).map_err(|e| format!("read {}: {}", registry.display(), e))?;
     let file: AgentRegistryFile = toml::from_str(&s).map_err(|e| e.to_string())?;
     let mut out = file.agent;
     out.sort_by(|a, b| a.id.cmp(&b.id));
@@ -356,14 +356,13 @@ mod codegen_tests {
         let out = repo.join("target/agent-pack-test-workflows-ref");
         generate(&pack, &out, "test").expect("gen");
         let src = fs::read(repo.join("skills/rgctl/references/workflows.md")).expect("src");
-        let dest = fs::read(
-            out.join("agents/host-cursor/skills/rgctl/references/workflows.md"),
-        )
-        .expect("dest");
+        let dest = fs::read(out.join("agents/host-cursor/skills/rgctl/references/workflows.md"))
+            .expect("dest");
         assert_eq!(src, dest);
-        assert!(!out
-            .join("agents/host-cursor/skills/rgctl/workflows")
-            .exists());
+        assert!(
+            !out.join("agents/host-cursor/skills/rgctl/workflows")
+                .exists()
+        );
     }
 
     #[test]
@@ -444,7 +443,10 @@ mod codegen_tests {
             let src = repo.join("skills").join(name);
             let dst = repo.join(".agents/skills").join(name);
             assert!(src.is_dir(), "missing skills/{name}");
-            assert!(dst.is_dir(), "missing .agents/skills/{name} — sync from skills/");
+            assert!(
+                dst.is_dir(),
+                "missing .agents/skills/{name} — sync from skills/"
+            );
             for entry in walkdir::WalkDir::new(&src)
                 .into_iter()
                 .filter_map(|e| e.ok())
@@ -481,7 +483,14 @@ mod codegen_tests {
         {
             let text = fs::read_to_string(entry.path()).unwrap();
             if text.contains("../../docs/") {
-                offenders.push(entry.path().strip_prefix(&repo).unwrap().display().to_string());
+                offenders.push(
+                    entry
+                        .path()
+                        .strip_prefix(&repo)
+                        .unwrap()
+                        .display()
+                        .to_string(),
+                );
             }
         }
         assert!(

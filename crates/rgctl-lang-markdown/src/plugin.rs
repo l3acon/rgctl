@@ -2,9 +2,7 @@
 
 use crate::extract::extract;
 use crate::parse::parse_markdown;
-use rgctl_plugin_api::{
-    ComplexityMetrics, LanguageCapabilities, LanguagePlugin, Result, Symbol,
-};
+use rgctl_plugin_api::{ComplexityMetrics, LanguageCapabilities, LanguagePlugin, Result, Symbol};
 use std::path::Path;
 use tree_sitter::Language;
 

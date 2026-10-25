@@ -68,6 +68,14 @@ rgctl-lang-gdscript = { workspace = true }
 rgctl-lang-haskell = { workspace = true }
 rgctl-lang-r = { workspace = true }
 rgctl-lang-julia = { workspace = true }
+rgctl-lang-cobol = { workspace = true }
+rgctl-lang-pli = { workspace = true }
+rgctl-lang-jcl = { workspace = true }
+rgctl-lang-apex = { workspace = true }
+rgctl-lang-pascal = { workspace = true }
+rgctl-lang-perl = { workspace = true }
+rgctl-lang-ada = { workspace = true }
+rgctl-lang-matlab = { workspace = true }
 # JSON/YAML: optional Tier-2 query crates exist but are not dual-registered
 # (config-format plugins own `.json` / `.yaml` ingest).
 

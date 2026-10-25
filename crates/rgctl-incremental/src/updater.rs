@@ -590,12 +590,11 @@ impl IncrementalUpdater {
         }
 
         let mmap = MmappedGraphSnapshot::open(snapshot_path)?;
-        let col = mmap
-            .columnar()
-            .ok_or_else(|| rgctl_error::Error::Other("cascade requires columnar snapshot".into()))?;
+        let col = mmap.columnar().ok_or_else(|| {
+            rgctl_error::Error::Other("cascade requires columnar snapshot".into())
+        })?;
         let seeds = changes.invalidation_paths();
-        let cascaded =
-            incoming_callers_files_depth(col, &seeds, self.config.cascade_depth)?;
+        let cascaded = incoming_callers_files_depth(col, &seeds, self.config.cascade_depth)?;
         paths.extend(cascaded);
         paths.sort();
         paths.dedup();
@@ -810,10 +809,7 @@ mod tests {
         let mut tracker = FileTracker::new(root);
         tracker
             .index_files(
-                &[
-                    root.join("src/main.rs"),
-                    root.join("src/auth.rs"),
-                ],
+                &[root.join("src/main.rs"), root.join("src/auth.rs")],
                 &graph,
             )
             .unwrap();
@@ -880,10 +876,11 @@ mod tests {
 
         let registry = Arc::new(rgctl_languages::default_registry());
         let facts = Arc::new(FactsCache::new());
-        let extractor =
-            Extractor::new(Arc::clone(&registry)).with_facts_cache(Arc::clone(&facts));
+        let extractor = Extractor::new(Arc::clone(&registry)).with_facts_cache(Arc::clone(&facts));
 
-        let first = extractor.extract_file_with_source(&path, source.clone()).unwrap();
+        let first = extractor
+            .extract_file_with_source(&path, source.clone())
+            .unwrap();
         assert_eq!(facts.miss_count(), 1);
         assert_eq!(facts.hit_count(), 0);
         assert!(!first.symbols.is_empty());
@@ -894,9 +891,7 @@ mod tests {
         let reloaded = Arc::new(FactsCache::load(root));
         let extractor2 =
             Extractor::new(Arc::clone(&registry)).with_facts_cache(Arc::clone(&reloaded));
-        let second = extractor2
-            .extract_file_with_source(&path, source)
-            .unwrap();
+        let second = extractor2.extract_file_with_source(&path, source).unwrap();
         assert_eq!(reloaded.hit_count(), 1);
         assert_eq!(reloaded.miss_count(), 0);
         assert_eq!(first.symbols.len(), second.symbols.len());
@@ -979,9 +974,7 @@ mod tests {
             .map(|n| n.id)
             .expect("main");
         assert!(
-            graph
-                .backend()
-                .has_edge(main_id, old_id, EdgeType::Calls),
+            graph.backend().has_edge(main_id, old_id, EdgeType::Calls),
             "precondition: main→old_helper"
         );
 
@@ -1020,15 +1013,11 @@ mod tests {
             .unwrap()
             .id;
         assert!(
-            graph
-                .backend()
-                .has_edge(main_id, new_id, EdgeType::Calls),
+            graph.backend().has_edge(main_id, new_id, EdgeType::Calls),
             "main→new_helper call edge required after edit"
         );
         assert!(
-            !graph
-                .backend()
-                .has_edge(main_id, old_id, EdgeType::Calls),
+            !graph.backend().has_edge(main_id, old_id, EdgeType::Calls),
             "stale main→old_helper edge must be cleaned up"
         );
     }

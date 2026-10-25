@@ -275,10 +275,11 @@ fn classify(kind: &str) -> Option<AstSkeletonKind> {
         | "while" | "until" | "for" | "iterator_statement" | "case_statement" => {
             AstSkeletonKind::Loop
         }
-        "call_expression" | "method_invocation" | "invocation_expression" | "function_call"
-        | "call" => {
-            AstSkeletonKind::Call
-        }
+        "call_expression"
+        | "method_invocation"
+        | "invocation_expression"
+        | "function_call"
+        | "call" => AstSkeletonKind::Call,
         "assignment_expression"
         | "assignment"
         | "assignment_statement"

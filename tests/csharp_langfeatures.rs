@@ -67,14 +67,20 @@ fn edge_count(repo: &Path, rel: &str) -> usize {
 fn csharp_ecommerce_annotated_with_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "ANNOTATEDWITH");
-    assert!(n > 0, "expected AnnotatedWith edges on ecommerce-csharp, got {n}");
+    assert!(
+        n > 0,
+        "expected AnnotatedWith edges on ecommerce-csharp, got {n}"
+    );
 }
 
 #[test]
 fn csharp_ecommerce_instantiates_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "INSTANTIATES");
-    assert!(n > 0, "expected Instantiates edges on ecommerce-csharp, got {n}");
+    assert!(
+        n > 0,
+        "expected Instantiates edges on ecommerce-csharp, got {n}"
+    );
 }
 
 #[test]

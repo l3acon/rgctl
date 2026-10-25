@@ -249,8 +249,7 @@ pub fn run(ctx: &CliContext, action: CpgAction) -> Result<()> {
     {
         let svc = cpg_action_to_service(&action);
         let mut session = rgctl_service::Session::new(&ctx.repo);
-        let value =
-            rgctl_service::execute(&mut session, rgctl_service::Command::Cpg(svc))?;
+        let value = rgctl_service::execute(&mut session, rgctl_service::Command::Cpg(svc))?;
         return ctx.emit_json_value(&value);
     }
     match action {
@@ -482,9 +481,7 @@ fn run_ast(
     line: Option<usize>,
 ) -> Result<()> {
     let archive = AstSkeletonArchive::open_if_exists(&ctx.repo)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "AST skeleton archive missing (run `rgctl discover --with-ast-skeleton`)"
-        )
+        anyhow::anyhow!("AST skeleton archive missing (run `rgctl discover --with-ast-skeleton`)")
     })?;
     let bare = bare_method_name(symbol);
     let mut matches: Vec<_> = archive
@@ -543,8 +540,7 @@ fn run_ast(
                 line: r.nodes.first().map(|n| n.start_line),
             })
             .collect();
-        let recovery =
-            format!("rgctl cpg ast {symbol} --file <PATH> --class <CLASS> --line <N>");
+        let recovery = format!("rgctl cpg ast {symbol} --file <PATH> --class <CLASS> --line <N>");
         if ctx.format == OutputFormat::Json {
             let _ = ctx.emit_json_error(
                 "ambiguous_symbol",
@@ -650,11 +646,7 @@ fn resolve_cpg_symbol_id(
     class: Option<&str>,
     line: Option<usize>,
 ) -> Result<String> {
-    let parsed = parse_fqn_symbol(
-        symbol,
-        class.map(str::to_string),
-        file.map(str::to_string),
-    );
+    let parsed = parse_fqn_symbol(symbol, class.map(str::to_string), file.map(str::to_string));
     let mut matches = find_function_nodes(backend, &parsed.target_name)?;
     if let Some(file) = parsed.file_filter.as_deref().or(file) {
         let f = file.replace('\\', "/");
@@ -723,8 +715,7 @@ fn run_function(
 ) -> Result<()> {
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
-    let resolved = if file.is_some() || class.is_some() || line.is_some() || symbol.contains("::")
-    {
+    let resolved = if file.is_some() || class.is_some() || line.is_some() || symbol.contains("::") {
         resolve_cpg_symbol_id(ctx, backend, symbol, file, class, line)?
     } else {
         // Keep AmbiguousSymbol from analysis when bare name is unique or not.

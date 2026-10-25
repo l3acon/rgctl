@@ -2,10 +2,12 @@
 
 use crate::export_util::write_json_compact;
 use crate::source_catalog::{
-    SourceFileEntry, SOURCE_INDEX_FILE, ensure_source_file, write_source_index,
+    SOURCE_INDEX_FILE, SourceFileEntry, ensure_source_file, write_source_index,
 };
 use rayon::prelude::*;
-use rgctl_kantra::{KantraCatalog, KantraFindings, KantraViolation, SkippedRule, rule_konveyor_targets};
+use rgctl_kantra::{
+    KantraCatalog, KantraFindings, KantraViolation, SkippedRule, rule_konveyor_targets,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -113,7 +115,10 @@ impl KantraExportSummary {
     }
 }
 
-pub fn export_kantra_bundle(repo_root: &Path, out_dir: &Path) -> Result<KantraExportSummary, String> {
+pub fn export_kantra_bundle(
+    repo_root: &Path,
+    out_dir: &Path,
+) -> Result<KantraExportSummary, String> {
     let findings_path = rgctl_graph::paths::artifact_path(repo_root, "kantra_findings.json");
     if !findings_path.is_file() {
         return Ok(KantraExportSummary::default());
@@ -146,9 +151,10 @@ pub fn export_kantra_bundle(repo_root: &Path, out_dir: &Path) -> Result<KantraEx
         let rel = relativize_path(repo_root, &v.file);
         by_file.entry(rel).or_default().push(v.clone());
 
-        let entry = by_rule
-            .entry(v.rule_id.clone())
-            .or_insert((0, v.category.clone(), v.message.clone()));
+        let entry =
+            by_rule
+                .entry(v.rule_id.clone())
+                .or_insert((0, v.category.clone(), v.message.clone()));
         entry.0 += 1;
         if entry.1.is_none() {
             entry.1 = v.category.clone();
@@ -177,11 +183,7 @@ pub fn export_kantra_bundle(repo_root: &Path, out_dir: &Path) -> Result<KantraEx
                         .and_modify(|n| *n += 1)
                         .or_insert(1);
                 }
-                if let Some(b) = v
-                    .enrichment
-                    .as_ref()
-                    .and_then(|e| e.blast_radius_score)
-                {
+                if let Some(b) = v.enrichment.as_ref().and_then(|e| e.blast_radius_score) {
                     max_blast = max_blast.max(b);
                 }
             }
@@ -208,15 +210,17 @@ pub fn export_kantra_bundle(repo_root: &Path, out_dir: &Path) -> Result<KantraEx
 
     merge_source_index(out_dir, &new_sources)?;
 
-    file_entries.par_iter().try_for_each(|(entry, violations)| {
-        let bundle = KantraFileBundle {
-            schema_version: 1,
-            path: entry.path.clone(),
-            source_id: entry.source_id.clone(),
-            violations: violations.clone(),
-        };
-        write_json_compact(&files_dir.join(format!("{}.json", entry.id)), &bundle)
-    })?;
+    file_entries
+        .par_iter()
+        .try_for_each(|(entry, violations)| {
+            let bundle = KantraFileBundle {
+                schema_version: 1,
+                path: entry.path.clone(),
+                source_id: entry.source_id.clone(),
+                violations: violations.clone(),
+            };
+            write_json_compact(&files_dir.join(format!("{}.json", entry.id)), &bundle)
+        })?;
 
     let mut files: Vec<KantraFileEntry> = file_entries.into_iter().map(|(e, _)| e).collect();
     files.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.path.cmp(&b.path)));
@@ -231,7 +235,11 @@ pub fn export_kantra_bundle(repo_root: &Path, out_dir: &Path) -> Result<KantraEx
             message,
         })
         .collect();
-    rules.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.rule_id.cmp(&b.rule_id)));
+    rules.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
+    });
 
     let mut available_targets: Vec<KantraTargetEntry> = by_target
         .into_iter()
@@ -415,10 +423,8 @@ mod tests {
         assert_eq!(summary.file_count, 1);
         assert_eq!(summary.rule_count, 2);
 
-        let index: KantraIndexPayload = serde_json::from_slice(
-            &fs::read(out.join(KANTRA_INDEX_FILE)).unwrap(),
-        )
-        .unwrap();
+        let index: KantraIndexPayload =
+            serde_json::from_slice(&fs::read(out.join(KANTRA_INDEX_FILE)).unwrap()).unwrap();
         assert!(index.available);
         assert_eq!(index.files.len(), 1);
         assert_eq!(index.files[0].count, 2);
@@ -438,7 +444,11 @@ mod tests {
         assert_eq!(shard.violations.len(), 2);
         assert_eq!(shard.path, "src/Foo.java");
         assert!(shard.source_id.is_some());
-        assert!(out.join("sources").join(format!("{}.txt", shard.source_id.unwrap())).is_file());
+        assert!(
+            out.join("sources")
+                .join(format!("{}.txt", shard.source_id.unwrap()))
+                .is_file()
+        );
     }
 
     #[test]

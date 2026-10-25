@@ -102,9 +102,7 @@ impl RuleMatcher {
                 }
                 if let Some(pattern) = name_pattern {
                     let re = Regex::new(pattern).map_err(|e| {
-                        rgctl_error::Error::ConfigError(format!(
-                            "Invalid regex '{pattern}': {e}"
-                        ))
+                        rgctl_error::Error::ConfigError(format!("Invalid regex '{pattern}': {e}"))
                     })?;
                     Ok(re.is_match(&node.name))
                 } else {

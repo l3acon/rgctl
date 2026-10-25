@@ -979,11 +979,9 @@ fn go_traverse_for_symbols(
                         for spec_child in child.children(&mut spec_cursor) {
                             match spec_child.kind() {
                                 "struct_type" => {
-                                    let mut st =
-                                        plugin.extract_struct(child, source, file_path)?;
+                                    let mut st = plugin.extract_struct(child, source, file_path)?;
                                     if let Some(tp) = plugin.type_params_of(child, source) {
-                                        st.metadata["type_params"] =
-                                            serde_json::Value::String(tp);
+                                        st.metadata["type_params"] = serde_json::Value::String(tp);
                                     }
                                     symbols.push(st);
                                     handled = true;
@@ -1331,9 +1329,10 @@ func helper() {}
         let path = Path::new("test.go");
         let result = plugin.extract_all(path, source).unwrap();
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to.contains("helper")
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to.contains("helper") }),
             "forward Calls -> helper: {:?}",
             result.relations
         );
@@ -1342,11 +1341,13 @@ func helper() {}
             .iter()
             .find(|s| s.name == "caller")
             .expect("caller");
-        let from_meta =
-            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        let from_meta = complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
         assert_eq!(from_meta.cyclomatic, 2);
         assert_eq!(from_meta.returns, 1);
-        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        let via_api = plugin
+            .calculate_complexity(caller, source)
+            .unwrap()
+            .unwrap();
         assert_eq!(via_api, from_meta);
     }
 
@@ -1515,7 +1516,10 @@ mod cri_promote {
             "/../../example/kubernetes/staging/src/k8s.io/cri-api/pkg/apis/services.go"
         ));
         let Ok(src) = std::fs::read(path) else {
-            eprintln!("skipping: kubernetes corpus not present at {}", path.display());
+            eprintln!(
+                "skipping: kubernetes corpus not present at {}",
+                path.display()
+            );
             return;
         };
         let plugin = GoPlugin::new().unwrap();

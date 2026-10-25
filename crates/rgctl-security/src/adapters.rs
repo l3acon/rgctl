@@ -126,9 +126,8 @@ fn scan_one_jar(path: &Path) -> Result<Vec<DepHit>, SecurityError> {
         path: path.display().to_string(),
         source: e,
     })?;
-    let mut archive = ZipArchive::new(file).map_err(|e| {
-        SecurityError::Msg(format!("zip open {}: {e}", path.display()))
-    })?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|e| SecurityError::Msg(format!("zip open {}: {e}", path.display())))?;
     let mut hits = Vec::new();
     let names: Vec<String> = (0..archive.len())
         .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
@@ -137,9 +136,9 @@ fn scan_one_jar(path: &Path) -> Result<Vec<DepHit>, SecurityError> {
         if !(name.starts_with("META-INF/maven/") && name.ends_with("/pom.xml")) {
             continue;
         }
-        let mut file = archive.by_name(&name).map_err(|e| {
-            SecurityError::Msg(format!("zip entry {name}: {e}"))
-        })?;
+        let mut file = archive
+            .by_name(&name)
+            .map_err(|e| SecurityError::Msg(format!("zip entry {name}: {e}")))?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).map_err(|e| SecurityError::Io {
             path: format!("{}!{}", path.display(), name),
@@ -159,7 +158,10 @@ fn scan_one_jar(path: &Path) -> Result<Vec<DepHit>, SecurityError> {
 }
 
 /// Scan `node_modules/<pkg>/package.json` for name/version (honesty: direct children only).
-pub fn scan_node_modules(repo: &Path, opts: &BundledScanOpts) -> Result<Vec<DepHit>, SecurityError> {
+pub fn scan_node_modules(
+    repo: &Path,
+    opts: &BundledScanOpts,
+) -> Result<Vec<DepHit>, SecurityError> {
     let mut hits = Vec::new();
     let mut count = 0usize;
     for root in &opts.node_modules_roots {
@@ -185,12 +187,7 @@ pub fn scan_node_modules(repo: &Path, opts: &BundledScanOpts) -> Result<Vec<DepH
             let pkg_json = ent.path().join("package.json");
             if !pkg_json.is_file() {
                 // scoped packages @scope/name
-                if ent.path().is_dir()
-                    && ent
-                        .file_name()
-                        .to_string_lossy()
-                        .starts_with('@')
-                {
+                if ent.path().is_dir() && ent.file_name().to_string_lossy().starts_with('@') {
                     for sub in fs::read_dir(ent.path()).into_iter().flatten().flatten() {
                         if count >= opts.max_node_packages {
                             break;
@@ -220,9 +217,8 @@ fn read_npm_package_json(path: &Path) -> Result<Option<DepHit>, SecurityError> {
         path: path.display().to_string(),
         source: e,
     })?;
-    let v: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-        SecurityError::Msg(format!("package.json {}: {e}", path.display()))
-    })?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| SecurityError::Msg(format!("package.json {}: {e}", path.display())))?;
     let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("");
     if name.is_empty() {
         return Ok(None);
@@ -244,8 +240,8 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::tempdir;
-    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     #[test]
     fn jar_embedded_pom_jackson() {
@@ -255,11 +251,8 @@ mod tests {
             let f = fs::File::create(&jar).unwrap();
             let mut zip = ZipWriter::new(f);
             let opts = SimpleFileOptions::default();
-            zip.start_file(
-                "META-INF/maven/com.enterprise/audit/pom.xml",
-                opts,
-            )
-            .unwrap();
+            zip.start_file("META-INF/maven/com.enterprise/audit/pom.xml", opts)
+                .unwrap();
             zip.write_all(
                 br#"<?xml version="1.0"?>
 <project>
@@ -284,7 +277,8 @@ mod tests {
         let hits = scan_jars(dir.path(), &opts).unwrap();
         assert!(
             hits.iter()
-                .any(|h| h.name.contains("jackson-databind") && h.version.as_deref() == Some("2.13.5")),
+                .any(|h| h.name.contains("jackson-databind")
+                    && h.version.as_deref() == Some("2.13.5")),
             "{hits:?}"
         );
     }

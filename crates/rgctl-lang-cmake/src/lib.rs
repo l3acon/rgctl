@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_cmake::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_cmake::LANGUAGE.into())
+                .expect("compile");
         let source = br###"function(add_numbers a b)
   message(STATUS "hi")
 endfunction()
@@ -40,7 +41,10 @@ endfunction()
             .extract_all(Path::new("CMakeLists.cmake"), source)
             .expect("extract_all");
         assert!(
-            result.symbols.iter().any(|s| s.name.contains("add_numbers")),
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name.contains("add_numbers")),
             "expected symbol containing 'add_numbers', got {:?}",
             result.symbols
         );
@@ -54,10 +58,12 @@ endfunction()
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "add_numbers" && r.to == "add_numbers"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "add_numbers" && r.to == "add_numbers"),
             "must not emit self-call add_numbers -> add_numbers: {:?}",
             result.relations
         );
-
     }
 }

@@ -136,7 +136,9 @@ pub fn compute_and_apply_git_churn(
         let Some(&dense) = file_path_to_dense.get(&path) else {
             continue;
         };
-        let cyclo = parse_u32_prop(node.get_property("cyclomatic")).unwrap_or(1).max(1);
+        let cyclo = parse_u32_prop(node.get_property("cyclomatic"))
+            .unwrap_or(1)
+            .max(1);
         let d = dense as usize;
         if cyclo > dense_max_cyclomatic[d] {
             dense_max_cyclomatic[d] = cyclo;
@@ -280,8 +282,10 @@ pub fn compute_and_apply_git_churn(
     }
 
     // Stamp File + Function/Method properties.
-    let mut prop_updates: std::collections::HashMap<Uuid, std::collections::HashMap<String, String>> =
-        std::collections::HashMap::new();
+    let mut prop_updates: std::collections::HashMap<
+        Uuid,
+        std::collections::HashMap<String, String>,
+    > = std::collections::HashMap::new();
     let mut report_files = Vec::new();
 
     for u in 0..n {
@@ -296,10 +300,7 @@ pub fn compute_and_apply_git_churn(
         let mut props = std::collections::HashMap::new();
         props.insert("git_commits".into(), commits_count[u].to_string());
         props.insert("git_churn_lines".into(), churn_lines.to_string());
-        props.insert(
-            "git_churn_score".into(),
-            format!("{:.4}", recency_churn[u]),
-        );
+        props.insert("git_churn_score".into(), format!("{:.4}", recency_churn[u]));
         props.insert("git_hotspot_score".into(), format!("{:.4}", hotspot));
         prop_updates.insert(file_id, props);
 
@@ -361,9 +362,7 @@ fn stream_git_commits(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| {
-            Error::Other(format!("failed to spawn git: {e}"))
-        })?;
+        .map_err(|e| Error::Other(format!("failed to spawn git: {e}")))?;
 
     let stdout = child
         .stdout
@@ -429,20 +428,14 @@ fn stream_git_commits(
         .wait()
         .map_err(|e| Error::Other(format!("git wait: {e}")))?;
     if !status.success() {
-        return Err(Error::Other(format!(
-            "git log exited with status {status}"
-        )));
+        return Err(Error::Other(format!("git log exited with status {status}")));
     }
 
     Ok(commits)
 }
 
 fn parse_numstat_count(s: &str) -> u64 {
-    if s == "-" {
-        0
-    } else {
-        s.parse().unwrap_or(0)
-    }
+    if s == "-" { 0 } else { s.parse().unwrap_or(0) }
 }
 
 fn parse_u32_prop(v: Option<&str>) -> Option<u32> {
@@ -468,9 +461,7 @@ fn normalize_node_repo_path(repo_root: &Path, canon_root: Option<&Path>, raw: &s
 }
 
 fn normalize_repo_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim_start_matches("./")
-        .to_string()
+    path.replace('\\', "/").trim_start_matches("./").to_string()
 }
 
 /// Normalize a git `--numstat` path, resolving rename syntax to the post-rename path.
@@ -652,7 +643,11 @@ mod tests {
             .iter()
             .filter(|e| (e.from == a_id && e.to == b_id) || (e.from == b_id && e.to == a_id))
             .collect();
-        assert_eq!(ab.len(), 2, "expected symmetric a↔b CoChangesWith, got {edges:?}");
+        assert_eq!(
+            ab.len(),
+            2,
+            "expected symmetric a↔b CoChangesWith, got {edges:?}"
+        );
         for e in &ab {
             assert_eq!(e.get_property("cochange_count"), Some("4"));
             assert_eq!(e.get_property("jaccard"), Some("1.0000"));
@@ -707,13 +702,7 @@ mod tests {
             normalize_git_numstat_path("src/{old.rs => new.rs}"),
             "src/new.rs"
         );
-        assert_eq!(
-            normalize_git_numstat_path("old.rs => new.rs"),
-            "new.rs"
-        );
-        assert_eq!(
-            normalize_git_numstat_path("./foo/bar.rs"),
-            "foo/bar.rs"
-        );
+        assert_eq!(normalize_git_numstat_path("old.rs => new.rs"), "new.rs");
+        assert_eq!(normalize_git_numstat_path("./foo/bar.rs"), "foo/bar.rs");
     }
 }

@@ -21,11 +21,7 @@ pub fn eval_file(
             .to_string_lossy()
             .replace('\\', "/");
         if glob.matches(&rel) || glob.matches(file.to_string_lossy().as_ref()) {
-            out.push(violation(
-                rule_id,
-                "builtin.file",
-                &MatchSite::new(&rel, 1),
-            ));
+            out.push(violation(rule_id, "builtin.file", &MatchSite::new(&rel, 1)));
         }
     }
     Ok(out)

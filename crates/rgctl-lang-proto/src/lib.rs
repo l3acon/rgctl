@@ -40,8 +40,23 @@ service Bar { rpc Baz (Foo) returns (Foo); }
         let result = plugin
             .extract_all(Path::new("api.proto"), source)
             .expect("extract_all");
-        assert!(result.symbols.iter().any(|s| s.name == "Foo" && s.symbol_type == SymbolType::Class));
-        assert!(result.symbols.iter().any(|s| s.name == "Bar" && s.symbol_type == SymbolType::Interface));
-        assert!(result.symbols.iter().any(|s| s.name == "Baz" && s.symbol_type == SymbolType::Function));
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Foo" && s.symbol_type == SymbolType::Class)
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Bar" && s.symbol_type == SymbolType::Interface)
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Baz" && s.symbol_type == SymbolType::Function)
+        );
     }
 }

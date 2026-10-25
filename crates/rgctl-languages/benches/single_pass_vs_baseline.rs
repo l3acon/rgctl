@@ -6,7 +6,7 @@
 //!
 //! Run: `cargo bench -p rgctl-languages --bench single_pass_vs_baseline`
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rgctl_languages::default_registry;
 use rgctl_plugin_api::LanguagePlugin;
 use std::path::Path;

@@ -313,9 +313,7 @@ impl ColumnarGraphMmap {
 
     /// Iterate `(column_index, node_id)` pairs without materializing nodes.
     pub fn node_ids_by_index(&self) -> impl Iterator<Item = (usize, Uuid)> + '_ {
-        (0..self.node_count).filter_map(|idx| {
-            self.node_id_at(idx).ok().map(|id| (idx, id))
-        })
+        (0..self.node_count).filter_map(|idx| self.node_id_at(idx).ok().map(|id| (idx, id)))
     }
 
     /// Read typed edge topology directly from mmap columns.
@@ -481,7 +479,10 @@ impl ColumnarGraphMmap {
 
     /// String pool base offset and byte length for [`string_at`].
     pub(crate) fn string_pool_bounds(&self) -> (usize, usize) {
-        (self.offset_strings as usize, self.offset_strings_len as usize)
+        (
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+        )
     }
 
     /// Raw mmap bytes for zero-copy string pool reads.
@@ -521,11 +522,8 @@ impl ColumnarGraphMmap {
         match bytes.first().copied() {
             Some(0) => Ok(None),
             Some(1) if bytes.len() >= 9 => {
-                let slen = u64::from_le_bytes(
-                    bytes[1..9]
-                        .try_into()
-                        .expect("slice length checked"),
-                ) as usize;
+                let slen = u64::from_le_bytes(bytes[1..9].try_into().expect("slice length checked"))
+                    as usize;
                 let sbytes = bytes.get(9..9 + slen).ok_or_else(|| {
                     Error::SerdeError("node extension qualified_name out of range".into())
                 })?;
@@ -796,21 +794,21 @@ impl PreparedGraphSnapshot {
             file.extend_from_slice(&encode_edge_row(row));
         }
         file.extend_from_slice(&strings.bytes);
-    file.extend_from_slice(&extensions_blob);
+        file.extend_from_slice(&extensions_blob);
 
-    let tmp = path.with_file_name(format!(
-        "{}.tmp",
-        path.file_name()
-            .map(|n| n.to_string_lossy())
-            .unwrap_or_else(|| "graph.snapshot.bin".into())
-    ));
-    std::fs::write(&tmp, &file)?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e
-    })?;
-    Ok(())
-}
+        let tmp = path.with_file_name(format!(
+            "{}.tmp",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| "graph.snapshot.bin".into())
+        ));
+        std::fs::write(&tmp, &file)?;
+        std::fs::rename(&tmp, path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            e
+        })?;
+        Ok(())
+    }
 }
 
 pub(crate) struct StringPool {
@@ -951,8 +949,7 @@ fn optional_string(
     off: u32,
     len: u32,
 ) -> Result<Option<String>> {
-    optional_string_at(mmap, base, len_limit, off, len)
-        .map(|opt| opt.map(str::to_string))
+    optional_string_at(mmap, base, len_limit, off, len).map(|opt| opt.map(str::to_string))
 }
 
 fn node_matches_invalidated_path(
@@ -1879,8 +1876,14 @@ mod tests {
         );
 
         let decoded = decode_node_extension(&legacy_bytes).expect("decode legacy extension");
-        assert_eq!(decoded.properties.get("cyclomatic").map(String::as_str), Some("1"));
-        assert_eq!(decoded.properties.get("cognitive").map(String::as_str), Some("2"));
+        assert_eq!(
+            decoded.properties.get("cyclomatic").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            decoded.properties.get("cognitive").map(String::as_str),
+            Some("2")
+        );
         assert_eq!(decoded.properties.get("loc").map(String::as_str), Some("3"));
         assert_eq!(
             decoded.properties.get("nesting_depth").map(String::as_str),

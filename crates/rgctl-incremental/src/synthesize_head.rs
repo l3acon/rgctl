@@ -32,9 +32,7 @@ pub fn out_root_clobbers_live_session(repo_root: &Path, out_root: &Path) -> bool
     let out = out_root
         .canonicalize()
         .unwrap_or_else(|_| out_root.to_path_buf());
-    let live_canon = live
-        .canonicalize()
-        .unwrap_or_else(|_| live.clone());
+    let live_canon = live.canonicalize().unwrap_or_else(|_| live.clone());
     let live_rgctl_canon = live_rgctl
         .canonicalize()
         .unwrap_or_else(|_| live_rgctl.clone());
@@ -50,9 +48,7 @@ pub fn out_root_clobbers_live_session(repo_root: &Path, out_root: &Path) -> bool
     } else {
         out_root.join("graph.snapshot.bin")
     };
-    let out_snap_canon = out_snap
-        .canonicalize()
-        .unwrap_or_else(|_| out_snap);
+    let out_snap_canon = out_snap.canonicalize().unwrap_or_else(|_| out_snap);
     out_snap_canon == live_canon
 }
 

@@ -177,7 +177,11 @@ pub fn validate_request(req: &mut UpdateQueueRequest) -> Result<()> {
             }
         }
         UpdateQueueMode::Since => {
-            let since = req.since.as_deref().map(str::trim).filter(|s| !s.is_empty());
+            let since = req
+                .since
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             if since.is_none() {
                 bail!("mode since requires a non-empty since ref");
             }
@@ -204,9 +208,9 @@ pub fn normalize_repo_path(repo: &Path, path: &str) -> Result<String> {
         } else {
             candidate.to_path_buf()
         };
-        let rel = joined.strip_prefix(&canon_repo).map_err(|_| {
-            anyhow::anyhow!("path escapes repository root: {trimmed}")
-        })?;
+        let rel = joined
+            .strip_prefix(&canon_repo)
+            .map_err(|_| anyhow::anyhow!("path escapes repository root: {trimmed}"))?;
         return Ok(rel.to_string_lossy().replace('\\', "/"));
     }
 
@@ -234,7 +238,10 @@ pub fn normalize_repo_path(repo: &Path, path: &str) -> Result<String> {
 /// Count non-empty lines in a file (best-effort).
 fn count_lines(path: &Path) -> Result<usize> {
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(bytes.split(|&b| b == b'\n').filter(|l| !l.is_empty()).count())
+    Ok(bytes
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .count())
 }
 
 /// Append one request line to the queue. Fails if size/line limits would be exceeded.
@@ -319,13 +326,8 @@ pub fn drain_queue(repo: &Path) -> Result<CoalescedBatch> {
         if err.kind() == std::io::ErrorKind::NotFound {
             return Ok(CoalescedBatch::default());
         }
-        return Err(err).with_context(|| {
-            format!(
-                "rename queue {} → {}",
-                src.display(),
-                processing.display()
-            )
-        });
+        return Err(err)
+            .with_context(|| format!("rename queue {} → {}", src.display(), processing.display()));
     }
 
     let mut bytes = Vec::new();
@@ -527,7 +529,11 @@ pub fn ok_result(
 
 /// Build an error result.
 #[must_use]
-pub fn err_result(request_id: &str, error: impl Into<String>, warnings: Vec<String>) -> UpdateQueueResult {
+pub fn err_result(
+    request_id: &str,
+    error: impl Into<String>,
+    warnings: Vec<String>,
+) -> UpdateQueueResult {
     UpdateQueueResult {
         schema_version: UPDATE_QUEUE_SCHEMA_VERSION,
         request_id: request_id.to_string(),
@@ -639,10 +645,7 @@ mod tests {
         let repo = dir.path();
         assert!(normalize_repo_path(repo, "../outside.rs").is_err());
         assert!(normalize_repo_path(repo, "src/../../x").is_err());
-        assert_eq!(
-            normalize_repo_path(repo, "src/./a.rs").unwrap(),
-            "src/a.rs"
-        );
+        assert_eq!(normalize_repo_path(repo, "src/./a.rs").unwrap(), "src/a.rs");
     }
 
     #[test]

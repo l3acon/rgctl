@@ -12,7 +12,7 @@ Pick a lane — each links to the checklist / architecture docs you will touch m
 
 | Track | Start here |
 |-------|------------|
-| **Language Plugins & AST Coverage** | [contributor-checklist.md](docs/contributor-checklist.md) · [tier-1-language-support.md](docs/tier-1-language-support.md) · [language-testing-guide.md](docs/language-testing-guide.md) · [languages/README.md](docs/languages/README.md) |
+| **Language Plugins & AST Coverage** | [contributor-checklist.md](docs/contributor-checklist.md) · [tier-1-language-support.md](docs/tier-1-language-support.md) · [tier-2-language-support.md](docs/tier-2-language-support.md) · [language-testing-guide.md](docs/language-testing-guide.md) · [languages/README.md](docs/languages/README.md) |
 | **Declarative Taint & Kantra Rules** | [Vulnerability and Osv Analysis](https://rgctl.io/docs/guides/vulnerability-and-osv-analysis/) · [analysis-architecture.md](docs/analysis-architecture.md) · [policy-format.md](docs/policy-format.md) |
 | **Agent Host Adapters & Skills** | [Agent Skill](https://rgctl.io/docs/guides/agent-skill/) · [`skills/rgctl/`](skills/rgctl/) · [USER_AGENTS_TEMPLATE.md](docs/agents/USER_AGENTS_TEMPLATE.md) |
 | **Graph & CPG Algorithms** | [analysis-architecture.md](docs/analysis-architecture.md) · [graph-storage-architecture.md](docs/graph-storage-architecture.md) · [Hybrid Cpg](https://rgctl.io/docs/guides/hybrid-cpg/) · [Blast Radius Analysis](https://rgctl.io/docs/guides/blast-radius-analysis/) |
@@ -32,7 +32,7 @@ Optional: **Playwright** (dashboard browser tests) — installed via `dashboard/
 ## Clone and build
 
 ```bash
-git clone https://github.com/sshaaf/rgctl.git
+git clone https://github.com/rgctl/rgctl.git
 cd rgctl
 cargo build --release
 ./target/release/rgctl --version

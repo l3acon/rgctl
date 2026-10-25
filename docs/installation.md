@@ -49,7 +49,7 @@ Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTA
 
 Pre-built binaries are published on the project **Releases** page:
 
-**https://github.com/sshaaf/rgctl/releases**
+**https://github.com/rgctl/rgctl/releases**
 
 1. Open the latest release.
 2. Download the archive for your platform:
@@ -82,7 +82,7 @@ Expand-Archive rgctl-*-x86_64-pc-windows-msvc.zip -DestinationPath .
 Requires **Rust 1.85+** (see README MSRV; prefer current stable via rustup). Check with `rustc --version`.
 
 ```bash
-git clone https://github.com/sshaaf/rgctl.git
+git clone https://github.com/rgctl/rgctl.git
 cd rgctl
 cargo build --release --bin rgctl
 ./target/release/rgctl --version
@@ -286,7 +286,7 @@ See the [Semantic Search guide](https://rgctl.io/docs/guides/semantic-search/).
 
 ### From a release binary
 
-Download the new release from [GitHub Releases](https://github.com/sshaaf/rgctl/releases) and replace the old binary:
+Download the new release from [GitHub Releases](https://github.com/rgctl/rgctl/releases) and replace the old binary:
 
 ```bash
 cp /path/to/new/rgctl ~/.local/bin/rgctl

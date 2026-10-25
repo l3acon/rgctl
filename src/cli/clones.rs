@@ -6,11 +6,11 @@ use super::args::OutputFormat;
 use super::context::CliContext;
 use anyhow::{Context, Result, bail};
 use rgctl_analysis::{
-    discover_fragment_clones, load_fragment_sidecar_if_fresh, query_fragment_clones,
-    save_fragment_sidecar, BloomCloneOptions, CLONE_REPORT_SCHEMA_VERSION, CloneFilters,
-    DEFAULT_BLOOM_THRESHOLD, DEFAULT_MIN_LOC, ExactCloneOptions, FragmentCloneFilters,
-    FragmentSeedQuery, MODE_BLOOM, MODE_EXACT, MODE_FRAGMENT, bloom_clones_with_cache,
-    build_bloom_report, build_exact_report, exact_clones_with_cache, parse_mode, save_sidecar,
+    BloomCloneOptions, CLONE_REPORT_SCHEMA_VERSION, CloneFilters, DEFAULT_BLOOM_THRESHOLD,
+    DEFAULT_MIN_LOC, ExactCloneOptions, FragmentCloneFilters, FragmentSeedQuery, MODE_BLOOM,
+    MODE_EXACT, MODE_FRAGMENT, bloom_clones_with_cache, build_bloom_report, build_exact_report,
+    discover_fragment_clones, exact_clones_with_cache, load_fragment_sidecar_if_fresh, parse_mode,
+    query_fragment_clones, save_fragment_sidecar, save_sidecar,
 };
 use rgctl_error::Error as GraphError;
 use rgctl_graph::{QueryFilters, StructuredQuery, schema::NodeType};
@@ -94,10 +94,7 @@ fn map_sq_err(ctx: &CliContext, err: GraphError) -> anyhow::Error {
             eprintln!("Ambiguous symbol '{name}': {count} matches. Candidates:");
             for c in candidates.iter().take(20) {
                 let file = c.file.as_deref().unwrap_or("?");
-                let line = c
-                    .line
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| "?".into());
+                let line = c.line.map(|n| n.to_string()).unwrap_or_else(|| "?".into());
                 eprintln!(
                     "  - id={} type={} file={file}:{line} name={}",
                     c.id, c.node_type, c.name
@@ -132,7 +129,9 @@ pub fn run(ctx: &CliContext, args: ClonesArgs) -> Result<()> {
         let mut parsed_lines = None;
         if let Some(ref l) = args.lines {
             if let Some((s_str, e_str)) = l.split_once('-') {
-                if let (Ok(s), Ok(e)) = (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>()) {
+                if let (Ok(s), Ok(e)) =
+                    (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>())
+                {
                     parsed_lines = Some((s, e));
                 }
             }
@@ -145,7 +144,9 @@ pub fn run(ctx: &CliContext, args: ClonesArgs) -> Result<()> {
 
             if let Some((prefix, suffix)) = seed_str.rsplit_once(':') {
                 if let Some((s_str, e_str)) = suffix.split_once('-') {
-                    if let (Ok(s), Ok(e)) = (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>()) {
+                    if let (Ok(s), Ok(e)) =
+                        (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>())
+                    {
                         seed_file = Some(prefix.to_string());
                         if parsed_lines.is_none() {
                             parsed_lines = Some((s, e));
@@ -336,10 +337,7 @@ pub fn run(ctx: &CliContext, args: ClonesArgs) -> Result<()> {
             .as_deref()
             .map(|h| format!(" hash={}…", &h[..h.len().min(12)]))
             .unwrap_or_default();
-        ctx.stdout_line(&format!(
-            "\n[{}] size={}{score}{hash}",
-            g.mode, g.size
-        ))?;
+        ctx.stdout_line(&format!("\n[{}] size={}{score}{hash}", g.mode, g.size))?;
         for m in &g.members {
             let file = m.file.as_deref().unwrap_or("?");
             let line = m.start_line.unwrap_or(0);

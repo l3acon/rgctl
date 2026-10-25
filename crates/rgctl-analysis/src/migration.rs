@@ -876,8 +876,14 @@ mod tests {
         );
 
         // Two same-named subdirectories across different crates do not collide
-        assert_eq!(package_label("crates/crate-a/src/models/user.rs"), "crate-a.models");
-        assert_eq!(package_label("crates/crate-b/src/models/user.rs"), "crate-b.models");
+        assert_eq!(
+            package_label("crates/crate-a/src/models/user.rs"),
+            "crate-a.models"
+        );
+        assert_eq!(
+            package_label("crates/crate-b/src/models/user.rs"),
+            "crate-b.models"
+        );
 
         // Top-level `src/`
         assert_eq!(package_label("src/main.rs"), "src");

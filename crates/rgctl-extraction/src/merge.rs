@@ -1,8 +1,6 @@
 //! Cross-repo `park-and-resolve` merge (`rgctl merge`).
 
-use crate::parked_relations::{
-    PARKED_RELATIONS_FILE, ParkedRelationRecord, load_parked_relations,
-};
+use crate::parked_relations::{PARKED_RELATIONS_FILE, ParkedRelationRecord, load_parked_relations};
 use rgctl_error::{Error, Result};
 use rgctl_graph::backend::MemoryBackend;
 use rgctl_graph::paths::{ARTIFACT_DIR_NAME, artifact_dir};
@@ -95,7 +93,14 @@ pub fn normalize_module_path_segments(raw: &str) -> Vec<String> {
             break;
         }
     }
-    for suffix in ["/index", "/mod", "/__init__", "\\index", "\\mod", "\\__init__"] {
+    for suffix in [
+        "/index",
+        "/mod",
+        "/__init__",
+        "\\index",
+        "\\mod",
+        "\\__init__",
+    ] {
         if let Some(stripped) = s.strip_suffix(suffix) {
             s = stripped.to_string();
             break;
@@ -287,23 +292,23 @@ impl CrossRepoExportIndex {
                     .push((repo_idx, node.id));
             }
 
-            index.by_name.entry(simple).or_default().push(ExportCandidate {
-                repo_idx,
-                node_id: node.id,
-                node_type: node.node_type,
-                qualified_name: qn,
-                file_path,
-                norm_segments,
-            });
+            index
+                .by_name
+                .entry(simple)
+                .or_default()
+                .push(ExportCandidate {
+                    repo_idx,
+                    node_id: node.id,
+                    node_type: node.node_type,
+                    qualified_name: qn,
+                    file_path,
+                    norm_segments,
+                });
         }
         index
     }
 
-    fn resolve_parked(
-        &self,
-        rec: &ParkedRelationRecord,
-        src_repo: usize,
-    ) -> ResolveOutcome {
+    fn resolve_parked(&self, rec: &ParkedRelationRecord, src_repo: usize) -> ResolveOutcome {
         // Tier 1 — exact cross-repo qualified hint.
         if let Some(hint) = rec.to_qualified_hint.as_deref() {
             if let Some(cands) = self.by_qualified.get(hint) {
@@ -628,7 +633,8 @@ pub fn merge_repositories(repos: &[PathBuf], out: &Path) -> Result<MergeReport> 
 
     if !stubs_to_prune.is_empty() {
         merged_nodes.retain(|n| !stubs_to_prune.contains(&n.id));
-        merged_edges.retain(|e| !stubs_to_prune.contains(&e.from) && !stubs_to_prune.contains(&e.to));
+        merged_edges
+            .retain(|e| !stubs_to_prune.contains(&e.from) && !stubs_to_prune.contains(&e.to));
         let remaining_stubs = merged_nodes.iter().any(is_external_stub);
         if !remaining_stubs {
             merged_nodes.retain(|n| {
@@ -724,8 +730,7 @@ mod tests {
 
         // --- billing ---
         let mut billing_be = MemoryBackend::new();
-        let billing_file =
-            Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
+        let billing_file = Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
         let billing_us = Node::new(NodeType::Class, "UserService")
             .with_file_path("src/user.ts")
             .with_qualified_name("UserService");
@@ -738,16 +743,12 @@ mod tests {
         billing_be
             .insert_nodes_batch(vec![billing_file, billing_us, billing_charge, billing_fmt])
             .unwrap();
-        write_columnar_from_backend(
-            &billing_be,
-            &billing.join(".rgctl").join(SNAPSHOT_FILE),
-        )
-        .unwrap();
+        write_columnar_from_backend(&billing_be, &billing.join(".rgctl").join(SNAPSHOT_FILE))
+            .unwrap();
 
         // --- auth ---
         let mut auth_be = MemoryBackend::new();
-        let auth_file =
-            Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
+        let auth_file = Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
         let auth_us = Node::new(NodeType::Class, "UserService")
             .with_file_path("src/user.ts")
             .with_qualified_name("UserService");
@@ -773,8 +774,7 @@ mod tests {
             .with_file_path("<external>")
             .with_qualified_name("UserService")
             .with_property("is_external_stub".into(), "true".into());
-        let external_file =
-            Node::new(NodeType::File, "<external>").with_file_path("<external>");
+        let external_file = Node::new(NodeType::File, "<external>").with_file_path("<external>");
         let from_id_orig = checkout.id;
         let stub_id = stub.id;
         let ext_file_id = external_file.id;
@@ -830,16 +830,16 @@ mod tests {
                 stub_node_id: None,
             },
         ];
-        save_parked_relations(
-            &gateway.join(".rgctl").join(PARKED_RELATIONS_FILE),
-            &parked,
-        )
-        .unwrap();
+        save_parked_relations(&gateway.join(".rgctl").join(PARKED_RELATIONS_FILE), &parked)
+            .unwrap();
 
         let out = tmp.path().join("merged");
         let report = merge_repositories(&[gateway, billing, auth], &out).unwrap();
         assert_eq!(report.repos_merged, 3);
-        assert_eq!(report.ambiguous_skipped, 1, "formatCurrency must be skipped");
+        assert_eq!(
+            report.ambiguous_skipped, 1,
+            "formatCurrency must be skipped"
+        );
         assert!(
             report.cross_repo_edges_resolved >= 1,
             "expected Tier-2 UserService/charge resolve, got {report:?}"
@@ -909,7 +909,10 @@ mod tests {
             "expected exactly 1 deduplicated edge checkout→billing UserService; got {matching_edges:?}"
         );
         assert_eq!(
-            matching_edges[0].properties.get("cross_repo").map(String::as_str),
+            matching_edges[0]
+                .properties
+                .get("cross_repo")
+                .map(String::as_str),
             Some("true"),
             "expected cross_repo=true property on merged edge"
         );
@@ -919,14 +922,14 @@ mod tests {
             .iter()
             .find(|n| {
                 n.name.as_str() == "UserService"
-                    && n.file_path.as_deref().is_some_and(|p| p.starts_with("auth/"))
+                    && n.file_path
+                        .as_deref()
+                        .is_some_and(|p| p.starts_with("auth/"))
             })
             .map(|n| n.id);
         if let Some(auth_id) = auth_us_id {
             assert!(
-                !edges
-                    .iter()
-                    .any(|e| e.from == from_id && e.to == auth_id),
+                !edges.iter().any(|e| e.from == from_id && e.to == auth_id),
                 "must not resolve to auth UserService"
             );
         }
@@ -1004,12 +1007,8 @@ mod tests {
             a_fid,
         );
         let (a_nodes, a_edges) = auth_gb.into_graph();
-        write_columnar_from_nodes_edges(
-            a_nodes,
-            a_edges,
-            &auth.join(".rgctl").join(SNAPSHOT_FILE),
-        )
-        .unwrap();
+        write_columnar_from_nodes_edges(a_nodes, a_edges, &auth.join(".rgctl").join(SNAPSHOT_FILE))
+            .unwrap();
 
         // 3. Build `gateway` via GraphBuilder with a real Java-style `import com.acme.billing.UserService;`
         //    and an unresolved `Injects` relation (`CheckoutController -> UserService`).
@@ -1080,11 +1079,8 @@ mod tests {
             &gateway.join(".rgctl").join(SNAPSHOT_FILE),
         )
         .unwrap();
-        save_parked_relations(
-            &gateway.join(".rgctl").join(PARKED_RELATIONS_FILE),
-            &parked,
-        )
-        .unwrap();
+        save_parked_relations(&gateway.join(".rgctl").join(PARKED_RELATIONS_FILE), &parked)
+            .unwrap();
 
         let out = tmp.path().join("merged-java");
         let report = merge_repositories(&[gateway, billing, auth], &out).unwrap();

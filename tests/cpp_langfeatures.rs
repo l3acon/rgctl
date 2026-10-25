@@ -81,5 +81,8 @@ fn cpp_ecommerce_calls_gate() {
 fn cpp_ecommerce_instantiates_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "INSTANTIATES");
-    assert!(n > 0, "expected Instantiates edges on ecommerce-cpp, got {n}");
+    assert!(
+        n > 0,
+        "expected Instantiates edges on ecommerce-cpp, got {n}"
+    );
 }

@@ -13,11 +13,9 @@ pub use framework_schema::{
 };
 
 use framework_schema::CompiledFrameworkCatalog as Catalog;
-use rgctl_plugin_api::{
-    Relation, RelationType, SourceLocation, Symbol, SymbolType,
-};
+use rgctl_plugin_api::{Relation, RelationType, SourceLocation, Symbol, SymbolType};
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 use tree_sitter::Node;
@@ -331,8 +329,7 @@ pub fn apply_framework_catalog(
         }
     }
 
-    let any_trigger =
-        has_ann || has_call || has_router || has_wrapper_param || has_provider_param;
+    let any_trigger = has_ann || has_call || has_router || has_wrapper_param || has_provider_param;
     if !any_trigger {
         return;
     }
@@ -466,13 +463,7 @@ fn apply_route_decorator(
         let (display, hint) = format_route_target(&method, &path);
         let loc = rel.location.clone();
         out.push(exposes_route_relation(
-            &rel.from,
-            &display,
-            &hint,
-            &method,
-            &path,
-            rule,
-            loc,
+            &rel.from, &display, &hint, &method, &path, rule, loc,
         ));
         if let Some(sym) = find_symbol_mut(symbols, &rel.from) {
             stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
@@ -628,11 +619,7 @@ fn extract_route_call_bits<'a>(
     let text = std::str::from_utf8(slice).ok()?;
     let (before_paren, after_open) = text.split_once('(')?;
     // Reject huge chained prefixes before '(' unless we take the trailing receiver.callee
-    let tail = before_paren
-        .lines()
-        .last()
-        .unwrap_or(before_paren)
-        .trim();
+    let tail = before_paren.lines().last().unwrap_or(before_paren).trim();
     let callee = tail
         .rsplit(['.', ':'])
         .next()?
@@ -746,7 +733,11 @@ fn extract_handler_and_method_from_args(args: &[String]) -> Option<(Option<Strin
             verb_cand.as_str(),
             "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "OPTIONS" | "HEAD" | "ANY"
         ) {
-            let handler_inner = inner.rsplit_once(')').map(|(a, _)| a).unwrap_or(inner).trim();
+            let handler_inner = inner
+                .rsplit_once(')')
+                .map(|(a, _)| a)
+                .unwrap_or(inner)
+                .trim();
             let h = handler_inner
                 .rsplit(['.', ':'])
                 .next()
@@ -992,10 +983,7 @@ fn apply_param_call_inject(
         let qn = symbol_qn(sym);
         let mut stamped = false;
         for param in &sym.parameters {
-            let haystacks = [
-                param.default_value.as_deref(),
-                param.param_type.as_deref(),
-            ];
+            let haystacks = [param.default_value.as_deref(), param.param_type.as_deref()];
             for hay in haystacks.into_iter().flatten() {
                 if let Some(provider) = extract_provider_call(hay, &providers) {
                     out.push(injects_relation(
@@ -1224,9 +1212,7 @@ fn find_symbol<'a>(symbols: &'a [Symbol], name: &str) -> Option<&'a Symbol> {
 
 fn find_symbol_mut<'a>(symbols: &'a mut [Symbol], name: &str) -> Option<&'a mut Symbol> {
     symbols.iter_mut().find(|s| {
-        s.qualified_name.as_deref() == Some(name)
-            || s.name == name
-            || symbol_qn(s) == name
+        s.qualified_name.as_deref() == Some(name) || s.name == name || symbol_qn(s) == name
     })
 }
 
@@ -1268,8 +1254,7 @@ fn resolve_field_type(
 ) -> Option<String> {
     // Direct field symbol
     if let Some(sym) = symbols.iter().find(|s| {
-        matches!(s.symbol_type, SymbolType::Variable)
-            && (symbol_qn(s) == from || s.name == from)
+        matches!(s.symbol_type, SymbolType::Variable) && (symbol_qn(s) == from || s.name == from)
     }) {
         if let Some(sig) = &sym.signature {
             return Some(sig.clone());
@@ -1307,7 +1292,9 @@ fn strip_generics_and_prefix(ty: &str) -> String {
 }
 
 fn peel_known_containers(ty: &str) -> String {
-    for wrap in ["Arc", "RwLock", "Mutex", "Box", "Rc", "RefCell", "Provider", "List", "Optional"] {
+    for wrap in [
+        "Arc", "RwLock", "Mutex", "Box", "Rc", "RefCell", "Provider", "List", "Optional",
+    ] {
         if let Some(rest) = strip_wrapper_prefix(ty, wrap) {
             return rest;
         }
@@ -1404,7 +1391,9 @@ fn strip_wrapper_prefix(ty: &str, wrapper: &str) -> Option<String> {
         format!("::{lower_w}<"),
         format!(".{lower_w}<"),
     ];
-    let idx = candidates.iter().find_map(|pat| ty.find(pat.as_str()).map(|i| (i, pat.len())))?;
+    let idx = candidates
+        .iter()
+        .find_map(|pat| ty.find(pat.as_str()).map(|i| (i, pat.len())))?;
     let start = idx.0 + idx.1 - 1; // at '<'
     let end = find_matching_angle(ty, start)?;
     Some(ty[start + 1..end].trim().to_string())
@@ -1460,7 +1449,8 @@ fn type_mentions_wrappers(ty: &str, wrappers: &FxHashSet<String>) -> bool {
     wrappers.iter().any(|w| {
         ty.contains(&format!("{w}<"))
             || ty.contains(&format!("::{w}<"))
-            || ty.split(|c: char| !c.is_alphanumeric() && c != '_')
+            || ty
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
                 .any(|p| p == w.as_str())
     })
 }
@@ -1518,12 +1508,7 @@ fn is_primitive(name: &str) -> bool {
 }
 
 fn is_constructor(sym: &Symbol, class_qn: &str) -> bool {
-    if sym
-        .metadata
-        .get("is_constructor")
-        .and_then(|v| v.as_bool())
-        == Some(true)
-    {
+    if sym.metadata.get("is_constructor").and_then(|v| v.as_bool()) == Some(true) {
         return enclosing_class_qn(&symbol_qn(sym))
             .map(|c| c == class_qn || simple_name(&c) == simple_name(class_qn))
             .unwrap_or(true);
@@ -1545,7 +1530,9 @@ fn is_constructor(sym: &Symbol, class_qn: &str) -> bool {
 }
 
 fn source_has_route_path_literal(source: &[u8]) -> bool {
-    source.windows(2).any(|w| w == b"\"/" || w == b"'/" || w == b"`/")
+    source
+        .windows(2)
+        .any(|w| w == b"\"/" || w == b"'/" || w == b"`/")
 }
 
 #[cfg(test)]
@@ -1660,11 +1647,11 @@ mod tests {
             routes[0].to_qualified_hint.as_deref(),
             Some("route::GET /users")
         );
-        let handler = symbols
-            .iter()
-            .find(|s| s.name == "list")
-            .expect("handler");
-        let tags = handler.metadata.get("framework_tags").and_then(|v| v.as_str());
+        let handler = symbols.iter().find(|s| s.name == "list").expect("handler");
+        let tags = handler
+            .metadata
+            .get("framework_tags")
+            .and_then(|v| v.as_str());
         assert!(tags.is_some_and(|t| t.contains("role:endpoint")));
     }
 
@@ -1700,7 +1687,13 @@ mod tests {
     fn fast_reject_empty_c_like() {
         let mut symbols = vec![empty_sym("main", "main", SymbolType::Function)];
         let mut relations = Vec::new();
-        apply_framework_catalog("python", b"int main(){}", None, &mut symbols, &mut relations);
+        apply_framework_catalog(
+            "python",
+            b"int main(){}",
+            None,
+            &mut symbols,
+            &mut relations,
+        );
         assert!(relations.is_empty());
         assert!(symbols[0].metadata.get("framework_tags").is_none());
     }

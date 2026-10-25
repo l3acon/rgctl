@@ -722,8 +722,7 @@ fn test_discover_cli_flags() {
     let with_all = Sandbox::new();
     let all_doc = discover_json_metrics(&with_all, &["--all"]);
     assert_eq!(
-        all_doc["metrics"]["nodes_generated"],
-        baseline_doc["metrics"]["nodes_generated"],
+        all_doc["metrics"]["nodes_generated"], baseline_doc["metrics"]["nodes_generated"],
         "--all must not change discover output after #34"
     );
 }

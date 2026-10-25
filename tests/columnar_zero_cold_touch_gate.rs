@@ -1,15 +1,16 @@
 //! Zero cold-extension deserialization on hot columnar scan paths.
 
+use rgctl_analysis::BlastRadiusEngine;
 use rgctl_analysis::{
-    default_community_edge_types, CommunityDetector, FastPageRank, FlatGraphIndex, PetGraphView,
+    CommunityDetector, FastPageRank, FlatGraphIndex, PetGraphView, default_community_edge_types,
 };
 use rgctl_graph::backend::{GraphBackend, MemoryBackend};
 use rgctl_graph::schema::{Edge, EdgeType, Node, NodeType};
 use rgctl_graph::{
-    cold_ext_deserialization_count, diff_snapshots, reset_cold_ext_deserialization_count,
-    write_columnar_from_backend, write_columnar_from_nodes_edges, NoopDiffSink, SnapshotNodeStore,
+    NoopDiffSink, SnapshotNodeStore, cold_ext_deserialization_count, diff_snapshots,
+    reset_cold_ext_deserialization_count, write_columnar_from_backend,
+    write_columnar_from_nodes_edges,
 };
-use rgctl_analysis::BlastRadiusEngine;
 use rgctl_incremental::incoming_callers_files_depth;
 use std::path::Path;
 use tempfile::TempDir;
@@ -163,7 +164,10 @@ fn hot_name_and_type_scan_zero_cold_ext() {
             matched += 1;
         }
     }
-    assert!(matched >= 1_000, "expected hot qn prefix matches, got {matched}");
+    assert!(
+        matched >= 1_000,
+        "expected hot qn prefix matches, got {matched}"
+    );
     let all_ids = store.all_node_ids();
     let funcs = store.filter_function_impact(&all_ids).unwrap();
     assert_eq!(funcs.len(), 2_000);

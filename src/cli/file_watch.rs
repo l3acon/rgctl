@@ -53,18 +53,16 @@ pub fn spawn_repo_watcher(repo: PathBuf) -> Result<thread::JoinHandle<()>> {
     }
 
     let (tx, rx) = mpsc::channel::<PathBuf>();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-        match res {
-            Ok(event) => {
-                if !is_interesting_event(&event.kind) {
-                    return;
-                }
-                for path in event.paths {
-                    let _ = tx.send(path);
-                }
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| match res {
+        Ok(event) => {
+            if !is_interesting_event(&event.kind) {
+                return;
             }
-            Err(err) => warn!("rgctl watch: notify error: {err}"),
+            for path in event.paths {
+                let _ = tx.send(path);
+            }
         }
+        Err(err) => warn!("rgctl watch: notify error: {err}"),
     })
     .context("create filesystem watcher")?;
 
@@ -136,9 +134,7 @@ fn watch_loop(
                 }
             }
             Err(RecvTimeoutError::Timeout) => {
-                let debounce_fired = deadline
-                    .map(|d| Instant::now() >= d)
-                    .unwrap_or(false);
+                let debounce_fired = deadline.map(|d| Instant::now() >= d).unwrap_or(false);
                 let has_queue = queue_nonempty(&repo);
 
                 if !debounce_fired && !has_queue {
@@ -239,9 +235,7 @@ mod tests {
         let repo = PathBuf::from("/tmp/repo");
         let mut exts = HashSet::new();
         exts.insert("rs".into());
-        assert!(
-            filter_watch_path(&repo, Path::new("/tmp/repo/target/foo.rs"), &exts).is_none()
-        );
+        assert!(filter_watch_path(&repo, Path::new("/tmp/repo/target/foo.rs"), &exts).is_none());
         assert!(filter_watch_path(&repo, Path::new("/tmp/repo/README.md"), &exts).is_none());
         assert_eq!(
             filter_watch_path(&repo, Path::new("/tmp/repo/src/lib.rs"), &exts).as_deref(),

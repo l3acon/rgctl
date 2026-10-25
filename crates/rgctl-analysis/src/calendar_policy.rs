@@ -86,13 +86,8 @@ pub fn evaluate_calendar_for_deltas(
     deltas
         .iter()
         .map(|delta| {
-            let disposition = evaluate_calendar_disposition(
-                delta,
-                config,
-                ledger,
-                today_days,
-                now_secs,
-            );
+            let disposition =
+                evaluate_calendar_disposition(delta, config, ledger, today_days, now_secs);
             (delta.key.as_u64(), disposition)
         })
         .collect()
@@ -114,7 +109,11 @@ pub fn evaluate_calendar_disposition(
         return CalendarDisposition::default();
     }
 
-    if let Some(effective) = config.effective_from.as_deref().and_then(iso_date_to_day_number) {
+    if let Some(effective) = config
+        .effective_from
+        .as_deref()
+        .and_then(iso_date_to_day_number)
+    {
         if today_days < effective {
             return CalendarDisposition {
                 severity: None,
@@ -133,9 +132,7 @@ pub fn evaluate_calendar_disposition(
                     override_blocking: Some(config.severity_during_grace == GraceSeverity::Fail),
                 };
             }
-            if config.fail_existing_after_grace
-                && delta.classification == TemporalClass::Existing
-            {
+            if config.fail_existing_after_grace && delta.classification == TemporalClass::Existing {
                 return CalendarDisposition {
                     severity: Some(CalendarSeverity::Fail),
                     override_blocking: Some(true),
@@ -158,7 +155,11 @@ pub fn evaluate_calendar_disposition(
         }
     }
 
-    if let Some(sunset) = config.sunset_date.as_deref().and_then(iso_date_to_day_number) {
+    if let Some(sunset) = config
+        .sunset_date
+        .as_deref()
+        .and_then(iso_date_to_day_number)
+    {
         if today_days >= sunset {
             return CalendarDisposition {
                 severity: Some(CalendarSeverity::Fail),
@@ -244,8 +245,8 @@ mod tests {
     use super::*;
     use crate::policy::PolicyViolation;
     use crate::violation_ledger::ViolationLedger;
-    use rgctl_graph::stable_key::stable_key_from_facets;
     use rgctl_graph::schema::NodeType;
+    use rgctl_graph::stable_key::stable_key_from_facets;
 
     fn sample_delta(classification: TemporalClass) -> PolicyDelta {
         PolicyDelta {
@@ -282,13 +283,8 @@ mod tests {
             ..Default::default()
         };
         let delta = sample_delta(TemporalClass::Existing);
-        let disposition = evaluate_calendar_disposition(
-            &delta,
-            &config,
-            &ViolationLedger::in_memory(),
-            today,
-            0,
-        );
+        let disposition =
+            evaluate_calendar_disposition(&delta, &config, &ViolationLedger::in_memory(), today, 0);
         assert_eq!(disposition.override_blocking, Some(true));
     }
 
@@ -311,13 +307,8 @@ mod tests {
             enforce_sla: true,
             ..Default::default()
         };
-        let disposition = evaluate_calendar_disposition(
-            &delta,
-            &config,
-            &ledger,
-            system_today_days(),
-            now_secs,
-        );
+        let disposition =
+            evaluate_calendar_disposition(&delta, &config, &ledger, system_today_days(), now_secs);
         assert_eq!(disposition.override_blocking, Some(true));
     }
 

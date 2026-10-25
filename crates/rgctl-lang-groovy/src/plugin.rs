@@ -2,7 +2,7 @@
 
 use crate::single_pass::{extract_all_single_pass, groovy_ast_handlers};
 use rgctl_plugin_api::*;
-use rgctl_plugin_api::{complexity_from_metadata, parse_with_pool, Error, Result};
+use rgctl_plugin_api::{Error, Result, complexity_from_metadata, parse_with_pool};
 use std::path::Path;
 use tree_sitter::Node;
 
@@ -59,7 +59,12 @@ impl GroovyPlugin {
                 }
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -114,14 +119,11 @@ impl GroovyPlugin {
     }
 
     pub(crate) fn extract_parameters(&self, node: Node, source: &[u8]) -> Vec<Parameter> {
-        let Some(params) = node
-            .child_by_field_name("parameters")
-            .or_else(|| {
-                let mut c = node.walk();
-                node.children(&mut c)
-                    .find(|ch| matches!(ch.kind(), "formal_parameters" | "inferred_parameters"))
-            })
-        else {
+        let Some(params) = node.child_by_field_name("parameters").or_else(|| {
+            let mut c = node.walk();
+            node.children(&mut c)
+                .find(|ch| matches!(ch.kind(), "formal_parameters" | "inferred_parameters"))
+        }) else {
             return Vec::new();
         };
         let mut out = Vec::new();
@@ -197,11 +199,7 @@ impl GroovyPlugin {
             } else {
                 Self::qualify(package, &name)
             };
-            (
-                name,
-                qn,
-                serde_json::json!({ "language": "groovy" }),
-            )
+            (name, qn, serde_json::json!({ "language": "groovy" }))
         };
         Some(Symbol {
             name: sym_name,
@@ -259,11 +257,7 @@ impl GroovyPlugin {
         })
     }
 
-    pub(crate) fn extract_import_symbol(
-        node: Node,
-        source: &[u8],
-        file: &str,
-    ) -> Option<Symbol> {
+    pub(crate) fn extract_import_symbol(node: Node, source: &[u8], file: &str) -> Option<Symbol> {
         let text = node.utf8_text(source).unwrap_or("").trim();
         let imported = text
             .trim_start_matches("import")
@@ -311,11 +305,7 @@ impl GroovyPlugin {
                     .map(|s| s.lines().next().unwrap_or("").to_string())
                     .unwrap_or_default();
                 if let Some(rest) = header.split_once("extends").map(|(_, r)| r) {
-                    let parent = rest
-                        .split(['{', ',', 'i'])
-                        .next()
-                        .unwrap_or("")
-                        .trim();
+                    let parent = rest.split(['{', ',', 'i']).next().unwrap_or("").trim();
                     if !parent.is_empty() {
                         relations.push(Relation {
                             from: from_qn.clone(),
@@ -329,7 +319,11 @@ impl GroovyPlugin {
                     }
                 }
                 if let Some(rest) = header.split_once("implements").map(|(_, r)| r) {
-                    for iface in rest.split(['{', ',']).map(str::trim).filter(|s| !s.is_empty()) {
+                    for iface in rest
+                        .split(['{', ','])
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                    {
                         relations.push(Relation {
                             from: from_qn.clone(),
                             to: iface.to_string(),
@@ -356,7 +350,12 @@ impl GroovyPlugin {
                 Self::push_annotated_with_for(node, source, file_path, root, relations);
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -376,11 +375,17 @@ impl GroovyPlugin {
 
         while let Some(node) = stack.pop() {
             match node.kind() {
-                "class_declaration" | "interface_declaration" | "enum_declaration"
+                "class_declaration"
+                | "interface_declaration"
+                | "enum_declaration"
                 | "annotation_type_declaration" => {
                     let Some(simple) = Self::type_name(node, source) else {
                         let mut cursor = node.walk();
-                        for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev()
+                        for child in node
+                            .children(&mut cursor)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
                         {
                             stack.push(child);
                         }
@@ -427,7 +432,11 @@ impl GroovyPlugin {
                         });
                     let Some(name) = name else {
                         let mut cursor = node.walk();
-                        for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev()
+                        for child in node
+                            .children(&mut cursor)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
                         {
                             stack.push(child);
                         }
@@ -453,11 +462,7 @@ impl GroovyPlugin {
                         } else {
                             Self::qualify(package.as_deref(), &name)
                         };
-                        (
-                            name,
-                            qn,
-                            serde_json::json!({ "language": "groovy" }),
-                        )
+                        (name, qn, serde_json::json!({ "language": "groovy" }))
                     };
                     symbols.push(Symbol {
                         name: sym_name,
@@ -536,7 +541,12 @@ impl GroovyPlugin {
                 _ => {}
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -568,45 +578,44 @@ impl GroovyPlugin {
             if node.kind() == "class_declaration"
                 && let Some(from) = Self::type_name(node, source)
             {
-                    let package = Self::package_name(root, source);
-                    let from_qn = Self::qualify(package.as_deref(), &from);
-                    let header = node
-                        .utf8_text(source)
-                        .ok()
-                        .map(|s| s.lines().next().unwrap_or("").to_string())
-                        .unwrap_or_default();
-                    if let Some(rest) = header.split_once("extends").map(|(_, r)| r) {
-                        let parent = rest
-                            .split(['{', ',', 'i'])
-                            .next()
-                            .unwrap_or("")
-                            .trim();
-                        if !parent.is_empty() {
-                            relations.push(Relation {
-                                from: from_qn.clone(),
-                                to: parent.to_string(),
-                                relation_type: RelationType::Extends,
-                                location: Self::loc(&file_path.to_string_lossy(), node),
-                                metadata: serde_json::json!({ "language": "groovy" }),
-                                to_qualified_hint: None,
-                                to_type_hint: None,
-                            });
-                        }
+                let package = Self::package_name(root, source);
+                let from_qn = Self::qualify(package.as_deref(), &from);
+                let header = node
+                    .utf8_text(source)
+                    .ok()
+                    .map(|s| s.lines().next().unwrap_or("").to_string())
+                    .unwrap_or_default();
+                if let Some(rest) = header.split_once("extends").map(|(_, r)| r) {
+                    let parent = rest.split(['{', ',', 'i']).next().unwrap_or("").trim();
+                    if !parent.is_empty() {
+                        relations.push(Relation {
+                            from: from_qn.clone(),
+                            to: parent.to_string(),
+                            relation_type: RelationType::Extends,
+                            location: Self::loc(&file_path.to_string_lossy(), node),
+                            metadata: serde_json::json!({ "language": "groovy" }),
+                            to_qualified_hint: None,
+                            to_type_hint: None,
+                        });
                     }
-                    if let Some(rest) = header.split_once("implements").map(|(_, r)| r) {
-                        for iface in rest.split(['{', ',']).map(str::trim).filter(|s| !s.is_empty())
-                        {
-                            relations.push(Relation {
-                                from: from_qn.clone(),
-                                to: iface.to_string(),
-                                relation_type: RelationType::Implements,
-                                location: Self::loc(&file_path.to_string_lossy(), node),
-                                metadata: serde_json::json!({ "language": "groovy" }),
-                                to_qualified_hint: None,
-                                to_type_hint: None,
-                            });
-                        }
+                }
+                if let Some(rest) = header.split_once("implements").map(|(_, r)| r) {
+                    for iface in rest
+                        .split(['{', ','])
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                    {
+                        relations.push(Relation {
+                            from: from_qn.clone(),
+                            to: iface.to_string(),
+                            relation_type: RelationType::Implements,
+                            location: Self::loc(&file_path.to_string_lossy(), node),
+                            metadata: serde_json::json!({ "language": "groovy" }),
+                            to_qualified_hint: None,
+                            to_type_hint: None,
+                        });
                     }
+                }
             }
             // AnnotatedWith on types / methods / constructors (Java-shaped modifiers).
             if matches!(
@@ -623,7 +632,12 @@ impl GroovyPlugin {
                 Self::push_annotated_with_for(node, source, file_path, root, &mut relations);
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -643,8 +657,9 @@ impl GroovyPlugin {
             "class_declaration"
             | "interface_declaration"
             | "enum_declaration"
-            | "annotation_type_declaration" => Self::type_name(node, source)
-                .map(|n| Self::qualify(package.as_deref(), &n)),
+            | "annotation_type_declaration" => {
+                Self::type_name(node, source).map(|n| Self::qualify(package.as_deref(), &n))
+            }
             "method_declaration" | "function_definition" => {
                 let name = node
                     .child_by_field_name("name")
@@ -733,7 +748,12 @@ impl GroovyPlugin {
                 complexity += 1;
             }
             let mut cursor = n.walk();
-            for child in n.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in n
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -809,7 +829,12 @@ impl LanguagePlugin for GroovyPlugin {
                 break;
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -850,10 +875,7 @@ mod tests {
             }),
             "{symbols:?}"
         );
-        assert!(
-            symbols.iter().any(|s| s.name == "findById"),
-            "{symbols:?}"
-        );
+        assert!(symbols.iter().any(|s| s.name == "findById"), "{symbols:?}");
     }
 
     #[test]
@@ -889,9 +911,9 @@ mod tests {
             all.relations
         );
         assert!(
-            all.relations.iter().any(|r| {
-                r.relation_type == RelationType::AnnotatedWith && r.to == "Override"
-            }),
+            all.relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::AnnotatedWith && r.to == "Override" }),
             "expected AnnotatedWith Override: {:?}",
             all.relations
         );

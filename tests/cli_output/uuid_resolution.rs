@@ -1,7 +1,5 @@
 use rgctl::analysis::MacroIndexEntry;
-use rgctl::cli::blast_radius_output::{
-    NodeLookup, build_from_cache_entry, skipped_gatekeeping,
-};
+use rgctl::cli::blast_radius_output::{NodeLookup, build_from_cache_entry, skipped_gatekeeping};
 use uuid::Uuid;
 
 #[test]

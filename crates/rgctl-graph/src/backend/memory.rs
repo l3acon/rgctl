@@ -316,10 +316,11 @@ impl MemoryBackend {
         let value_arc = self.string_interner.intern(value)?;
         let index = read_lock(&self.node_property_index)?;
         if let Some(values) = index.get(key_arc.as_ref())
-            && let Some(ids) = values.get(value_arc.as_ref()) {
-                let nodes = read_lock(&self.nodes)?;
-                return Ok(ids.iter().filter_map(|id| nodes.get(id).cloned()).collect());
-            }
+            && let Some(ids) = values.get(value_arc.as_ref())
+        {
+            let nodes = read_lock(&self.nodes)?;
+            return Ok(ids.iter().filter_map(|id| nodes.get(id).cloned()).collect());
+        }
         Ok(Vec::new())
     }
 
@@ -481,9 +482,10 @@ impl MemoryBackend {
                 let key_arc = self.string_interner.intern(&key)?;
                 let value_arc = self.string_interner.intern(&value)?;
                 if let Some(values) = property_index.get_mut(key_arc.as_ref())
-                    && let Some(ids) = values.get_mut(value_arc.as_ref()) {
-                        ids.retain(|&id| id != node_id);
-                    }
+                    && let Some(ids) = values.get_mut(value_arc.as_ref())
+                {
+                    ids.retain(|&id| id != node_id);
+                }
             }
         }
 
@@ -636,15 +638,15 @@ impl MemoryBackend {
                         | NodeType::Annotation
                         | NodeType::Variable
                         | NodeType::TypeAlias
-                )
-                    && let Some(file) = &node.file_path {
-                        let key = format!(
-                            "{}::{}",
-                            normalize_path_str(file),
-                            node.qualified_name.as_deref().unwrap_or(&node.name)
-                        );
-                        index.insert(key, node.id);
-                    }
+                ) && let Some(file) = &node.file_path
+                {
+                    let key = format!(
+                        "{}::{}",
+                        normalize_path_str(file),
+                        node.qualified_name.as_deref().unwrap_or(&node.name)
+                    );
+                    index.insert(key, node.id);
+                }
             }
         }
         index
@@ -855,9 +857,10 @@ impl MemoryBackend {
             let key_arc = self.string_interner.intern(key)?;
             let value_arc = self.string_interner.intern(value)?;
             if let Some(values) = write_lock(&self.node_property_index)?.get_mut(key_arc.as_ref())
-                && let Some(ids) = values.get_mut(value_arc.as_ref()) {
-                    ids.retain(|&x| x != node.id);
-                }
+                && let Some(ids) = values.get_mut(value_arc.as_ref())
+            {
+                ids.retain(|&x| x != node.id);
+            }
         }
         Ok(())
     }

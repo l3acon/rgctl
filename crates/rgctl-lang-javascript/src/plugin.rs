@@ -5,9 +5,9 @@
 
 use crate::single_pass::{extract_all_single_pass, javascript_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, complexity_from_metadata, parse_with_pool, AstHandlerTable,
-    ComplexityMetrics, Error, ExtractAllResult, Field, JS_CALL_KINDS, LanguagePlugin, Parameter,
-    Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
+    AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field, JS_CALL_KINDS,
+    LanguagePlugin, Parameter, Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
+    callee_name, complexity_from_metadata, containing_function, parse_with_pool,
 };
 use rgctl_plugin_helpers::{
     bound_function_expression_name, extract_cjs_require_symbols, extract_class_extends_relations,
@@ -201,7 +201,12 @@ impl JavaScriptPlugin {
         Ok(parameters)
     }
 
-    pub(crate) fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_class(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -797,13 +802,16 @@ impl JavaScriptPlugin {
     }
 
     pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<tree_sitter::Tree> {
-        parse_with_pool("javascript", tree_sitter_javascript::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: 0,
-                message: e,
-            },
+        parse_with_pool(
+            "javascript",
+            tree_sitter_javascript::LANGUAGE.into(),
+            source,
         )
+        .map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })
     }
 
     /// Emit decorator `AnnotatedWith` relations for a single node (no child walk).
@@ -885,9 +893,7 @@ impl JavaScriptPlugin {
         if let Some(ref m) = module_path {
             meta["module"] = serde_json::Value::String(m.clone());
         }
-        let to_qualified_hint = module_path
-            .as_ref()
-            .map(|m| format!("{m}::{exported}"));
+        let to_qualified_hint = module_path.as_ref().map(|m| format!("{m}::{exported}"));
         relations.push(Relation {
             from: file_path.to_string(),
             to: exported,
@@ -1042,12 +1048,16 @@ impl LanguagePlugin for JavaScriptPlugin {
             return Ok(Some(metrics));
         }
 
-        let tree = parse_with_pool("javascript", tree_sitter_javascript::LANGUAGE.into(), source)
-            .map_err(|e| Error::ParseError {
-                file: symbol.location.file.clone().into(),
-                line: symbol.location.start_line,
-                message: e,
-            })?;
+        let tree = parse_with_pool(
+            "javascript",
+            tree_sitter_javascript::LANGUAGE.into(),
+            source,
+        )
+        .map_err(|e| Error::ParseError {
+            file: symbol.location.file.clone().into(),
+            line: symbol.location.start_line,
+            message: e,
+        })?;
 
         let root = tree.root_node();
         let target_line = symbol.location.start_line.saturating_sub(1);
@@ -1140,7 +1150,10 @@ const api = { fetchAll: async () => 0 };
             "callback should stay span-disambiguated anonymous: {names:?}"
         );
         assert_eq!(
-            names.iter().filter(|n| n.starts_with("anonymous@L")).count(),
+            names
+                .iter()
+                .filter(|n| n.starts_with("anonymous@L"))
+                .count(),
             1,
             "only the map callback should be anonymous, got {names:?}"
         );
@@ -1235,9 +1248,7 @@ import express from 'express';
 import { foo, bar as Baz } from 'lodash';
 "#;
         let plugin = JavaScriptPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("a.js"), source)
-            .unwrap();
+        let symbols = plugin.extract_symbols(Path::new("a.js"), source).unwrap();
         assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Import));
         assert!(symbols.len() >= 2);
     }
@@ -1303,14 +1314,10 @@ function f(obj, key) { return obj[key](); }
     fn test_cjs_require_import() {
         let source = br#"const fs = require('fs');"#;
         let plugin = JavaScriptPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("cjs.js"), source)
-            .unwrap();
-        assert!(
-            symbols.iter().any(|s| {
-                s.symbol_type == SymbolType::Import
-                    && s.metadata.get("module_system").and_then(|v| v.as_str()) == Some("cjs")
-            })
-        );
+        let symbols = plugin.extract_symbols(Path::new("cjs.js"), source).unwrap();
+        assert!(symbols.iter().any(|s| {
+            s.symbol_type == SymbolType::Import
+                && s.metadata.get("module_system").and_then(|v| v.as_str()) == Some("cjs")
+        }));
     }
 }

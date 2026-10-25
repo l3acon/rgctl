@@ -165,14 +165,10 @@ pub fn serve(ctx: &CliContext, args: HttpServeArgs) -> Result<()> {
 
     // Hold for the lifetime of serve so Drop releases `.rgctl/watch.lock` on exit.
     let _watch_lock = if args.watch {
-        let lock = super::pipeline_status::try_acquire_watch_lock(&session_root).with_context(
-            || {
-                format!(
-                    "cannot start serve --watch for {}",
-                    session_root.display()
-                )
-            },
-        )?;
+        let lock =
+            super::pipeline_status::try_acquire_watch_lock(&session_root).with_context(|| {
+                format!("cannot start serve --watch for {}", session_root.display())
+            })?;
         super::file_watch::spawn_repo_watcher(session_root.clone())
             .context("start source file watcher")?;
         eprintln!("[>] Source watch enabled (incremental update on save; exclusive lock held)");

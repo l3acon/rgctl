@@ -10,8 +10,9 @@ pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
 pub fn register(registry: &mut LanguageRegistry) {
-    let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_powershell::LANGUAGE.into())
-        .expect("compile powershell tags.scm");
+    let plugin =
+        QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_powershell::LANGUAGE.into())
+            .expect("compile powershell tags.scm");
     registry.register_language_plugin(Arc::new(plugin));
 }
 
@@ -31,7 +32,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_powershell::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_powershell::LANGUAGE.into())
+                .expect("compile");
         let source = br###"function Add-Numbers($a, $b) {
   Write-Host $a
   return $a + $b
@@ -41,7 +43,10 @@ mod tests {
             .extract_all(Path::new("Math.ps1"), source)
             .expect("extract_all");
         assert!(
-            result.symbols.iter().any(|s| s.name.contains("Add-Numbers")),
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name.contains("Add-Numbers")),
             "expected symbol containing 'Add-Numbers', got {:?}",
             result.symbols
         );
@@ -55,10 +60,12 @@ mod tests {
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "Add-Numbers" && r.to == "Add-Numbers"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "Add-Numbers" && r.to == "Add-Numbers"),
             "must not emit self-call Add-Numbers -> Add-Numbers: {:?}",
             result.relations
         );
-
     }
 }

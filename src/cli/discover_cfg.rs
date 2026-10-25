@@ -1,5 +1,6 @@
 //! Parallel CFG/PDG/taint analysis for discover `--with-cfg` / `--with-taint`.
 
+use crate::analysis::hash_maps::FxHashMap;
 use crate::analysis::storage::stable_function_key;
 use crate::analysis::{
     AnalysisIndexEntry, AnalysisStorage, AstSkeletonRecord, CfgPdgRecord, ControlFlowGraph,
@@ -8,7 +9,6 @@ use crate::analysis::{
     build_file_local_types_from_tree, build_function_skeleton_from_tree, cfg_language_id_from_path,
     extract_writes_from_cfg,
 };
-use crate::analysis::hash_maps::FxHashMap;
 use rayon::prelude::*;
 use rgctl_graph::code_index::hash_code;
 use rgctl_graph::schema::Node;
@@ -106,13 +106,7 @@ pub struct CfgAnalysisBatchResult {
 }
 
 impl CfgAnalysisBatchResult {
-    fn record_skip(
-        &mut self,
-        reason: CfgSkipReason,
-        file_path: &str,
-        symbol: &str,
-        verbose: bool,
-    ) {
+    fn record_skip(&mut self, reason: CfgSkipReason, file_path: &str, symbol: &str, verbose: bool) {
         self.error_count += 1;
         match reason {
             CfgSkipReason::UnsupportedLanguage => self.skip_unsupported_language += 1,
@@ -297,11 +291,7 @@ pub fn run_cfg_analysis_batch(
     }
 
     let stage_profile = stage_ref.map(|stage| {
-        let analyzed = nested
-            .iter()
-            .flatten()
-            .filter(|w| w.is_ok())
-            .count();
+        let analyzed = nested.iter().flatten().filter(|w| w.is_ok()).count();
         emit_stage_profile(stage, analyzed)
     });
     if let (Some(log), true) = (timing_log, options.verbose) {
@@ -329,12 +319,7 @@ pub fn run_cfg_analysis_batch(
             let func = &functions[func_idx];
             match outcome {
                 Err(reason) => {
-                    result.record_skip(
-                        reason,
-                        &group.file_path,
-                        &func.name,
-                        options.verbose,
-                    );
+                    result.record_skip(reason, &group.file_path, &func.name, options.verbose);
                 }
                 Ok(w) => {
                     if w.from_cache {
@@ -487,17 +472,16 @@ fn process_file_group(
     };
 
     let parsed = ParsedSourceFile::parse(&group.language, source.as_bytes()).ok();
-    let file_locals: FxHashMap<(usize, String), HashMap<String, String>> =
-        parsed
-            .as_ref()
-            .map(|p| {
-                build_file_local_types_from_tree(
-                    &group.language,
-                    p.tree().root_node(),
-                    source.as_bytes(),
-                )
-            })
-            .unwrap_or_default();
+    let file_locals: FxHashMap<(usize, String), HashMap<String, String>> = parsed
+        .as_ref()
+        .map(|p| {
+            build_file_local_types_from_tree(
+                &group.language,
+                p.tree().root_node(),
+                source.as_bytes(),
+            )
+        })
+        .unwrap_or_default();
 
     group
         .func_indices
@@ -585,18 +569,13 @@ fn is_constructor_node(node: &Node) -> bool {
 }
 
 fn function_name_looks_like_ctor(name: &str, node: &Node) -> bool {
-    if let Some(enclosing) = node
-        .properties
-        .get("member_of")
-        .cloned()
-        .or_else(|| {
-            node.qualified_name.as_ref().and_then(|qn| {
-                qn.rsplit_once('#')
-                    .map(|(o, _)| o.to_string())
-                    .or_else(|| qn.rsplit_once('.').map(|(o, _)| o.to_string()))
-            })
+    if let Some(enclosing) = node.properties.get("member_of").cloned().or_else(|| {
+        node.qualified_name.as_ref().and_then(|qn| {
+            qn.rsplit_once('#')
+                .map(|(o, _)| o.to_string())
+                .or_else(|| qn.rsplit_once('.').map(|(o, _)| o.to_string()))
         })
-    {
+    }) {
         return name == enclosing || enclosing.ends_with(&format!(".{name}"));
     }
     false

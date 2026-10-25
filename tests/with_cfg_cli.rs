@@ -17,15 +17,14 @@ fn materialize() -> (tempfile::TempDir, std::path::PathBuf) {
 
 fn run_discover(repo: &Path, extra: &[&str]) -> std::process::Output {
     let mut cmd = Command::new(rgctl_bin());
-    cmd.current_dir(repo)
-        .args([
-            "-r",
-            repo.to_str().unwrap(),
-            "discover",
-            ".",
-            "--languages",
-            "java,rust",
-        ]);
+    cmd.current_dir(repo).args([
+        "-r",
+        repo.to_str().unwrap(),
+        "discover",
+        ".",
+        "--languages",
+        "java,rust",
+    ]);
     cmd.args(extra);
     cmd.output().expect("spawn rgctl discover")
 }
@@ -46,17 +45,16 @@ fn discover_all_flag_is_ignored() {
 
     fn nodes_generated(repo: &Path, extra: &[&str]) -> u64 {
         let mut cmd = Command::new(rgctl_bin());
-        cmd.current_dir(repo)
-            .args([
-                "-r",
-                repo.to_str().unwrap(),
-                "-f",
-                "json",
-                "discover",
-                ".",
-                "--languages",
-                "java,rust",
-            ]);
+        cmd.current_dir(repo).args([
+            "-r",
+            repo.to_str().unwrap(),
+            "-f",
+            "json",
+            "discover",
+            ".",
+            "--languages",
+            "java,rust",
+        ]);
         cmd.args(extra);
         let out = cmd.output().expect("discover json");
         assert!(
@@ -85,8 +83,7 @@ fn discover_with_cfg_writes_archive_without_requiring_taint() {
     let output = run_discover(&repo, &["--with-cfg"]);
     assert_ok(&output, "discover --with-cfg");
     assert!(
-        repo.join(".rgctl/analysis/cfg_pdg.archive.bin")
-            .is_file()
+        repo.join(".rgctl/analysis/cfg_pdg.archive.bin").is_file()
             || repo.join(".rgctl/analysis").is_dir(),
         "CFG pass should create analysis artifacts"
     );

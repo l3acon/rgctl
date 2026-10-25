@@ -2,10 +2,10 @@
 
 mod rgctl_harness;
 
-use rgctl::analysis::{compute_and_apply_git_churn, GitChurnConfig};
+use rgctl::analysis::{GitChurnConfig, compute_and_apply_git_churn};
 use rgctl::graph::backend::{GraphBackend, MemoryBackend};
 use rgctl::graph::schema::{EdgeType, Node, NodeType};
-use rgctl::graph::{SnapshotNodeStore, SNAPSHOT_FILE};
+use rgctl::graph::{SNAPSHOT_FILE, SnapshotNodeStore};
 use rgctl_harness::{assert_ok, run_in_repo};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -23,10 +23,7 @@ fn write(repo: &Path, rel: &str, body: &str) {
 
 fn discover(repo: &Path, langs: &str) {
     assert_ok(
-        &run_in_repo(
-            repo,
-            &["discover", ".", "--languages", langs],
-        ),
+        &run_in_repo(repo, &["discover", ".", "--languages", langs]),
         "discover",
     );
 }
@@ -70,9 +67,9 @@ fn load_view(repo: &Path) -> GraphView {
 }
 
 fn has_edge(view: &GraphView, from_sub: &str, to_sub: &str, edge: &str) -> bool {
-    view.edges.iter().any(|(f, t, e)| {
-        e == edge && f.contains(from_sub) && t.contains(to_sub)
-    })
+    view.edges
+        .iter()
+        .any(|(f, t, e)| e == edge && f.contains(from_sub) && t.contains(to_sub))
 }
 
 fn calls_targets(view: &GraphView, from_sub: &str) -> BTreeSet<String> {
@@ -151,7 +148,9 @@ fn python_c3_diamond_calls_right_not_base() {
     let view = load_view(repo);
     let targets = calls_targets(&view, "Child.run");
     assert!(
-        targets.iter().any(|t| t.contains("Right") && t.contains("f")),
+        targets
+            .iter()
+            .any(|t| t.contains("Right") && t.contains("f")),
         "Child.run should Call Right.f, got {targets:?}"
     );
     assert!(
@@ -244,11 +243,15 @@ public class Impl extends Base implements Repo {
     let view = load_view(repo);
     let targets = calls_targets(&view, "Impl.run");
     assert!(
-        targets.iter().any(|t| t.contains("Base") && t.contains("save")),
+        targets
+            .iter()
+            .any(|t| t.contains("Base") && t.contains("save")),
         "Impl.run should Call Base.save, got {targets:?}"
     );
     assert!(
-        !targets.iter().any(|t| t.contains("Repo") && t.contains("save")),
+        !targets
+            .iter()
+            .any(|t| t.contains("Repo") && t.contains("save")),
         "Impl.run must not prefer Repo.save, got {targets:?}"
     );
 }
@@ -344,7 +347,8 @@ fn drive(a: &App) {
         .edges
         .iter()
         .filter(|(f, _, e)| {
-            e == "Calls" && (f.contains("App::exec") || f.ends_with("App.exec") || f == "exec")
+            e == "Calls"
+                && (f.contains("App::exec") || f.ends_with("App.exec") || f == "exec")
                 && !f.contains("Runner")
         })
         .map(|(_, t, _)| t.clone())
@@ -624,7 +628,11 @@ def get_db():
     );
     assert_ok(&out, "relations exposesroute");
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    let edges = v.get("edges").and_then(|e| e.as_array()).cloned().unwrap_or_default();
+    let edges = v
+        .get("edges")
+        .and_then(|e| e.as_array())
+        .cloned()
+        .unwrap_or_default();
     assert!(
         !edges.is_empty(),
         "expected seedless ExposesRoute edges, got {v}"

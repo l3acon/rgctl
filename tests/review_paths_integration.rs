@@ -12,9 +12,7 @@ use tempfile::TempDir;
 fn rgctl_bin() -> PathBuf {
     std::env::var("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl"))
 }
 
 fn init_git_repo(dir: &Path) {
@@ -105,10 +103,7 @@ fn setup_rewired_repo() -> TempDir {
     git_commit_all(repo, "head");
 
     fs::create_dir_all(repo.join(".rgctl-base/.rgctl")).unwrap();
-    write_rewired_snapshot(
-        &repo.join(".rgctl-base/.rgctl/graph.snapshot.bin"),
-        false,
-    );
+    write_rewired_snapshot(&repo.join(".rgctl-base/.rgctl/graph.snapshot.bin"), false);
     tmp
 }
 
@@ -199,7 +194,9 @@ fn write_chain_snapshot(path: &Path, depth: usize) {
         let node = Node::new(NodeType::Function, format!("c{i}")).with_file_path("src/pkg.rs");
         let id = node.id;
         backend.insert_node(node).unwrap();
-        backend.insert_edge(Edge::new(previous.id, id, EdgeType::Calls)).unwrap();
+        backend
+            .insert_edge(Edge::new(previous.id, id, EdgeType::Calls))
+            .unwrap();
         previous = Node::new(NodeType::Function, format!("c{i}")).with_file_path("src/pkg.rs");
         previous.id = id;
         ids.push(id);
@@ -232,7 +229,10 @@ fn setup_violating_policy_repo() -> (TempDir, PathBuf) {
     git_commit_all(repo, "head");
 
     fs::create_dir_all(repo.join(".rgctl-base/.rgctl")).unwrap();
-    write_chain_snapshot(&repo.join(".rgctl-base/.rgctl/graph.snapshot.bin"), CHAIN_BASE);
+    write_chain_snapshot(
+        &repo.join(".rgctl-base/.rgctl/graph.snapshot.bin"),
+        CHAIN_BASE,
+    );
 
     let policy = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rgctl-tests/rgctl-pr-policy.json");
     (tmp, policy)
@@ -388,7 +388,10 @@ fn review_export_reads_a_pre_seeded_ledger_without_appending_to_it() {
     );
     fs::write(&ledger, seeded).unwrap();
 
-    let out = run_export(repo, &["--stdout", "--policy-file", policy.to_str().unwrap()]);
+    let out = run_export(
+        repo,
+        &["--stdout", "--policy-file", policy.to_str().unwrap()],
+    );
     assert!(
         out.status.success(),
         "export should succeed against a seeded ledger: {}",
@@ -396,7 +399,10 @@ fn review_export_reads_a_pre_seeded_ledger_without_appending_to_it() {
     );
 
     let after = fs::read_to_string(&ledger).expect("ledger still readable");
-    assert_eq!(after, seeded, "export must not append to the ledger it classifies against");
+    assert_eq!(
+        after, seeded,
+        "export must not append to the ledger it classifies against"
+    );
 }
 
 /// Export's `policy` classifications must equal `review check`'s **on a ledger with history**.
@@ -461,7 +467,10 @@ fn review_export_policy_matches_review_check_on_a_seeded_ledger() {
             String::from_utf8_lossy(&first.stderr)
         )
     });
-    assert!(!seeded.trim().is_empty(), "review check should have recorded at least one observation");
+    assert!(
+        !seeded.trim().is_empty(),
+        "review check should have recorded at least one observation"
+    );
 
     // Phase 2: rewrite every class to `resolved`, which is what makes a later violation a *regression*
     // rather than new. Without this both commands trivially agree on "new" and the test proves nothing.
@@ -482,7 +491,10 @@ fn review_export_policy_matches_review_check_on_a_seeded_ledger() {
     // restored first — otherwise the comparison would be between two different inputs and would prove
     // nothing either way.
     // Also not asserting exit status, for the same reason — and the JSON envelope is on stdout either way.
-    let export_out = run_export(repo, &["--stdout", "--policy-file", policy.to_str().unwrap()]);
+    let export_out = run_export(
+        repo,
+        &["--stdout", "--policy-file", policy.to_str().unwrap()],
+    );
     let export_json: Value = serde_json::from_slice(&export_out.stdout).unwrap_or_else(|e| {
         panic!(
             "export should emit one JSON document ({e})\n  stdout: {}\n  stderr: {}",

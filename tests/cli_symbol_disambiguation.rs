@@ -8,9 +8,7 @@ use std::process::Command;
 fn rgctl_bin() -> PathBuf {
     option_env!("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl")
-        })
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl"))
 }
 
 fn fixture_root() -> PathBuf {
@@ -49,7 +47,10 @@ fn run_rgctl(repo: &Path, args: &[&str]) -> std::process::Output {
 }
 
 fn discover_java(repo: &Path) {
-    let out = run_rgctl(repo, &["discover", ".", "--languages", "java", "--with-cfg"]);
+    let out = run_rgctl(
+        repo,
+        &["discover", ".", "--languages", "java", "--with-cfg"],
+    );
     assert!(
         out.status.success(),
         "discover failed: {}",
@@ -103,9 +104,8 @@ fn inspect_accepts_file_class_line_filters() {
         ],
     );
     assert!(!bad.status.success(), "wrong --line should fail");
-    let doc: serde_json::Value =
-        serde_json::from_str(String::from_utf8_lossy(&bad.stdout).trim())
-            .expect("JSON error envelope on stdout");
+    let doc: serde_json::Value = serde_json::from_str(String::from_utf8_lossy(&bad.stdout).trim())
+        .expect("JSON error envelope on stdout");
     assert_eq!(doc.get("ok"), Some(&serde_json::json!(false)));
     assert!(doc.get("error_code").is_some());
     assert!(

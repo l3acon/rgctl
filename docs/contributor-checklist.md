@@ -25,7 +25,7 @@ This doc **does not replace** the deep guides it links to. Use it to pick a path
 | Path | When | Deep guide |
 |------|------|------------|
 | **Tier 1 language** | Custom `LanguagePlugin`, full CFG/PDG/taint + Layer F CPG | [tier-1-language-support.md](tier-1-language-support.md) |
-| **Tier 2 language** | Generic tree-sitter + `LanguageConfig` | [languages/README.md](languages/README.md) (coverage JSON + website) · scaffold in [tier-1 §3–4](tier-1-language-support.md#3-repository-layout) (Tier 2 uses `config.rs`) |
+| **Tier 2 language** | Declarative tree-sitter `queries/tags.scm` + `LanguageConfig` | [tier-2-language-support.md](tier-2-language-support.md) · [languages/README.md](languages/README.md) (coverage JSON + website) |
 | **Tier 3 language** | Regex patterns only | [languages/README.md](languages/README.md) |
 | **Config formats** | JSON, YAML, TOML, properties, … | `crates/rgctl-config-formats` |
 | **Markup (Markdown)** | Doc context graph (not Tier 1/2) | [markdown-context.md](markdown-context.md) |

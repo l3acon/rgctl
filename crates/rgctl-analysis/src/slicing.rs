@@ -420,7 +420,9 @@ fn rebind() {
             .nodes
             .values()
             .find(|n| {
-                n.defined_vars.iter().any(|d| d.starts_with("x#") || d == "x")
+                n.defined_vars
+                    .iter()
+                    .any(|d| d.starts_with("x#") || d == "x")
                     && n.used_vars.iter().any(|u| u == "x" || u.starts_with("x#"))
                     && n.statement.text.contains("x + 1")
             })

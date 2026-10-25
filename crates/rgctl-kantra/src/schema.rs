@@ -94,15 +94,15 @@ impl WhenClause {
         match value {
             Value::Mapping(map) => {
                 if let Some(and) = map.get(Value::from("and"))
-                    && let Value::Sequence(items) = and {
-                        return WhenClause::And(
-                            items.iter().map(WhenClause::from_value).collect(),
-                        );
-                    }
+                    && let Value::Sequence(items) = and
+                {
+                    return WhenClause::And(items.iter().map(WhenClause::from_value).collect());
+                }
                 if let Some(or) = map.get(Value::from("or"))
-                    && let Value::Sequence(items) = or {
-                        return WhenClause::Or(items.iter().map(WhenClause::from_value).collect());
-                    }
+                    && let Value::Sequence(items) = or
+                {
+                    return WhenClause::Or(items.iter().map(WhenClause::from_value).collect());
+                }
                 if let Some(not) = map.get(Value::from("not")) {
                     return WhenClause::Not(Box::new(WhenClause::from_value(not)));
                 }
@@ -241,13 +241,15 @@ fn parse_provider(provider: &str, val: &Value) -> WhenClause {
             xpath: string_field(val, "xpath")
                 .or_else(|| string_field(val, "pattern"))
                 .unwrap_or_default(),
-            file_pattern: string_field(val, "filePattern").or_else(|| string_field(val, "filepattern")),
+            file_pattern: string_field(val, "filePattern")
+                .or_else(|| string_field(val, "filepattern")),
         },
         "builtin.json" => WhenClause::BuiltinJson {
             jsonpath: string_field(val, "jsonpath")
                 .or_else(|| string_field(val, "pattern"))
                 .unwrap_or_default(),
-            file_pattern: string_field(val, "filePattern").or_else(|| string_field(val, "filepattern")),
+            file_pattern: string_field(val, "filePattern")
+                .or_else(|| string_field(val, "filepattern")),
         },
         other => WhenClause::Unsupported {
             provider: other.to_string(),
@@ -320,7 +322,10 @@ builtin.filecontent:
         let val: Value = serde_yaml::from_str(yaml).unwrap();
         let clause = WhenClause::from_value(&val);
         match clause {
-            WhenClause::FileContent { pattern, file_pattern } => {
+            WhenClause::FileContent {
+                pattern,
+                file_pattern,
+            } => {
                 assert_eq!(pattern, "hkdf");
                 assert_eq!(file_pattern.as_deref(), Some("**/*.go"));
             }

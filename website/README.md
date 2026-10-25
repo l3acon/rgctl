@@ -1,9 +1,9 @@
 # Website redirect stub
 
-The full marketing site and guides live in **[rgctl-website](https://github.com/sshaaf/rgctl-website)** at **https://rgctl.io/**.
+The full marketing site and guides live in **[rgctl-website](https://github.com/rgctl/rgctl-website)** at **https://rgctl.io/**.
 
 This directory is a **GitHub Pages redirect** for the legacy project site
-`https://shaaf.dev/rgctl/` (and `*.github.io/rgctl/`):
+`https://rgctl.io/` (and `*.github.io/rgctl/`):
 
 | File | Role |
 |------|------|

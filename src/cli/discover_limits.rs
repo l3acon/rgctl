@@ -1,6 +1,6 @@
 //! Discover resource limits (`--with-limits` / `RGCTL_WITH_LIMITS`).
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use tracing::info;
 
 /// Opt-in discover constraints. Default discover leaves these unset.
@@ -27,9 +27,9 @@ impl DiscoverLimits {
             if part.is_empty() {
                 continue;
             }
-            let (key, value) = part
-                .split_once('=')
-                .with_context(|| format!("invalid --with-limits entry `{part}` (want key=value)"))?;
+            let (key, value) = part.split_once('=').with_context(|| {
+                format!("invalid --with-limits entry `{part}` (want key=value)")
+            })?;
             let key = key.trim().to_ascii_lowercase().replace('_', "-");
             let value = value.trim();
             match key.as_str() {
@@ -51,9 +51,9 @@ impl DiscoverLimits {
                     }
                     out.threads = Some(n);
                 }
-                other => bail!(
-                    "unknown --with-limits key `{other}` (supported: max-mem-mb, threads)"
-                ),
+                other => {
+                    bail!("unknown --with-limits key `{other}` (supported: max-mem-mb, threads)")
+                }
             }
         }
         Ok(out)
@@ -162,7 +162,9 @@ mod tests {
         let l = DiscoverLimits::from_cli(None).unwrap().unwrap();
         assert_eq!(l.threads, Some(2));
         // Flag wins over env.
-        let l = DiscoverLimits::from_cli(Some("threads=1")).unwrap().unwrap();
+        let l = DiscoverLimits::from_cli(Some("threads=1"))
+            .unwrap()
+            .unwrap();
         assert_eq!(l.threads, Some(1));
         unsafe { std::env::remove_var("RGCTL_WITH_LIMITS") };
     }

@@ -84,11 +84,7 @@ pub fn validate_tags_captures(language_id: &str, tags_scm: &str) -> Vec<String> 
 }
 
 /// Compile `tags_scm` against `language`, returning capture-name validation + query errors.
-pub fn compile_tags_query(
-    language_id: &str,
-    language: &Language,
-    tags_scm: &str,
-) -> Result<Query> {
+pub fn compile_tags_query(language_id: &str, language: &Language, tags_scm: &str) -> Result<Query> {
     let capture_issues = validate_tags_captures(language_id, tags_scm);
     if !capture_issues.is_empty() {
         return Err(Error::PluginError(capture_issues.join("; ")));
@@ -104,9 +100,8 @@ pub fn compile_tags_query(
             )));
         }
     }
-    Query::new(language, tags_scm).map_err(|e| {
-        Error::PluginError(format!("{language_id}: failed to compile tags.scm: {e}"))
-    })
+    Query::new(language, tags_scm)
+        .map_err(|e| Error::PluginError(format!("{language_id}: failed to compile tags.scm: {e}")))
 }
 
 /// Index of capture ids → roles for a compiled [`Query`].
@@ -183,22 +178,33 @@ fn is_definition_span_kind(kind: &str) -> bool {
                     | "class_statement"
                     | "table"
                     | "pair"
+                    | "defProc"
+                    | "declProc"
+                    | "declType"
+                    | "declClass"
+                    | "declIntf"
+                    | "unit"
+                    | "library"
+                    | "subprogram_body"
             ))
 }
 
 /// Prefer the immediate enclosing `*_definition` / `*_declaration` node when `@definition.*`
 /// is captured on a header/declarator child (e.g. `function_declarator`, `rpc_name`,
-/// Fortran `function_statement`/`module_statement`), without walking past a `function_definition`
-/// up to its enclosing `contract_declaration`/`class_declaration`.
+/// Fortran `function_statement`/`module_statement`, or Pascal `declProc` inside `defProc`),
+/// without walking past a `function_definition` up to its enclosing `contract_declaration`/`class_declaration`.
 fn definition_span_node(node: Node<'_>) -> Node<'_> {
     // Fortran `function_statement` / `subroutine_statement` / `module_statement` are 1-line
     // headers inside `function` / `subroutine` / `module` (whereas PowerShell `function_statement`
-    // is the full function node).
+    // is the full function node). Pascal `declProc` is a 1-line header inside `defProc`.
     if matches!(
         node.kind(),
-        "function_statement" | "subroutine_statement" | "module_statement"
+        "function_statement" | "subroutine_statement" | "module_statement" | "declProc"
     ) && let Some(parent) = node.parent()
-        && matches!(parent.kind(), "function" | "subroutine" | "module")
+        && matches!(
+            parent.kind(),
+            "function" | "subroutine" | "module" | "defProc"
+        )
     {
         return parent;
     }
@@ -254,10 +260,7 @@ fn is_inside_declaration_header(node: Node<'_>, source: &[u8]) -> bool {
         };
         if matches!(
             parent.kind(),
-            "signature"
-                | "function_declarator"
-                | "method_declarator"
-                | "function_declaration_left"
+            "signature" | "function_declarator" | "method_declarator" | "function_declaration_left"
         ) {
             return true;
         }
@@ -455,9 +458,7 @@ pub fn extract_with_query(
             if let Some((cname, _, _)) = containers[..end_idx]
                 .iter()
                 .filter(|(cname, c_start, c_end)| {
-                    *c_end >= s_end
-                        && (*c_start < s_start || *c_end > s_end)
-                        && cname != &sym.name
+                    *c_end >= s_end && (*c_start < s_start || *c_end > s_end) && cname != &sym.name
                 })
                 .min_by_key(|(_, c_start, c_end)| c_end.saturating_sub(*c_start))
             {
@@ -498,9 +499,7 @@ pub fn extract_with_query(
             .min_by_key(|s| s.location.end_line.saturating_sub(s.location.start_line))
             .map(|s| {
                 if fn_name_counts.get(s.name.as_str()).copied().unwrap_or(0) > 1 {
-                    s.qualified_name
-                        .clone()
-                        .unwrap_or_else(|| s.name.clone())
+                    s.qualified_name.clone().unwrap_or_else(|| s.name.clone())
                 } else {
                     s.name.clone()
                 }
@@ -561,7 +560,10 @@ mod tests {
             capture_role("definition.function"),
             Some(CaptureRole::Definition(SymbolType::Function))
         );
-        assert_eq!(capture_role("reference.call"), Some(CaptureRole::ReferenceCall));
+        assert_eq!(
+            capture_role("reference.call"),
+            Some(CaptureRole::ReferenceCall)
+        );
         assert_eq!(capture_role("import.path"), Some(CaptureRole::ImportPath));
         assert_eq!(capture_role("local.scope"), Some(CaptureRole::Local));
         assert!(capture_role("definition.widget").is_none());

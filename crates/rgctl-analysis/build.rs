@@ -44,10 +44,7 @@ fn main() {
         );
         fs::write(&out_path, bytes).expect("write distilled vocab_matrix.bin");
         println!("cargo:rustc-env=RGCTL_VOCAB_MODEL_ID=vocab-accumulate-v2");
-        println!(
-            "cargo:rustc-env=RGCTL_VOCAB_MATRIX={}",
-            out_path.display()
-        );
+        println!("cargo:rustc-env=RGCTL_VOCAB_MATRIX={}", out_path.display());
         return;
     }
 
@@ -102,8 +99,5 @@ fn main() {
     }
 
     println!("cargo:rustc-env=RGCTL_VOCAB_MODEL_ID=vocab-accumulate-v1");
-    println!(
-        "cargo:rustc-env=RGCTL_VOCAB_MATRIX={}",
-        out_path.display()
-    );
+    println!("cargo:rustc-env=RGCTL_VOCAB_MATRIX={}", out_path.display());
 }

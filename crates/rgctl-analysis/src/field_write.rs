@@ -7,6 +7,7 @@
 use crate::cfg::{ControlFlowGraph, DefVar};
 use crate::cfg_pdg_archive::CfgPdgArchive;
 use crate::field_write_locals::{build_file_local_types_index, language_from_path};
+use rayon::prelude::*;
 use rgctl_error::{Error, Result};
 use rgctl_graph::schema::Node;
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
-use rayon::prelude::*;
 
 /// On-disk filename under `.rgctl/analysis/`.
 pub const FIELD_WRITE_INDEX_FILE: &str = "field_write.index.bin";
@@ -112,10 +112,7 @@ impl FieldWriteIndex {
                 .clone()
                 .or_else(|| func.and_then(|n| n.file_path.as_ref().map(|s| s.to_string())))
                 .unwrap_or_default();
-            by_file
-                .entry(file)
-                .or_default()
-                .push(record.function_id);
+            by_file.entry(file).or_default().push(record.function_id);
         }
 
         let repo_root = repo_root.map(Path::to_path_buf);
@@ -483,8 +480,8 @@ pub fn build_and_save_field_write_index(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::SmallVec;
     use crate::cfg::{ControlFlowGraph, Statement, StatementKind};
+    use smallvec::SmallVec;
     use std::collections::HashSet;
     use uuid::Uuid;
 
@@ -654,8 +651,13 @@ public class OrderProcessor {
             pdg: Arc::new(pdg_proc),
         });
 
-        let index =
-            FieldWriteIndex::build_from_archive(&archive, &[order_fn, process_fn], None, None, None);
+        let index = FieldWriteIndex::build_from_archive(
+            &archive,
+            &[order_fn, process_fn],
+            None,
+            None,
+            None,
+        );
         let hits = index.query(&MutationQuery {
             type_name: "OrderDTO".into(),
             exclude_ctors: true,
@@ -1215,7 +1217,13 @@ class OrderProcessor {
             source,
             "OrderDTO",
             "process",
-            fn_node("OrderDTO", "OrderDTO.<init>", "OrderDTO.groovy", true, vec![]),
+            fn_node(
+                "OrderDTO",
+                "OrderDTO.<init>",
+                "OrderDTO.groovy",
+                true,
+                vec![],
+            ),
             fn_node(
                 "process",
                 "OrderProcessor.process",

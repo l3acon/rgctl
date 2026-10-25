@@ -500,9 +500,7 @@ impl MacroCallIndex {
         }
         let file = std::fs::File::open(path)?;
         let index = bincode::deserialize_from(file).map_err(|e| {
-            rgctl_error::Error::SerdeError(format!(
-                "Failed to deserialize macro_call_index: {e}"
-            ))
+            rgctl_error::Error::SerdeError(format!("Failed to deserialize macro_call_index: {e}"))
         })?;
         Ok(Some(index))
     }
@@ -637,7 +635,10 @@ mod tests {
         };
 
         let d2 = write_columnar_from_nodes_edges(vec![mk_node()], vec![], &snap_path).unwrap();
-        assert_eq!(d1, d2, "rebuilt snapshot digest must be stable with properties");
+        assert_eq!(
+            d1, d2,
+            "rebuilt snapshot digest must be stable with properties"
+        );
 
         assert!(
             fingerprint.matches_repo(repo_dir).unwrap(),

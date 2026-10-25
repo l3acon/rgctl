@@ -97,9 +97,9 @@ fn push_table_ref_call(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "relation" || child.kind() == "object_reference" {
-            if let Some(name) = object_name(child, source).or_else(|| {
-                extract_name_from_node(child, source).ok().flatten()
-            }) {
+            if let Some(name) = object_name(child, source)
+                .or_else(|| extract_name_from_node(child, source).ok().flatten())
+            {
                 let from = from_fn
                     .qualified_name
                     .clone()
@@ -326,7 +326,11 @@ CREATE VIEW v AS SELECT * FROM users;
                 .iter()
                 .any(|s| s.symbol_type == SymbolType::Table && s.name == "users"),
             "expected table users, got {:?}",
-            result.symbols.iter().map(|s| (&s.name, &s.symbol_type)).collect::<Vec<_>>()
+            result
+                .symbols
+                .iter()
+                .map(|s| (&s.name, &s.symbol_type))
+                .collect::<Vec<_>>()
         );
         assert!(
             result
@@ -336,10 +340,7 @@ CREATE VIEW v AS SELECT * FROM users;
             "expected function foo"
         );
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name == "v"),
+            result.symbols.iter().any(|s| s.name == "v"),
             "expected view v"
         );
     }

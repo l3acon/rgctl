@@ -618,7 +618,7 @@ pub fn run_project(
 
     // Universal columnar structural invariants (INV-1…INV-7).
     {
-        use rgctl_graph::{assert_graph_invariants, SnapshotNodeStore, SNAPSHOT_FILE};
+        use rgctl_graph::{SNAPSHOT_FILE, SnapshotNodeStore, assert_graph_invariants};
         let snap = project_dir.join(".rgctl").join(SNAPSHOT_FILE);
         let inv_check = match SnapshotNodeStore::open(&snap) {
             Ok(store) => match store.mmap().columnar() {

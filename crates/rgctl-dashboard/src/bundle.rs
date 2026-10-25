@@ -231,9 +231,8 @@ pub fn inject_manifest_bootstrap(out_dir: &Path, manifest_json: &str) -> Result<
     let index_path = out_dir.join("index.html");
     let html = fs::read_to_string(&index_path).map_err(|e| format!("read index.html: {e}"))?;
     const MARKER: &str = "</head>";
-    let script = format!(
-        r#"<script id="rgctl-manifest" type="application/json">{manifest_json}</script>"#
-    );
+    let script =
+        format!(r#"<script id="rgctl-manifest" type="application/json">{manifest_json}</script>"#);
     if html.contains("id=\"rgctl-manifest\"") {
         return Ok(());
     }
@@ -284,7 +283,10 @@ mod tests {
         assert_eq!(version_from_env(None, None), BundleVersion::V2);
         assert_eq!(version_from_env(Some(""), Some("")), BundleVersion::V2);
         assert_eq!(version_from_env(Some("0"), None), BundleVersion::V2);
-        assert_eq!(version_from_env(Some("false"), Some("0")), BundleVersion::V2);
+        assert_eq!(
+            version_from_env(Some("false"), Some("0")),
+            BundleVersion::V2
+        );
         assert_eq!(version_from_env(None, Some("1")), BundleVersion::V2);
         // the one-release hatch is the only way back, and it wins over everything
         assert_eq!(version_from_env(Some("1"), None), BundleVersion::V1);
@@ -364,9 +366,7 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok)
             .find(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .starts_with("worker-")
+                e.file_name().to_string_lossy().starts_with("worker-")
                     && e.path().extension().is_some_and(|ext| ext == "js")
             })
             .map(|e| e.path())
@@ -381,10 +381,7 @@ mod tests {
         assert!(
             assets.join(&wasm_name).is_file(),
             "missing WASM asset {wasm_name} referenced by {}",
-            worker
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
+            worker.file_name().unwrap_or_default().to_string_lossy()
         );
     }
 }

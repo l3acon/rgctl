@@ -11,7 +11,7 @@ mod rgctl_harness;
 #[path = "support/user_guide_harness.rs"]
 mod user_guide_harness;
 
-use user_guide_harness::{run_full_workflow, PROJECTS};
+use user_guide_harness::{PROJECTS, run_full_workflow};
 
 #[test]
 fn user_guide_workflow_all_ecommerce_projects() {

@@ -30,8 +30,8 @@ mod tests {
 
     #[test]
     fn extract_smoke() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_css::LANGUAGE.into()).expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_css::LANGUAGE.into())
+            .expect("compile");
         let source = br###"@import "base.css";
 .foo { color: red; }
 @keyframes spin { from { opacity: 0; } }
@@ -53,7 +53,8 @@ mod tests {
             result
                 .symbols
                 .iter()
-                .any(|s| s.name == "base.css" && s.symbol_type == rgctl_plugin_api::SymbolType::Import),
+                .any(|s| s.name == "base.css"
+                    && s.symbol_type == rgctl_plugin_api::SymbolType::Import),
             "expected import 'base.css', got {:?}",
             result.symbols
         );

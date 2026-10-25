@@ -394,13 +394,23 @@ fn shadow() {
 
         let defs = collect_block_definitions(cfg.blocks.get(&b0).unwrap(), &pdg);
         assert_eq!(defs.len(), 2);
-        assert!(defs.iter().any(|d| d.variable == "a" && d.statement_index == 0));
-        assert!(defs.iter().any(|d| d.variable == "b" && d.statement_index == 1));
+        assert!(
+            defs.iter()
+                .any(|d| d.variable == "a" && d.statement_index == 0)
+        );
+        assert!(
+            defs.iter()
+                .any(|d| d.variable == "b" && d.statement_index == 1)
+        );
 
         let flow = pdg
             .data_deps
             .iter()
             .any(|d| d.from == a_node.id && d.to == b_node.id && d.variable == "a");
-        assert!(flow, "expected flow dep a → b on same line, deps={:?}", pdg.data_deps);
+        assert!(
+            flow,
+            "expected flow dep a → b on same line, deps={:?}",
+            pdg.data_deps
+        );
     }
 }

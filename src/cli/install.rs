@@ -48,7 +48,11 @@ pub fn run(ctx: &CliContext, args: InstallArgs) -> Result<()> {
     if args.global_install {
         validate_global_install(&manifest, &agent_ids).map_err(anyhow::Error::msg)?;
     }
-    let scope = if args.global_install { "global" } else { "local" };
+    let scope = if args.global_install {
+        "global"
+    } else {
+        "local"
+    };
     let prefix = install_prefix(ctx, args.global_install)?;
 
     let artifacts = collect_artifacts(&manifest, &agent_ids, args.skill, args.with_policy)

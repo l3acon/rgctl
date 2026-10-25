@@ -508,9 +508,8 @@ impl AnalysisResults {
         use std::time::Instant;
 
         let serialize_start = Instant::now();
-        let payload = bincode::serialize(self).map_err(|e| {
-            rgctl_error::Error::SerdeError(format!("Failed to serialize: {}", e))
-        })?;
+        let payload = bincode::serialize(self)
+            .map_err(|e| rgctl_error::Error::SerdeError(format!("Failed to serialize: {}", e)))?;
         let serialize_secs = serialize_start.elapsed().as_secs_f64();
 
         let write_start = Instant::now();
@@ -531,9 +530,8 @@ impl AnalysisResults {
     /// Load analysis results from a binary file.
     pub fn load(path: &Path) -> Result<Self> {
         let file = std::fs::File::open(path)?;
-        bincode::deserialize_from(file).map_err(|e| {
-            rgctl_error::Error::SerdeError(format!("Failed to deserialize: {}", e))
-        })
+        bincode::deserialize_from(file)
+            .map_err(|e| rgctl_error::Error::SerdeError(format!("Failed to deserialize: {}", e)))
     }
 }
 

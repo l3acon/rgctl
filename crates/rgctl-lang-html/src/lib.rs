@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_html::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_html::LANGUAGE.into())
+                .expect("compile");
         let source = br###"<html><body><script>void 0</script><div id="x"></div></body></html>"###;
         let result = plugin
             .extract_all(Path::new("index.html"), source)

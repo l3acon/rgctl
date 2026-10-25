@@ -31,16 +31,14 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_json::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_json::LANGUAGE.into())
+                .expect("compile");
         let source = br###"{"name": "rgctl", "version": 1}"###;
         let result = plugin
             .extract_all(Path::new("package.json"), source)
             .expect("extract_all");
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name.contains("name")),
+            result.symbols.iter().any(|s| s.name.contains("name")),
             "expected symbol containing 'name', got {:?}",
             result.symbols
         );

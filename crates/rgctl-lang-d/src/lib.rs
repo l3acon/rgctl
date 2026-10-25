@@ -30,8 +30,8 @@ mod tests {
 
     #[test]
     fn extract_smoke() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_d::LANGUAGE.into()).expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_d::LANGUAGE.into())
+            .expect("compile");
         let source = br###"module math;
 int add(int a, int b) { return helper(a) + b; }
 "###;
@@ -53,10 +53,12 @@ int add(int a, int b) { return helper(a) + b; }
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "add" && r.to == "add"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "add" && r.to == "add"),
             "must not emit self-call add -> add: {:?}",
             result.relations
         );
-
     }
 }

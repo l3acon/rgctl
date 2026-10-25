@@ -97,10 +97,7 @@ fn lua_function_decl_name(node: Node, source: &[u8]) -> Option<String> {
         node.children(&mut c).find(|ch| {
             matches!(
                 ch.kind(),
-                "identifier"
-                    | "dot_index_expression"
-                    | "method_index_expression"
-                    | "attribute"
+                "identifier" | "dot_index_expression" | "method_index_expression" | "attribute"
             )
         })
     })?;
@@ -238,11 +235,8 @@ pub fn extract_all_single_pass(
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "while_statement"
-                        | "for_statement"
-                        | "repeat_statement"
-                        | "do_statement" => {
+                        "if_statement" | "while_statement" | "for_statement"
+                        | "repeat_statement" | "do_statement" => {
                             let delta = 1 + ctx
                                 .scopes
                                 .current_function()

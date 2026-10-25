@@ -121,8 +121,26 @@ fn looks_like_file_scope(scope: &str) -> bool {
     matches!(
         scope.rsplit_once('.').map(|(_, ext)| ext),
         Some(
-            "java" | "rs" | "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "py" | "go" | "php"
-                | "cs" | "c" | "h" | "cpp" | "cc" | "cxx" | "hpp" | "hh" | "rb"
+            "java"
+                | "rs"
+                | "ts"
+                | "tsx"
+                | "js"
+                | "jsx"
+                | "mjs"
+                | "cjs"
+                | "py"
+                | "go"
+                | "php"
+                | "cs"
+                | "c"
+                | "h"
+                | "cpp"
+                | "cc"
+                | "cxx"
+                | "hpp"
+                | "hh"
+                | "rb"
         )
     )
 }
@@ -568,8 +586,7 @@ impl MacroCallLookupDb {
             .join(rgctl_graph::code_graph::GRAPH_DIR)
             .join(rgctl_graph::snapshot::SNAPSHOT_FILE);
         if snapshot_path.exists() {
-            if let Ok(mmap) = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)
-            {
+            if let Ok(mmap) = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path) {
                 if let Some(stored) = Self::read_meta(&conn, "graph_digest")? {
                     return Ok(stored == mmap.content_digest()?);
                 }
@@ -874,10 +891,7 @@ mod tests {
     fn parse_fqn_typescript_file_scope() {
         let parsed = parse_fqn_symbol("fixtures/caseB_one.ts::dup", None, None);
         assert_eq!(parsed.target_name, "dup");
-        assert_eq!(
-            parsed.file_filter.as_deref(),
-            Some("fixtures/caseB_one.ts")
-        );
+        assert_eq!(parsed.file_filter.as_deref(), Some("fixtures/caseB_one.ts"));
         assert!(parsed.class_filter.is_none());
     }
 

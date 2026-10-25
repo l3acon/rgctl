@@ -3,8 +3,8 @@
 //! This module defines all error types used throughout the rgctl system.
 //! We use `thiserror` for ergonomic error definitions with automatic trait implementations.
 
-use std::path::PathBuf;
 use serde::Serialize;
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Lean candidate row when a symbol name matches multiple nodes.

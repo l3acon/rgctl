@@ -257,9 +257,7 @@ impl TypeScriptPlugin {
         if let Some(ref m) = module_path {
             meta["module"] = serde_json::Value::String(m.clone());
         }
-        let to_qualified_hint = module_path
-            .as_ref()
-            .map(|m| format!("{m}::{exported}"));
+        let to_qualified_hint = module_path.as_ref().map(|m| format!("{m}::{exported}"));
         relations.push(Relation {
             from: file_path.to_string(),
             to: exported,
@@ -455,7 +453,12 @@ impl TypeScriptPlugin {
         Ok(parameters)
     }
 
-    pub(crate) fn extract_class(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_class(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let mut name = None;
         let mut fields = Vec::new();
@@ -595,7 +598,12 @@ impl TypeScriptPlugin {
         })
     }
 
-    pub(crate) fn extract_enum(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_enum(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let name = node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok())
@@ -902,12 +910,11 @@ impl TypeScriptPlugin {
                 }
                 "abstract_method_signature" => {
                     if let Some(owner) = plugin.find_containing_class_name(node, source) {
-                        symbols.push(plugin.extract_abstract_method_signature(
-                            node,
-                            source,
-                            file_path,
-                            &owner,
-                        )?);
+                        symbols.push(
+                            plugin.extract_abstract_method_signature(
+                                node, source, file_path, &owner,
+                            )?,
+                        );
                     }
                 }
                 "interface_declaration" => {
@@ -1035,9 +1042,7 @@ impl TypeScriptPlugin {
                                 .qualified_name
                                 .clone()
                                 .unwrap_or_else(|| callee.clone()),
-                            _ => to_qualified_hint
-                                .clone()
-                                .unwrap_or_else(|| callee.clone()),
+                            _ => to_qualified_hint.clone().unwrap_or_else(|| callee.clone()),
                         };
                         relations.push(Relation {
                             from,
@@ -1124,9 +1129,7 @@ impl TypeScriptPlugin {
                 .qualified_name
                 .as_ref()
                 .and_then(|qn| qn.rsplit_once('.').map(|(ty, _)| ty.to_string()))
-                .or_else(|| {
-                    self.find_containing_class_name(call_site, source)
-                }),
+                .or_else(|| self.find_containing_class_name(call_site, source)),
             "identifier" | "property_identifier" => {
                 let name = object.utf8_text(source).ok()?;
                 if let Some(class_name) = self.find_containing_class_name(call_site, source) {
@@ -1523,9 +1526,7 @@ impl TypeScriptPlugin {
                 .qualified_name
                 .clone()
                 .unwrap_or_else(|| callee.clone()),
-            _ => to_qualified_hint
-                .clone()
-                .unwrap_or_else(|| callee.clone()),
+            _ => to_qualified_hint.clone().unwrap_or_else(|| callee.clone()),
         };
         relations.push(Relation {
             from,
@@ -2080,7 +2081,9 @@ export class OrdersControllerFixture {
         let symbols = plugin.extract_symbols(path, source).unwrap();
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
         assert!(
-            relations.iter().any(|r| r.relation_type == RelationType::AnnotatedWith),
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::AnnotatedWith),
             "expected AnnotatedWith on exported class: {relations:?}"
         );
     }
@@ -2186,5 +2189,4 @@ export class UserService {
             "service semantic_tags={svc_tags:?}"
         );
     }
-
 }

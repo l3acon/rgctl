@@ -10,8 +10,8 @@ use rgctl_graph::snapshot::SNAPSHOT_FILE;
 use rgctl_kantra::eval::filecontent::SourceCache;
 use rgctl_kantra::loader::KantraRuleset;
 use rgctl_kantra::{
-    EvalContext, EvalEdge, EvalGraph, EvalNode, KantraCatalog, KantraEngine, KantraFindings,
-    KantraFileCache, NodeMetrics, ViolationResolver, cache_dir, enrich_findings,
+    EvalContext, EvalEdge, EvalGraph, EvalNode, KantraCatalog, KantraEngine, KantraFileCache,
+    KantraFindings, NodeMetrics, ViolationResolver, cache_dir, enrich_findings,
     rewrite_snapshot_with_catalog, rewrite_snapshot_with_violations, ruleset_hash,
 };
 use std::collections::{HashMap, HashSet};
@@ -22,9 +22,30 @@ use std::time::Instant;
 use uuid::Uuid;
 
 const TEXT_EXTENSIONS: &[&str] = &[
-    ".go", ".java", ".kt", ".scala", ".py", ".rs", ".js", ".ts", ".tsx", ".jsx", ".c", ".h",
-    ".cpp", ".hpp", ".cs", ".md", ".mdx", ".yaml", ".yml", ".xml", ".properties", ".gradle",
-    ".kts", ".sql",
+    ".go",
+    ".java",
+    ".kt",
+    ".scala",
+    ".py",
+    ".rs",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".c",
+    ".h",
+    ".cpp",
+    ".hpp",
+    ".cs",
+    ".md",
+    ".mdx",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".properties",
+    ".gradle",
+    ".kts",
+    ".sql",
 ];
 
 /// Resolve the rules catalog for index/eval (embedded, tree, or single ruleset dir).
@@ -67,8 +88,8 @@ pub fn run_kantra_index(
 pub fn run_kantra_violates(store: &Path, profile: &mut DiscoverStageReport) -> Result<usize> {
     let start = Instant::now();
     let findings_path = rgctl_graph::paths::artifact_path(store, "kantra_findings.json");
-    let bytes = fs::read(&findings_path)
-        .with_context(|| format!("read {}", findings_path.display()))?;
+    let bytes =
+        fs::read(&findings_path).with_context(|| format!("read {}", findings_path.display()))?;
     let findings: KantraFindings =
         serde_json::from_slice(&bytes).context("parse kantra findings for VIOLATES")?;
     let snapshot_path = rgctl_graph::paths::artifact_path(store, SNAPSHOT_FILE);
@@ -89,8 +110,8 @@ pub fn run_kantra_enrich(
 ) -> Result<KantraFindings> {
     let start = Instant::now();
     let findings_path = rgctl_graph::paths::artifact_path(store, "kantra_findings.json");
-    let bytes = fs::read(&findings_path)
-        .with_context(|| format!("read {}", findings_path.display()))?;
+    let bytes =
+        fs::read(&findings_path).with_context(|| format!("read {}", findings_path.display()))?;
     let mut findings: KantraFindings =
         serde_json::from_slice(&bytes).context("parse kantra findings for enrich")?;
 
@@ -101,7 +122,8 @@ pub fn run_kantra_enrich(
     enrich_findings(&mut findings, &metrics);
 
     let json = serde_json::to_string_pretty(&findings).context("serialize kantra findings")?;
-    fs::write(&findings_path, json).with_context(|| format!("write {}", findings_path.display()))?;
+    fs::write(&findings_path, json)
+        .with_context(|| format!("write {}", findings_path.display()))?;
     profile.kantra_enrich.secs = start.elapsed().as_secs_f64();
     Ok(findings)
 }

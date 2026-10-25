@@ -35,7 +35,10 @@ fn top_level_help_has_grouped_command_sections() {
     // Lifecycle section should appear before Security in the Commands list.
     let lifecycle = help.find("Lifecycle:").expect("Lifecycle:");
     let security = help.find("Security:").expect("Security:");
-    assert!(lifecycle < security, "Lifecycle should appear before Security");
+    assert!(
+        lifecycle < security,
+        "Lifecycle should appear before Security"
+    );
     let discover = help.find("discover").expect("discover");
     let vuln = help.find("  vuln").expect("vuln");
     assert!(discover < vuln, "discover should be listed before vuln");

@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_vhdl::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_vhdl::LANGUAGE.into())
+                .expect("compile");
         let source = br###"entity adder is
 end entity;
 architecture rtl of adder is

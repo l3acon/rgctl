@@ -3,9 +3,9 @@
 use crate::single_pass::{erb_ast_handlers, extract_all_single_pass};
 use regex::Regex;
 use rgctl_plugin_api::{
-    complexity_from_metadata, parse_with_pool, AstHandlerTable, ComplexityMetrics, Error,
-    ExtractAllResult, LanguagePlugin, Relation, RelationType, Result, SourceLocation, Symbol,
-    SymbolType,
+    AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, LanguagePlugin, Relation,
+    RelationType, Result, SourceLocation, Symbol, SymbolType, complexity_from_metadata,
+    parse_with_pool,
 };
 use std::path::Path;
 use std::sync::OnceLock;
@@ -47,8 +47,14 @@ macro_rules! re {
 }
 
 re!(re_simple_var, r"^@\w+$");
-re!(re_higher_order, r"\.(select|map|reject|collect|sort_by|find|detect|flat_map)\s*\{");
-re!(re_method_chain, r"\.(join|downcase|upcase|strip|chomp|first|last|length|size|split|include\?|nil\?|empty\?|to_s|to_i|to_f|capitalize|reverse|uniq|sort|flatten|compact)");
+re!(
+    re_higher_order,
+    r"\.(select|map|reject|collect|sort_by|find|detect|flat_map)\s*\{"
+);
+re!(
+    re_method_chain,
+    r"\.(join|downcase|upcase|strip|chomp|first|last|length|size|split|include\?|nil\?|empty\?|to_s|to_i|to_f|capitalize|reverse|uniq|sort|flatten|compact)"
+);
 re!(re_cond, r"^(if|elsif|unless)\s+");
 re!(re_each, r"\.each\s+do\s*\|");
 re!(re_access, r"^\w+\[");
@@ -67,9 +73,7 @@ fn re_facts_path() -> &'static Regex {
 
 fn re_join_double() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r#"\.join\("([^"]*)"\)"#).expect("bad regex: join_double")
-    })
+    RE.get_or_init(|| Regex::new(r#"\.join\("([^"]*)"\)"#).expect("bad regex: join_double"))
 }
 
 // ── Plugin ──────────────────────────────────────────────────────────
@@ -89,13 +93,16 @@ impl ErbPlugin {
     }
 
     pub(crate) fn parse(&self, file_path: &Path, source: &[u8]) -> Result<Tree> {
-        parse_with_pool("erb", tree_sitter_embedded_template::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: 0,
-                message: e,
-            },
+        parse_with_pool(
+            "erb",
+            tree_sitter_embedded_template::LANGUAGE.into(),
+            source,
         )
+        .map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })
     }
 
     fn loc(node: Node, file_path: &str) -> SourceLocation {
@@ -113,10 +120,7 @@ impl ErbPlugin {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if child.kind() == "code" {
-                return child
-                    .utf8_text(source)
-                    .ok()
-                    .map(|s| s.trim().to_string());
+                return child.utf8_text(source).ok().map(|s| s.trim().to_string());
             }
         }
         None
@@ -128,10 +132,7 @@ impl ErbPlugin {
             return Tier::T1;
         }
 
-        let code_trimmed = code
-            .trim_end_matches("-%")
-            .trim_end_matches('%')
-            .trim();
+        let code_trimmed = code.trim_end_matches("-%").trim_end_matches('%').trim();
 
         // T1: simple variable output
         if kind == BlockKind::Output && re_simple_var().is_match(code_trimmed) {
@@ -221,10 +222,7 @@ impl ErbPlugin {
 
     /// Suggest a Jinja2 translation pattern for T1–T3 blocks.
     fn jinja2_hint(code: &str, kind: BlockKind, tier: Tier) -> Option<String> {
-        let trimmed = code
-            .trim_end_matches("-%")
-            .trim_end_matches('%')
-            .trim();
+        let trimmed = code.trim_end_matches("-%").trim_end_matches('%').trim();
 
         match (tier, kind) {
             // T1 output: @var → {{ var }}
@@ -482,7 +480,13 @@ impl LanguagePlugin for ErbPlugin {
         let path_str = file_path.to_string_lossy();
         let mut symbols = Vec::new();
         let mut _rels = Vec::new();
-        self.walk_blocks(tree.root_node(), source, &path_str, &mut symbols, &mut _rels);
+        self.walk_blocks(
+            tree.root_node(),
+            source,
+            &path_str,
+            &mut symbols,
+            &mut _rels,
+        );
         Ok(symbols)
     }
 
@@ -496,7 +500,13 @@ impl LanguagePlugin for ErbPlugin {
         let path_str = file_path.to_string_lossy();
         let mut _syms = Vec::new();
         let mut relations = Vec::new();
-        self.walk_blocks(tree.root_node(), source, &path_str, &mut _syms, &mut relations);
+        self.walk_blocks(
+            tree.root_node(),
+            source,
+            &path_str,
+            &mut _syms,
+            &mut relations,
+        );
         Ok(relations)
     }
 
@@ -519,7 +529,11 @@ impl LanguagePlugin for ErbPlugin {
         Ok(Some(ComplexityMetrics {
             cyclomatic: 1,
             cognitive: 0,
-            loc: symbol.location.end_line.saturating_sub(symbol.location.start_line) + 1,
+            loc: symbol
+                .location
+                .end_line
+                .saturating_sub(symbol.location.start_line)
+                + 1,
             parameters: 0,
             nesting_depth: 0,
             returns: 0,
@@ -543,9 +557,11 @@ mod tests {
         let result = p.extract_all(path, src).expect("extract_all");
 
         assert_eq!(result.symbols.len(), 2);
-        assert!(result.symbols.iter().all(|s| {
-            s.metadata.get("translation_tier").and_then(|v| v.as_u64()) == Some(1)
-        }));
+        assert!(
+            result.symbols.iter().all(|s| {
+                s.metadata.get("translation_tier").and_then(|v| v.as_u64()) == Some(1)
+            })
+        );
 
         let var_rels: Vec<_> = result
             .relations
@@ -584,7 +600,10 @@ mod tests {
 
     #[test]
     fn classifies_tiers_correctly() {
-        assert_eq!(ErbPlugin::classify_tier("@hostname", BlockKind::Output) as u8, 1);
+        assert_eq!(
+            ErbPlugin::classify_tier("@hostname", BlockKind::Output) as u8,
+            1
+        );
         assert_eq!(ErbPlugin::classify_tier("end", BlockKind::Code) as u8, 1);
         assert_eq!(
             ErbPlugin::classify_tier("if @os == 'RedHat'", BlockKind::Code) as u8,
@@ -599,10 +618,7 @@ mod tests {
             3
         );
         assert_eq!(
-            ErbPlugin::classify_tier(
-                "@nets.select { |n| n.include?('/') }",
-                BlockKind::Code
-            ) as u8,
+            ErbPlugin::classify_tier("@nets.select { |n| n.include?('/') }", BlockKind::Code) as u8,
             4
         );
     }
@@ -618,18 +634,11 @@ mod tests {
 
     #[test]
     fn jinja2_hints_for_iteration() {
-        let hint = ErbPlugin::jinja2_hint(
-            "@vhosts.each do |vhost|",
-            BlockKind::Code,
-            Tier::T2,
-        );
+        let hint = ErbPlugin::jinja2_hint("@vhosts.each do |vhost|", BlockKind::Code, Tier::T2);
         assert_eq!(hint, Some("{% for vhost in vhosts %}".to_string()));
 
-        let hint = ErbPlugin::jinja2_hint(
-            "@headers.each do |key, value|",
-            BlockKind::Code,
-            Tier::T2,
-        );
+        let hint =
+            ErbPlugin::jinja2_hint("@headers.each do |key, value|", BlockKind::Code, Tier::T2);
         assert_eq!(
             hint,
             Some("{% for key, value in headers.items() %}".to_string())
@@ -638,15 +647,10 @@ mod tests {
 
     #[test]
     fn jinja2_hints_for_method_chains() {
-        let hint = ErbPlugin::jinja2_hint(
-            "@aliases.join(' ')",
-            BlockKind::Output,
-            Tier::T3,
-        );
+        let hint = ErbPlugin::jinja2_hint("@aliases.join(' ')", BlockKind::Output, Tier::T3);
         assert_eq!(hint, Some("{{ aliases | join(' ') }}".to_string()));
 
-        let hint =
-            ErbPlugin::jinja2_hint("@hostname.downcase", BlockKind::Output, Tier::T3);
+        let hint = ErbPlugin::jinja2_hint("@hostname.downcase", BlockKind::Output, Tier::T3);
         assert_eq!(hint, Some("{{ hostname | lower }}".to_string()));
     }
 
@@ -662,14 +666,23 @@ mod tests {
     fn honesty_regex_gaps() {
         // @facts.dig(...) and @facts.get('os') are NOT captured by the bracket regex.
         let facts_dig = ErbPlugin::extract_fact_paths("@facts.dig('os', 'family')");
-        assert!(facts_dig.is_empty(), "dig() should not match: {facts_dig:?}");
+        assert!(
+            facts_dig.is_empty(),
+            "dig() should not match: {facts_dig:?}"
+        );
 
         let facts_get = ErbPlugin::extract_fact_paths("@facts.get('os')");
-        assert!(facts_get.is_empty(), "get() should not match: {facts_get:?}");
+        assert!(
+            facts_get.is_empty(),
+            "get() should not match: {facts_get:?}"
+        );
 
         // Non-@ locals produce no variable references.
         let locals = ErbPlugin::extract_at_variables("item['name']");
-        assert!(locals.is_empty(), "non-@ locals should not match: {locals:?}");
+        assert!(
+            locals.is_empty(),
+            "non-@ locals should not match: {locals:?}"
+        );
     }
 
     #[test]

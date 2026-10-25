@@ -3,11 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::adapters::{
-    scan_jars, scan_manifests, scan_node_modules, BundledScanOpts, DepHit,
-};
+use crate::adapters::{BundledScanOpts, DepHit, scan_jars, scan_manifests, scan_node_modules};
 use crate::error::SecurityError;
-use crate::osv::{triage_osv_path, OsvPackageTriage, OsvTriage};
+use crate::osv::{OsvPackageTriage, OsvTriage, triage_osv_path};
 use crate::version::engine_for_ecosystem;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,7 +44,11 @@ pub struct DepsCheckOpts {
 }
 
 /// Run dependency check for an OSV file against `repo`.
-pub fn deps_check(repo: &Path, osv_path: &Path, opts: &DepsCheckOpts) -> Result<DepsCheckResult, SecurityError> {
+pub fn deps_check(
+    repo: &Path,
+    osv_path: &Path,
+    opts: &DepsCheckOpts,
+) -> Result<DepsCheckResult, SecurityError> {
     let triage = triage_osv_path(osv_path)?;
     let mut checked = vec!["manifests".to_string()];
     let mut inventory = scan_manifests(repo)?;
@@ -124,11 +126,8 @@ fn match_package(
             });
             continue;
         }
-        let in_range = engine.in_vulnerable_range(
-            ver,
-            pkg.introduced.as_deref(),
-            pkg.fixed.as_deref(),
-        )?;
+        let in_range =
+            engine.in_vulnerable_range(ver, pkg.introduced.as_deref(), pkg.fixed.as_deref())?;
         out.push(DepsMatch {
             ecosystem: hit.ecosystem.clone(),
             name: hit.name.clone(),
@@ -161,8 +160,8 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::tempdir;
-    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     #[test]
     fn coolstore_shaped_jackson_candidate() {

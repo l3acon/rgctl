@@ -24,9 +24,14 @@ pub fn build_cfg_for_function(
     let bytes = source.as_bytes();
     let tree = parse_language(language, bytes)?;
     let function_kinds = function_kinds_for(language)?;
-    let func_node =
-        find_function_by_name(tree.root_node(), bytes, function_name, function_kinds, language)
-            .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
+    let func_node = find_function_by_name(
+        tree.root_node(),
+        bytes,
+        function_name,
+        function_kinds,
+        language,
+    )
+    .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
     build_cfg_from_function_node(language, func_node, bytes, function_name)
 }
 
@@ -189,11 +194,12 @@ pub fn build_cfg_for_byte_range(
 ) -> Result<ControlFlowGraph> {
     let bytes = source.as_bytes();
     let tree = parse_language(language, bytes)?;
-    let func_node = seek_function_node(&tree, language, start_byte, end_byte)?.ok_or_else(|| {
-        Error::NotFound(format!(
-            "function '{function_name}' not found at byte range {start_byte}..{end_byte}"
-        ))
-    })?;
+    let func_node =
+        seek_function_node(&tree, language, start_byte, end_byte)?.ok_or_else(|| {
+            Error::NotFound(format!(
+                "function '{function_name}' not found at byte range {start_byte}..{end_byte}"
+            ))
+        })?;
     build_cfg_from_function_node(language, func_node, bytes, function_name)
 }
 
@@ -224,9 +230,14 @@ pub fn build_cfg_for_function_in_tree(
     function_name: &str,
 ) -> Result<ControlFlowGraph> {
     let function_kinds = function_kinds_for(language)?;
-    let func_node =
-        find_function_by_name(tree.root_node(), source, function_name, function_kinds, language)
-            .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
+    let func_node = find_function_by_name(
+        tree.root_node(),
+        source,
+        function_name,
+        function_kinds,
+        language,
+    )
+    .ok_or_else(|| Error::NotFound(format!("function '{function_name}' not found")))?;
     build_cfg_from_function_node(language, func_node, source, function_name)
 }
 
@@ -250,7 +261,13 @@ fn index_function_locations_full(
         by_name: HashMap::new(),
         by_span: HashMap::new(),
     };
-    collect_function_locations(tree.root_node(), source, function_kinds, language, &mut index);
+    collect_function_locations(
+        tree.root_node(),
+        source,
+        function_kinds,
+        language,
+        &mut index,
+    );
     Ok((tree, index))
 }
 
@@ -271,10 +288,7 @@ fn collect_function_locations(
                     start_line: node.start_position().row + 1,
                     end_line: node.end_position().row + 1,
                 };
-                out.by_name
-                    .entry(func_name.clone())
-                    .or_default()
-                    .push(loc);
+                out.by_name.entry(func_name.clone()).or_default().push(loc);
                 out.by_name_first.entry(func_name.clone()).or_insert(loc);
                 out.by_span
                     .insert((loc.start_line, loc.end_line, func_name), loc);
@@ -294,9 +308,7 @@ fn parse_language(language: &str, source: &[u8]) -> Result<Tree> {
 /// Resolve the Function name CFG should look up, matching language-plugin naming.
 fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Option<String> {
     match language {
-        "javascript" | "js" | "typescript" | "ts" => {
-            ecmascript_function_symbol_name(node, source)
-        }
+        "javascript" | "js" | "typescript" | "ts" => ecmascript_function_symbol_name(node, source),
         "puppet" => {
             // Prefer class_identifier / identifier / node_name over other children.
             let mut cursor = node.walk();
@@ -317,17 +329,16 @@ fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Optio
             extract_name_from_node(node, source).ok().flatten()
         }
         "kotlin" | "kt"
-            if matches!(
-                node.kind(),
-                "primary_constructor" | "secondary_constructor"
-            ) =>
+            if matches!(node.kind(), "primary_constructor" | "secondary_constructor") =>
         {
             // Constructors are looked up by enclosing type simple name (Java-shaped).
             enclosing_type_simple_name(node, source)
                 .or_else(|| extract_name_from_node(node, source).ok().flatten())
         }
         "elixir" | "ex" if node.kind() == "call" => elixir_def_callable_name(node, source),
-        "hcl" | "terraform" | "tf" if node.kind() == "block" => hcl_block_callable_name(node, source),
+        "hcl" | "terraform" | "tf" if node.kind() == "block" => {
+            hcl_block_callable_name(node, source)
+        }
         _ => extract_name_from_node(node, source).ok().flatten(),
     }
 }
@@ -411,8 +422,10 @@ fn enclosing_type_simple_name(node: Node<'_>, source: &[u8]) -> Option<String> {
                 .or_else(|| {
                     let mut c = n.walk();
                     n.children(&mut c).find_map(|ch| {
-                        if matches!(ch.kind(), "identifier" | "simple_identifier" | "type_identifier")
-                        {
+                        if matches!(
+                            ch.kind(),
+                            "identifier" | "simple_identifier" | "type_identifier"
+                        ) {
                             ch.utf8_text(source).ok().map(str::to_string)
                         } else {
                             None
@@ -740,8 +753,7 @@ impl<'a> CfgBuilder<'a> {
         let text = node.utf8_text(source)?.trim().to_string();
         let (defined_vars, used_vars) = extract_def_use(node, source);
         let is_decl = matches!(kind, StatementKind::Declaration);
-        let (defined_vars, used_vars) =
-            self.rewrite_scoped_vars(defined_vars, used_vars, is_decl);
+        let (defined_vars, used_vars) = self.rewrite_scoped_vars(defined_vars, used_vars, is_decl);
         let stmt = Statement {
             kind,
             line,
@@ -896,16 +908,15 @@ impl<'a> CfgBuilder<'a> {
             // Swift `guard` — early-exit branch (else body is the uncommon path)
             "guard_statement" => self.visit_if(node, source),
             "unless_statement" => self.visit_puppet_unless(node, source),
-            "case_statement" if self.language == "puppet" => {
-                self.visit_puppet_case(node, source)
-            }
+            "case_statement" if self.language == "puppet" => self.visit_puppet_case(node, source),
             "case_statement" if self.language == "bash" || self.language == "sh" => {
                 self.visit_switch(node, source)
             }
             "selector" if self.language == "puppet" => self.visit_expression_stmt(node, source),
-            "while_statement" | "while_expression" | "repeat_while_statement" | "repeat_statement" => {
-                self.visit_while(node, source)
-            }
+            "while_statement"
+            | "while_expression"
+            | "repeat_while_statement"
+            | "repeat_statement" => self.visit_while(node, source),
             "do_statement" | "do_while_statement" => self.visit_do(node, source),
             "for_statement" | "for_expression" | "for_in_expression" | "for_in_statement"
             | "foreach_statement" | "for_range_loop" => self.visit_for(node, source),
@@ -1064,7 +1075,9 @@ impl<'a> CfgBuilder<'a> {
 
             // Python `with` / comprehensions / yield
             "with_statement" => self.visit_with_statement(node, source),
-            "list_comprehension" | "dictionary_comprehension" | "set_comprehension"
+            "list_comprehension"
+            | "dictionary_comprehension"
+            | "set_comprehension"
             | "generator_expression" => {
                 self.add_statement(node, source, StatementKind::Expression)?;
                 Ok(())
@@ -1864,8 +1877,7 @@ impl<'a> CfgBuilder<'a> {
             self.current_block
         } else {
             let b = self.new_block();
-            self.cfg
-                .add_edge(self.current_block, b, CfgEdgeType::Next);
+            self.cfg.add_edge(self.current_block, b, CfgEdgeType::Next);
             b
         };
         self.current_block = cond_block;
@@ -2217,8 +2229,7 @@ impl<'a> CfgBuilder<'a> {
             // run body when condition is false (IfFalse → body_block).
             self.wire_condition(cond, source, merge, body_block)?;
         } else {
-            self.cfg
-                .add_edge(cond_block, merge, CfgEdgeType::IfTrue);
+            self.cfg.add_edge(cond_block, merge, CfgEdgeType::IfTrue);
             self.cfg
                 .add_edge(cond_block, body_block, CfgEdgeType::IfFalse);
         }
@@ -4718,8 +4729,6 @@ mod tests {
     use super::*;
     use crate::cfg::CfgEdgeType;
 
-
-
     #[test]
     fn annotate_deep_statements_cfg_does_not_overflow() {
         let path = concat!(
@@ -4873,9 +4882,7 @@ fn process(x: i32, y: i32, mut z: i32) -> i32 {
         let second_cond = rust_block_ids(&cfg, "y > 0")[0];
         assert!(
             cfg.edges.iter().any(|e| {
-                e.from == first_cond
-                    && e.to == second_cond
-                    && e.edge_type == CfgEdgeType::IfFalse
+                e.from == first_cond && e.to == second_cond && e.edge_type == CfgEdgeType::IfFalse
             }),
             "IfFalse from first guard must land on second condition, edges={:?}",
             cfg.edges
@@ -8058,7 +8065,10 @@ function example($x) {
 }
 "#;
         let cfg = build_cfg_for_function("php", code, "example").unwrap();
-        assert!(cfg.blocks.len() >= 4, "expected branching CFG for PHP if/else");
+        assert!(
+            cfg.blocks.len() >= 4,
+            "expected branching CFG for PHP if/else"
+        );
     }
 
     #[test]
@@ -8086,7 +8096,10 @@ def example(x)
 end
 "#;
         let cfg = build_cfg_for_function("ruby", code, "example").unwrap();
-        assert!(cfg.blocks.len() >= 4, "expected branching CFG for Ruby if/else");
+        assert!(
+            cfg.blocks.len() >= 4,
+            "expected branching CFG for Ruby if/else"
+        );
     }
 
     #[test]
@@ -8140,7 +8153,11 @@ class profile::web {
 }
 "#;
         let cfg = build_cfg_for_function("puppet", code, "profile::web").unwrap();
-        assert!(cfg.blocks.len() >= 3, "expected if/else branches, got {}", cfg.blocks.len());
+        assert!(
+            cfg.blocks.len() >= 3,
+            "expected if/else branches, got {}",
+            cfg.blocks.len()
+        );
         assert!(
             cfg.edges
                 .iter()
@@ -8161,7 +8178,11 @@ class profile::os {
 }
 "#;
         let cfg = build_cfg_for_function("puppet", code, "profile::os").unwrap();
-        assert!(cfg.blocks.len() >= 3, "expected case arms, got {}", cfg.blocks.len());
+        assert!(
+            cfg.blocks.len() >= 3,
+            "expected case arms, got {}",
+            cfg.blocks.len()
+        );
     }
 
     #[test]
@@ -8292,7 +8313,6 @@ int live(int a) {
             "expected #else arm kept, texts={texts:?}"
         );
     }
-
 
     #[test]
     fn seek_function_node_validates_kind() {
@@ -8425,7 +8445,6 @@ end
             "expected conditional edges"
         );
     }
-
 
     #[test]
     fn test_hcl_conditional_cfg() {

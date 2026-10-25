@@ -68,20 +68,22 @@ pub fn evaluate_temporal(
     for key in scope_keys {
         let head_entry = head_index.get(key);
         let base_entry = base_index.get(key);
-        let head_violation = head_entry
-            .and_then(|(id, _)| violation_for(head_engine, *id, head_backend, registry, centrality));
-        let base_violation = base_entry
-            .and_then(|(id, _)| violation_for(base_engine, *id, base_backend, registry, centrality));
+        let head_violation = head_entry.and_then(|(id, _)| {
+            violation_for(head_engine, *id, head_backend, registry, centrality)
+        });
+        let base_violation = base_entry.and_then(|(id, _)| {
+            violation_for(base_engine, *id, base_backend, registry, centrality)
+        });
 
-        let classification = match classify_temporal_pair(
-            head_violation.is_some(),
-            base_violation.is_some(),
-        ) {
-            Some(classification) => classification,
-            None => continue,
-        };
+        let classification =
+            match classify_temporal_pair(head_violation.is_some(), base_violation.is_some()) {
+                Some(classification) => classification,
+                None => continue,
+            };
 
-        let violation = head_violation.or(base_violation).expect("classified violation");
+        let violation = head_violation
+            .or(base_violation)
+            .expect("classified violation");
         let symbol = head_entry
             .or(base_entry)
             .map(|(_, name)| name.clone())
@@ -130,10 +132,7 @@ pub fn record_deltas_to_ledger(
     Ok(())
 }
 
-fn classify_temporal_pair(
-    head_violates: bool,
-    base_violates: bool,
-) -> Option<TemporalClass> {
+fn classify_temporal_pair(head_violates: bool, base_violates: bool) -> Option<TemporalClass> {
     match (head_violates, base_violates) {
         (true, false) => Some(TemporalClass::New),
         (true, true) => Some(TemporalClass::Existing),
@@ -163,9 +162,9 @@ fn violation_for(
 fn stable_symbol_index(
     store: &SnapshotNodeStore,
 ) -> Result<HashMap<StableNodeKey, (Uuid, String)>> {
-    let col = store
-        .columnar()
-        .ok_or_else(|| rgctl_error::Error::GraphError("temporal policy requires columnar snapshot".into()))?;
+    let col = store.columnar().ok_or_else(|| {
+        rgctl_error::Error::GraphError("temporal policy requires columnar snapshot".into())
+    })?;
     let mut index = HashMap::with_capacity(col.node_count());
     for idx in 0..col.node_count() {
         let row = node_row_ref(col, idx)?;
@@ -173,10 +172,7 @@ fn stable_symbol_index(
             continue;
         }
         let key = stable_key_from_row(col, idx)?;
-        let name = col
-            .materialize_node_at(idx)?
-            .name
-            .to_string();
+        let name = col.materialize_node_at(idx)?.name.to_string();
         index.insert(key, (row.id, name));
     }
     Ok(index)
@@ -185,8 +181,8 @@ fn stable_symbol_index(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::centrality::CentralityAnalyzer;
     use crate::PetGraphView;
+    use crate::centrality::CentralityAnalyzer;
     use rgctl_graph::backend::GraphBackend;
     use rgctl_graph::schema::{Edge, EdgeType, Node, NodeType};
     use rgctl_graph::write_columnar_from_nodes_edges;
@@ -294,10 +290,7 @@ mod tests {
         registry
     }
 
-    fn run_temporal(
-        fixture: &TemporalFixture,
-        registry: &PolicyRegistry,
-    ) -> Vec<PolicyDelta> {
+    fn run_temporal(fixture: &TemporalFixture, registry: &PolicyRegistry) -> Vec<PolicyDelta> {
         evaluate_temporal(
             &fixture.base_store,
             &fixture.head_store,
@@ -350,15 +343,13 @@ mod tests {
 
         let mut ledger = crate::violation_ledger::ViolationLedger::in_memory();
         ledger
-            .append(
-                crate::violation_ledger::ledger_entry_from_delta(
-                    deltas[0].key.as_u64(),
-                    deltas[0].violation.rule_id(),
-                    TemporalClass::Resolved,
-                    "deadbeef",
-                    Some(&deltas[0].symbol),
-                ),
-            )
+            .append(crate::violation_ledger::ledger_entry_from_delta(
+                deltas[0].key.as_u64(),
+                deltas[0].violation.rule_id(),
+                TemporalClass::Resolved,
+                "deadbeef",
+                Some(&deltas[0].symbol),
+            ))
             .unwrap();
         apply_ledger_regression(&mut deltas, &ledger);
         assert_eq!(deltas[0].classification, TemporalClass::Regression);
@@ -371,6 +362,9 @@ mod tests {
         assert_eq!(base_key, head_key);
         let base_id = fixture.base_store.all_node_ids();
         let head_id = fixture.head_store.all_node_ids();
-        assert_eq!(base_id, head_id, "deterministic node IDs align across snapshots");
+        assert_eq!(
+            base_id, head_id,
+            "deterministic node IDs align across snapshots"
+        );
     }
 }

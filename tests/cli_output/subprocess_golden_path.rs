@@ -24,9 +24,7 @@ use std::time::{Duration, Instant};
 fn rgctl_bin() -> PathBuf {
     option_env!("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl")
-        })
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl"))
 }
 
 fn fixture_root() -> PathBuf {
@@ -56,9 +54,7 @@ fn materialize_fixture() -> tempfile::TempDir {
 
 fn run_rgctl(repo: &Path, args: &[&str]) -> std::process::Output {
     let mut cmd = Command::new(rgctl_bin());
-    cmd.current_dir(repo)
-        .arg("-r")
-        .arg(repo);
+    cmd.current_dir(repo).arg("-r").arg(repo);
     cmd.args(args);
     cmd.output().expect("spawn rgctl")
 }
@@ -294,8 +290,7 @@ fn blast_radius_with_slices_under_30s_after_cfg_discover() {
         String::from_utf8_lossy(&discover.stderr)
     );
     assert!(
-        repo.join(".rgctl/analysis/cfg_pdg.archive.bin")
-            .exists(),
+        repo.join(".rgctl/analysis/cfg_pdg.archive.bin").exists(),
         "discover --cfg should write cfg_pdg archive"
     );
 
@@ -479,7 +474,11 @@ fn pr_check_json_passes_when_only_existing_violations() {
     write_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), 6);
     git_commit_all(repo, "base");
 
-    fs::write(repo.join("src/pkg.rs"), "fn target_fn() { /* changed */ }\n").unwrap();
+    fs::write(
+        repo.join("src/pkg.rs"),
+        "fn target_fn() { /* changed */ }\n",
+    )
+    .unwrap();
     write_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), 6);
     git_commit_all(repo, "head");
 
@@ -517,11 +516,13 @@ fn pr_check_json_passes_when_only_existing_violations() {
         serde_json::from_slice(&output.stdout).expect("pr-check stdout json");
     assert_eq!(doc["schema_version"].as_str(), Some("2"));
     assert_eq!(doc["passed"].as_bool(), Some(true));
-    assert!(doc["violations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v["classification"].as_str() == Some("existing")));
+    assert!(
+        doc["violations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["classification"].as_str() == Some("existing"))
+    );
 }
 
 #[test]
@@ -563,7 +564,11 @@ fn pr_check_json_fails_on_new_temporal_violation() {
     write_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), 0);
     git_commit_all(repo, "base");
 
-    fs::write(repo.join("src/pkg.rs"), "fn target_fn() { /* changed */ }\n").unwrap();
+    fs::write(
+        repo.join("src/pkg.rs"),
+        "fn target_fn() { /* changed */ }\n",
+    )
+    .unwrap();
     write_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), 6);
     git_commit_all(repo, "head");
 
@@ -596,9 +601,11 @@ fn pr_check_json_fails_on_new_temporal_violation() {
     let doc: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("pr-check stdout json");
     assert_eq!(doc["passed"].as_bool(), Some(false));
-    assert!(doc["violations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v["classification"].as_str() == Some("new")));
+    assert!(
+        doc["violations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["classification"].as_str() == Some("new"))
+    );
 }

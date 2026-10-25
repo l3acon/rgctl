@@ -3,10 +3,10 @@
 use rgctl_extraction::{DiscoveryConfig, Extractor, FileDiscoverer, GraphBuilder};
 use rgctl_graph::schema::NodeType;
 use rgctl_graph::{
-    assert_graph_invariants, diff_snapshots, write_columnar_from_nodes_edges, NoopDiffSink,
-    SnapshotNodeStore,
+    NoopDiffSink, SnapshotNodeStore, assert_graph_invariants, diff_snapshots,
+    write_columnar_from_nodes_edges,
 };
-use rgctl_pipeline::stream::{stream_into_graph, DEFAULT_STREAM_CHANNEL_CAPACITY};
+use rgctl_pipeline::stream::{DEFAULT_STREAM_CHANNEL_CAPACITY, stream_into_graph};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -132,7 +132,9 @@ fn write_snapshot(root: &Path, out: &Path) {
     )
     .expect("extract");
     builder.build_resolution_indexes();
-    extractor.populate_pass2(&tails, &mut builder).expect("pass2");
+    extractor
+        .populate_pass2(&tails, &mut builder)
+        .expect("pass2");
     let (nodes, edges) = builder.into_graph();
     assert!(
         nodes.iter().any(|n| matches!(

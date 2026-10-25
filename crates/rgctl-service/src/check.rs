@@ -1,6 +1,8 @@
 //! Policy check command.
 
-use crate::check_json::{build_check_response, check_response_to_json, violations_from_json_values};
+use crate::check_json::{
+    build_check_response, check_response_to_json, violations_from_json_values,
+};
 use crate::command::CheckArgs;
 use crate::error::{Result, ServiceError};
 use crate::policy::PolicyFile;
@@ -188,4 +190,3 @@ mod tests {
         assert_eq!(value["passed"].as_bool(), Some(true));
     }
 }
-

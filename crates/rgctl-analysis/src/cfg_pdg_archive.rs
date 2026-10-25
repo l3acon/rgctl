@@ -454,9 +454,11 @@ impl CfgPdgArchiveMmap {
     fn toc_entry_at(&self, index: usize) -> Result<TocEntry> {
         let start = self
             .toc_offset
-            .checked_add(index.checked_mul(TOC_ENTRY_SIZE).ok_or_else(|| {
-                Error::SerdeError("cfg_pdg TOC index overflow".into())
-            })?)
+            .checked_add(
+                index
+                    .checked_mul(TOC_ENTRY_SIZE)
+                    .ok_or_else(|| Error::SerdeError("cfg_pdg TOC index overflow".into()))?,
+            )
             .ok_or_else(|| Error::SerdeError("cfg_pdg TOC offset overflow".into()))?;
         let end = start + TOC_ENTRY_SIZE;
         if end > self.mmap.len().saturating_sub(TOC_TRAILER_SIZE) {
@@ -691,10 +693,16 @@ fn parse_v3_footer(mmap: &[u8]) -> Result<(usize, usize, Option<String>)> {
     let trailer_start = mmap.len() - TOC_TRAILER_SIZE;
     let toc_offset =
         u64::from_le_bytes(mmap[trailer_start..trailer_start + 8].try_into().unwrap()) as usize;
-    let toc_count =
-        u32::from_le_bytes(mmap[trailer_start + 8..trailer_start + 12].try_into().unwrap()) as usize;
-    let magic =
-        u32::from_le_bytes(mmap[trailer_start + 12..trailer_start + 16].try_into().unwrap());
+    let toc_count = u32::from_le_bytes(
+        mmap[trailer_start + 8..trailer_start + 12]
+            .try_into()
+            .unwrap(),
+    ) as usize;
+    let magic = u32::from_le_bytes(
+        mmap[trailer_start + 12..trailer_start + 16]
+            .try_into()
+            .unwrap(),
+    );
     if magic != TOC_FOOTER_MAGIC {
         return Err(Error::SerdeError(
             "cfg_pdg archive missing TOC3 footer".into(),
@@ -905,9 +913,7 @@ fn read_header_digest(mmap: &[u8]) -> Option<String> {
     if end > mmap.len() {
         return None;
     }
-    std::str::from_utf8(&mmap[12..end])
-        .ok()
-        .map(str::to_string)
+    std::str::from_utf8(&mmap[12..end]).ok().map(str::to_string)
 }
 
 fn serde_err(e: bincode::Error) -> Error {

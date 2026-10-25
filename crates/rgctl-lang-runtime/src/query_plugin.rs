@@ -1,9 +1,7 @@
 //! Tier-2 language plugin driven by a precompiled `tags.scm` query.
 
 use crate::config::LanguageConfig;
-use crate::queries::{
-    compile_tags_query, extract_with_query, CaptureIndex,
-};
+use crate::queries::{CaptureIndex, compile_tags_query, extract_with_query};
 use crate::regex_extract::{extract_regex_symbols, merge_symbols};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
@@ -66,8 +64,7 @@ impl QueryLanguagePlugin {
             &self.capture_index,
         )?;
         if let Some(patterns) = self.config.regex_patterns {
-            let supplemental =
-                extract_regex_symbols(file_path, source, patterns, "queries+regex")?;
+            let supplemental = extract_regex_symbols(file_path, source, patterns, "queries+regex")?;
             merge_symbols(&mut result.symbols, supplemental);
         }
         Ok(result)
@@ -212,11 +209,7 @@ int add(int a, int b) {
         assert!(
             result.symbols.iter().any(|s| s.name == "add"),
             "expected function add, got {:?}",
-            result
-                .symbols
-                .iter()
-                .map(|s| &s.name)
-                .collect::<Vec<_>>()
+            result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
         );
         assert!(result.symbols.iter().any(|s| s.name == "helper"));
         assert!(

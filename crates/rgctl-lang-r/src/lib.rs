@@ -30,8 +30,8 @@ mod tests {
 
     #[test]
     fn extract_smoke() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_r::LANGUAGE.into()).expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_r::LANGUAGE.into())
+            .expect("compile");
         let source = br###"add <- function(a, b) {
   a + b
 }
@@ -41,10 +41,7 @@ add(1, 2)
             .extract_all(Path::new("math.R"), source)
             .expect("extract_all");
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name.contains("add")),
+            result.symbols.iter().any(|s| s.name.contains("add")),
             "expected symbol containing 'add', got {:?}",
             result.symbols
         );

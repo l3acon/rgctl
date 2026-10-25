@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_graphql::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_graphql::LANGUAGE.into())
+                .expect("compile");
         let source = br###"type User { id: ID! }
 enum Role { ADMIN }
 query GetUser { user { id } }

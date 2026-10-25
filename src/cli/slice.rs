@@ -257,8 +257,7 @@ pub fn run(ctx: &CliContext, args: SliceArgs) -> Result<()> {
         }
         SliceView::Pdg => {
             if ctx.format == OutputFormat::Json {
-                let response =
-                    pdg_topology_json(&path.display().to_string(), &fn_name, pdg, false);
+                let response = pdg_topology_json(&path.display().to_string(), &fn_name, pdg, false);
                 ctx.emit_json_value(&serde_json::to_value(&response)?)?;
             } else {
                 println!(
@@ -400,7 +399,10 @@ mod tests {
             Some("second"),
             "offset 10 is `first`'s exclusive end and `second`'s inclusive start — it belongs to `second`"
         );
-        assert_eq!(function_containing_line(&locations, 9).as_deref(), Some("first"));
+        assert_eq!(
+            function_containing_line(&locations, 9).as_deref(),
+            Some("first")
+        );
         assert_eq!(
             function_containing_line(&locations, 20),
             None,

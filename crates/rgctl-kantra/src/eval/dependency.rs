@@ -1,8 +1,8 @@
 //! `java.dependency` / `go.dependency` against graph Dependency nodes.
 
+use crate::engine::EvalNode;
 use crate::eval::{MatchSite, violation};
 use crate::findings::KantraViolation;
-use crate::engine::EvalNode;
 
 /// Match Kantra java.dependency / go.dependency conditions against Dependency nodes.
 pub fn eval_dependency(
@@ -51,7 +51,9 @@ pub fn eval_dependency(
         let matched = if let Some(re) = &name_re {
             re.is_match(&node.name)
         } else if !name.is_empty() {
-            node.name == name || node.name.contains(name) || node.name.ends_with(&format!(":{name}"))
+            node.name == name
+                || node.name.contains(name)
+                || node.name.ends_with(&format!(":{name}"))
         } else {
             false
         };
@@ -63,7 +65,9 @@ pub fn eval_dependency(
         let _ = (lowerbound, upperbound);
 
         let site = MatchSite::new(
-            node.file_path.clone().unwrap_or_else(|| "<manifest>".into()),
+            node.file_path
+                .clone()
+                .unwrap_or_else(|| "<manifest>".into()),
             node.start_line.unwrap_or(1),
         )
         .with_symbol(node.name.clone());

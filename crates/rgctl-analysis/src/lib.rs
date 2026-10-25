@@ -7,10 +7,10 @@ pub mod analysis_pack;
 pub mod ast_skeleton;
 pub mod blast_engine_snapshot;
 pub mod blast_radius;
-pub mod boundary;
-pub mod calendar_policy;
 pub mod blast_radius_scc;
 pub mod blast_slice_handoff;
+pub mod boundary;
+pub mod calendar_policy;
 pub mod callgraph;
 pub mod centrality;
 pub mod centrality_approx;
@@ -47,11 +47,10 @@ pub mod node_lookup;
 pub mod pdg;
 pub mod policy;
 pub mod policy_diff;
-pub mod violation_ledger;
 pub mod results;
 pub mod review_paths;
-pub mod scoped_policy;
 pub mod scip_overlay;
+pub mod scoped_policy;
 pub mod semantic_code_daemon;
 pub mod semantic_diffuse;
 #[cfg(feature = "semantic-onnx")]
@@ -72,6 +71,7 @@ pub mod structural_topology;
 pub mod taint;
 pub mod taint_rules;
 pub mod type_inference;
+pub mod violation_ledger;
 pub mod wl_hash;
 
 pub use alias::may_alias_names;
@@ -86,14 +86,19 @@ pub use blast_radius::{
 pub use blast_radius_scc::{
     BlastRadiusEngine, BlastRadiusResult, EngineStats, SccNode, impact_score_from_counts,
 };
-pub use boundary::{
-    bundled_boundary_catalogs, classify_boundaries, BoundaryCatalog, BoundaryKind, BoundaryLabel,
-    BoundaryNodeRef, BoundaryRule,
-};
 pub use blast_slice_handoff::{
     BlastSliceTrace, SliceHandoffSeed, criterion_for_parameter, filter_handoff_seeds_by_index,
     load_source_files, resolve_handoff_seeds, resolve_handoff_seeds_for_indices,
     resolve_handoff_seeds_with_call_graph, trace_blast_to_slices, trace_blast_to_slices_with_blast,
+};
+pub use boundary::{
+    BoundaryCatalog, BoundaryKind, BoundaryLabel, BoundaryNodeRef, BoundaryRule,
+    bundled_boundary_catalogs, classify_boundaries,
+};
+pub use calendar_policy::{
+    CalendarDisposition, CalendarSeverity, GraceSeverity, PolicyTemporal,
+    evaluate_calendar_disposition, evaluate_calendar_for_deltas, iso_date_to_day_number,
+    system_today_days, system_unix_secs,
 };
 pub use callgraph::CallGraph;
 pub use centrality::{
@@ -111,8 +116,7 @@ pub use centrality_approx::{
     LARGE_GRAPH_HYPERBALL_ROUNDS, SampledBetweenness,
 };
 pub use cfg::{
-    BasicBlock, BlockId, CfgEdge, CfgEdgeType, ControlFlowGraph, DefVar, Statement,
-    StatementKind,
+    BasicBlock, BlockId, CfgEdge, CfgEdgeType, ControlFlowGraph, DefVar, Statement, StatementKind,
 };
 pub use cfg_builder::{
     FunctionLocation, ParsedSourceFile, build_cfg_for_byte_range, build_cfg_for_function,
@@ -124,11 +128,11 @@ pub use cfg_pdg_archive::{
 };
 pub use clones::{
     BloomCloneOptions, CLONE_REPORT_SCHEMA_VERSION, CLONE_REPORT_SCHEMA_VERSION_V2,
-    CLONES_FRAGMENT_SIDECAR_FILE, CLONES_SIDECAR_FILE, DEFAULT_BLOOM_MAX_BUCKET,
-    DEFAULT_BLOOM_THRESHOLD, DEFAULT_MIN_LOC, FragmentCloneFilters, FragmentCloneGroup,
-    FragmentCloneReport, FragmentMember, FragmentSeedInfo, MODE_BLOOM, MODE_EXACT, MODE_FRAGMENT,
-    MODE_SEMANTIC, MODE_STRUCTURAL, CloneError, CloneFilters, CloneGroup, CloneMember, CloneReport,
-    ExactCloneOptions, bloom_clones_with_cache, build_bloom_report, build_exact_report,
+    CLONES_FRAGMENT_SIDECAR_FILE, CLONES_SIDECAR_FILE, CloneError, CloneFilters, CloneGroup,
+    CloneMember, CloneReport, DEFAULT_BLOOM_MAX_BUCKET, DEFAULT_BLOOM_THRESHOLD, DEFAULT_MIN_LOC,
+    ExactCloneOptions, FragmentCloneFilters, FragmentCloneGroup, FragmentCloneReport,
+    FragmentMember, FragmentSeedInfo, MODE_BLOOM, MODE_EXACT, MODE_FRAGMENT, MODE_SEMANTIC,
+    MODE_STRUCTURAL, bloom_clones_with_cache, build_bloom_report, build_exact_report,
     clones_sidecar_path, clones_sidecar_path_for_mode, exact_clones_with_cache,
     fragment_clones_sidecar_path, group_bloom_from_nodes, group_exact_from_nodes,
     iter_bloom_functions, iter_hashed_functions, load_fragment_sidecar_if_fresh,
@@ -162,8 +166,7 @@ pub use dependency::{CircularDependency, DependencyAnalyzer, ImpactResult};
 pub use dominance::{DominatorTree, verify_idom_acyclic};
 pub use field_write::{
     FIELD_WRITE_INDEX_FILE, FIELD_WRITE_INDEX_VERSION, FieldWrite, FieldWriteIndex, FieldWriteKind,
-    MutationQuery,
-    build_and_save_field_write_index, extract_writes_from_cfg,
+    MutationQuery, build_and_save_field_write_index, extract_writes_from_cfg,
 };
 pub use field_write_locals::{
     LocalsParseContext, build_file_local_types_from_tree, build_file_local_types_index,
@@ -171,8 +174,8 @@ pub use field_write_locals::{
 };
 pub use flow_cache::{CachedAnalysis, CfgPdgCache, FlowCache, NodePdgCache};
 pub use fragment_clones::{
-    discover_fragment_clones, query_fragment_clones, resolve_cfg_for_function,
-    stage1_filter_functions, FragmentSeedQuery,
+    FragmentSeedQuery, discover_fragment_clones, query_fragment_clones, resolve_cfg_for_function,
+    stage1_filter_functions,
 };
 pub use git_churn::{
     FileChurnMetrics, GitChurnConfig, GitChurnReport, compute_and_apply_git_churn,
@@ -206,26 +209,18 @@ pub use mro::{
     InheritanceGraph, MroIndex, MroPassStats, MroStrategy, annotate_call_edge, apply_mro_pass,
     c3_linearize, c3_merge,
 };
-pub use scip_overlay::{
-    ScipOverlayStats, apply_scip_index, apply_scip_overlay, load_scip_index, normalize_path,
-    scip_display_name,
-};
 pub use node_lookup::NodeLookup;
 pub use pdg::{
     ControlDependency, DataDepType, DataDependency, PdgBuildOptions, PdgNode, PdgNodeId,
     ProgramDependenceGraph,
 };
 pub use policy::{DomainId, PolicyRegistry, PolicyViolation, check_policies, evaluate_policies};
-pub use calendar_policy::{
-    CalendarDisposition, CalendarSeverity, GraceSeverity, PolicyTemporal,
-    evaluate_calendar_disposition, evaluate_calendar_for_deltas, iso_date_to_day_number,
-    system_today_days, system_unix_secs,
-};
 pub use policy_diff::{
     PolicyDelta, TemporalClass, apply_ledger_regression, evaluate_temporal, record_deltas_to_ledger,
 };
-pub use violation_ledger::{
-    VIOLATION_LEDGER_FILE, ViolationLedger, ViolationLedgerEntry, ledger_entry_from_delta,
+pub use results::{
+    AnalysisResults, BlastRadiusMetrics, BlastRadiusTable, CentralityMetrics, CentralityTable,
+    CommunityTable, ComplexityTable, StructuralSketchTable,
 };
 pub use review_paths::{
     AmbiguousCandidate, CallEdgeCounts, ChangeSummary, DEFAULT_DOWNSTREAM_DEPTH,
@@ -233,13 +228,13 @@ pub use review_paths::{
     PathDelta, ReviewPathsOptions, ReviewPathsReport, SideLocation, SymbolPathReport,
     TruncationFlags, UnscoredFile, build_review_paths_report,
 };
-pub use scoped_policy::{
-    build_pr_check_centrality, collect_upstream_call_closure, hydrate_subset, load_centrality_cache,
-    scope_entity_ids,
+pub use scip_overlay::{
+    ScipOverlayStats, apply_scip_index, apply_scip_overlay, load_scip_index, normalize_path,
+    scip_display_name,
 };
-pub use results::{
-    AnalysisResults, BlastRadiusMetrics, BlastRadiusTable, CentralityMetrics, CentralityTable,
-    CommunityTable, ComplexityTable, StructuralSketchTable,
+pub use scoped_policy::{
+    build_pr_check_centrality, collect_upstream_call_closure, hydrate_subset,
+    load_centrality_cache, scope_entity_ids,
 };
 pub use semantic_code_daemon::{
     CODE_DAEMON_MAX_SEQ_LEN, CODE_DAEMON_MODEL_ID, CODE_DAEMON_MRL_DIMS, CODE_DAEMON_NATIVE_DIMS,
@@ -282,14 +277,17 @@ pub use semantic_vocab::{
     canonicalize_query_keywords, distill_vocab_matrix, encode_rbvk,
     normalize_semantic_query_tokens, parse_vocab_token_list,
 };
+pub use sese::{DEFAULT_MAX_STATEMENTS, DEFAULT_MIN_STATEMENTS, SeseRegion, extract_sese_regions};
 pub use slicing::{
     BackwardSlicer, CodeSlice, ForwardSlicer, SliceCriterion, SliceDirection, SliceOptions,
     compute_slice, compute_slice_with_options,
 };
-pub use sese::{DEFAULT_MAX_STATEMENTS, DEFAULT_MIN_STATEMENTS, SeseRegion, extract_sese_regions};
 pub use storage::{AnalysisIndexEntry, AnalysisStorage, FunctionAnalysis, FunctionIdSyncEntry};
 pub use structural_topology::StructuralTopology;
 pub use taint::{Sanitizer, TaintAnalyzer, TaintFlow, TaintSink, TaintSource};
-pub use taint_rules::{TaintRuleSet, bundled_cwe_catalog, CweCatalogEntry};
+pub use taint_rules::{CweCatalogEntry, TaintRuleSet, bundled_cwe_catalog};
 pub use type_inference::{InferredType, TypeInferenceEngine, VariableType, confidence_for};
+pub use violation_ledger::{
+    VIOLATION_LEDGER_FILE, ViolationLedger, ViolationLedgerEntry, ledger_entry_from_delta,
+};
 pub use wl_hash::{CanonicalEdgeTag, CanonicalStatementKind, WeisfeilerLehmanHasher};

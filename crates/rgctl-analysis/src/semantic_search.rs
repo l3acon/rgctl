@@ -1471,7 +1471,7 @@ mod tests {
 
     #[test]
     fn framework_tagged_nodes_rank_natural_language_queries() {
-        use crate::semantic_fusion::{query_index_with_fusion, SemanticFusionConfig};
+        use crate::semantic_fusion::{SemanticFusionConfig, query_index_with_fusion};
         use crate::semantic_vocab::VocabAccumulateEmbedder;
 
         let mut backend = MemoryBackend::new();
@@ -1511,12 +1511,8 @@ mod tests {
 
         let dims = 64;
         let embedder = VocabAccumulateEmbedder::new(dims).unwrap();
-        let (index, _stats) = build_index(
-            &backend,
-            &embedder,
-            SemanticBuildOptions::fresh(dims, None),
-        )
-        .unwrap();
+        let (index, _stats) =
+            build_index(&backend, &embedder, SemanticBuildOptions::fresh(dims, None)).unwrap();
         assert!(
             index.len() >= 3,
             "tagged classes + endpoint should be indexed, got {}",
@@ -1559,7 +1555,10 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(hits[0].entry.node_id, ctrl_id, "controllers → OrderController");
+        assert_eq!(
+            hits[0].entry.node_id, ctrl_id,
+            "controllers → OrderController"
+        );
 
         let hits = query_index_with_fusion(
             &index,

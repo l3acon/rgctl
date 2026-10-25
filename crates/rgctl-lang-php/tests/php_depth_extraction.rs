@@ -26,9 +26,9 @@ class Order {
         .expect("extract_all");
 
     assert!(
-        out.symbols.iter().any(|s| {
-            s.name == "MAX_RETRIES" && s.symbol_type == SymbolType::Variable
-        }),
+        out.symbols
+            .iter()
+            .any(|s| { s.name == "MAX_RETRIES" && s.symbol_type == SymbolType::Variable }),
         "top-level const missing: {:?}",
         out.symbols
             .iter()
@@ -72,12 +72,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../php-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_php::LANGUAGE_PHP.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "php",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("php", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

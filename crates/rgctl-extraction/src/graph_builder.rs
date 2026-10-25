@@ -10,9 +10,7 @@ use rgctl_graph::normalize_path_str;
 use rgctl_graph::schema::{Edge, EdgeType, Node, NodeType};
 use rgctl_graph::segmented_spill::{FinishedSpill, SegmentedSpill};
 use rgctl_graph::structural_sketch::build_token_bloom;
-use rgctl_plugin_api::{
-    ComplexityMetrics, ConfigKey, Relation, RelationType, Symbol, SymbolType,
-};
+use rgctl_plugin_api::{ComplexityMetrics, ConfigKey, Relation, RelationType, Symbol, SymbolType};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -429,11 +427,7 @@ impl GraphBuilder {
         // C `#include` paths are per-translation-unit; dedupe globally by path string
         // so kernel-scale repos do not materialize one Import node per occurrence.
         if symbol.symbol_type == SymbolType::Import
-            && symbol
-                .metadata
-                .get("kind")
-                .and_then(|v| v.as_str())
-                == Some("include")
+            && symbol.metadata.get("kind").and_then(|v| v.as_str()) == Some("include")
         {
             key = format!("c_include::{}", symbol.name);
             if let Some(&id) = self.symbol_index.get(&key) {
@@ -472,17 +466,15 @@ impl GraphBuilder {
             );
         }
 
-        let code_hash = prep
-            .and_then(|p| p.code_hash.clone())
-            .or_else(|| {
-                body.map(|b| {
-                    if let Some(index) = self.code_index.as_mut() {
-                        index.add_code(b, &symbol.location)
-                    } else {
-                        hash_code(b)
-                    }
-                })
-            });
+        let code_hash = prep.and_then(|p| p.code_hash.clone()).or_else(|| {
+            body.map(|b| {
+                if let Some(index) = self.code_index.as_mut() {
+                    index.add_code(b, &symbol.location)
+                } else {
+                    hash_code(b)
+                }
+            })
+        });
         if let Some(code_hash) = code_hash {
             node = node.with_code_hash(code_hash);
         }
@@ -540,8 +532,7 @@ impl GraphBuilder {
 
         let id = node.id;
         self.symbol_index.insert(key.clone(), id);
-        self.symbol_files
-            .insert(id, symbol.location.file.clone());
+        self.symbol_files.insert(id, symbol.location.file.clone());
         self.index_symbol_resolution(&key, &node);
         self.index_type_method(symbol, id);
         self.index_import_binding(symbol);
@@ -808,13 +799,10 @@ impl GraphBuilder {
             && !self.c_preferred_impl.contains_key(&relation.to)
             && !self.suffix_resolve_cache.contains_key(&relation.to)
         {
-            let can_resolve = self
-                .symbols_by_suffix
-                .get(&relation.to)
-                .is_some_and(|ids| {
-                    unique_resolved(ids).is_some()
-                        || single_c_preferred_impl(ids, &self.symbol_files).is_some()
-                });
+            let can_resolve = self.symbols_by_suffix.get(&relation.to).is_some_and(|ids| {
+                unique_resolved(ids).is_some()
+                    || single_c_preferred_impl(ids, &self.symbol_files).is_some()
+            });
             if !can_resolve {
                 let mut from_id = self.resolve_symbol_tracked(
                     &relation.from,
@@ -957,15 +945,12 @@ impl GraphBuilder {
                 let is_iface = matches!(
                     relation.relation_type,
                     RelationType::Implements | RelationType::IncludesClass
-                ) || relation
-                    .to_type_hint
-                    .as_deref()
-                    .is_some_and(|h| {
-                        matches!(
-                            h.to_ascii_lowercase().as_str(),
-                            "interface" | "trait" | "module" | "annotation"
-                        )
-                    });
+                ) || relation.to_type_hint.as_deref().is_some_and(|h| {
+                    matches!(
+                        h.to_ascii_lowercase().as_str(),
+                        "interface" | "trait" | "module" | "annotation"
+                    )
+                });
                 let prepend_front = relation
                     .metadata
                     .get("mixin")
@@ -1039,12 +1024,7 @@ impl GraphBuilder {
         let Some(node) = self.nodes.get_mut(idx) else {
             return;
         };
-        if node
-            .properties
-            .get("is_external_stub")
-            .map(String::as_str)
-            == Some("true")
-        {
+        if node.properties.get("is_external_stub").map(String::as_str) == Some("true") {
             return;
         }
         let existing = node
@@ -1110,12 +1090,7 @@ impl GraphBuilder {
     }
 
     /// Resolve `method` on `type_name` by walking the MRO (`sep` ∈ `.` / `::` / `#`).
-    fn resolve_via_mro(
-        &mut self,
-        type_name: &str,
-        method: &str,
-        skip_self: bool,
-    ) -> Option<Uuid> {
+    fn resolve_via_mro(&mut self, type_name: &str, method: &str, skip_self: bool) -> Option<Uuid> {
         if method.is_empty() || type_name.is_empty() {
             return None;
         }
@@ -1131,12 +1106,7 @@ impl GraphBuilder {
         self.lookup_method_on_chain(&chain, method, skip_self)
     }
 
-    fn resolve_via_mro_ref(
-        &self,
-        type_name: &str,
-        method: &str,
-        skip_self: bool,
-    ) -> Option<Uuid> {
+    fn resolve_via_mro_ref(&self, type_name: &str, method: &str, skip_self: bool) -> Option<Uuid> {
         if method.is_empty() || type_name.is_empty() {
             return None;
         }
@@ -1344,10 +1314,7 @@ impl GraphBuilder {
         let id = node.id;
         self.symbol_index.insert(key, id);
         self.external_stub_ids.insert(id);
-        self.symbols_by_qualified
-            .entry(qn)
-            .or_default()
-            .push(id);
+        self.symbols_by_qualified.entry(qn).or_default().push(id);
         self.commit_node(node);
         self.add_edge(id, file_id, EdgeType::DefinedIn);
         self.add_edge(file_id, id, EdgeType::Contains);
@@ -1373,11 +1340,8 @@ impl GraphBuilder {
         }
 
         let file_path = &relation.location.file;
-        let import_module_hint = self.lookup_import_module_hint(
-            file_path,
-            &relation.to,
-            to_type_hint.as_deref(),
-        );
+        let import_module_hint =
+            self.lookup_import_module_hint(file_path, &relation.to, to_type_hint.as_deref());
 
         self.parked_relations.push(ParkedRelationRecord {
             from_node_id: from_id,
@@ -2296,10 +2260,7 @@ pub(crate) fn is_inheritance_relation(rt: RelationType) -> bool {
     )
 }
 
-fn compute_mro_chain(
-    type_name: &str,
-    bases: &HashMap<String, Vec<(String, bool)>>,
-) -> Vec<String> {
+fn compute_mro_chain(type_name: &str, bases: &HashMap<String, Vec<(String, bool)>>) -> Vec<String> {
     let key = type_simple_name(type_name);
     let mut visiting = std::collections::HashSet::new();
     let mut memo: HashMap<String, Vec<String>> = HashMap::new();
@@ -2352,11 +2313,7 @@ fn compute_c3_mro(
     };
     let (classes, ifaces): (Vec<_>, Vec<_>) =
         direct.iter().cloned().partition(|(_, iface)| !*iface);
-    let ordered_parents: Vec<String> = classes
-        .into_iter()
-        .chain(ifaces)
-        .map(|(p, _)| p)
-        .collect();
+    let ordered_parents: Vec<String> = classes.into_iter().chain(ifaces).map(|(p, _)| p).collect();
     if ordered_parents.is_empty() {
         visiting.remove(name);
         let single = vec![name.to_string()];
@@ -3688,14 +3645,8 @@ mod tests {
         let mut builder = GraphBuilder::new();
         let a = builder.ensure_file_node(Path::new("FileA.java"));
         let b = builder.ensure_file_node(Path::new("FileB.java"));
-        builder.add_symbol(
-            &function_symbol("FileA.java", "a", "FileA.a"),
-            a,
-        );
-        builder.add_symbol(
-            &function_symbol("FileB.java", "b", "FileB.b"),
-            b,
-        );
+        builder.add_symbol(&function_symbol("FileA.java", "a", "FileA.a"), a);
+        builder.add_symbol(&function_symbol("FileB.java", "b", "FileB.b"), b);
         builder.build_resolution_indexes();
         builder
             .add_relation(&Relation {
@@ -3740,9 +3691,21 @@ mod tests {
             })
             .map(|n| n.qualified_name.clone())
             .collect();
-        assert_eq!(stubs.len(), 2, "expected distinct external Builders, got {stubs:?}");
-        assert!(stubs.iter().any(|q| q.as_deref() == Some("com.foo.Builder")));
-        assert!(stubs.iter().any(|q| q.as_deref() == Some("org.bar.Builder")));
+        assert_eq!(
+            stubs.len(),
+            2,
+            "expected distinct external Builders, got {stubs:?}"
+        );
+        assert!(
+            stubs
+                .iter()
+                .any(|q| q.as_deref() == Some("com.foo.Builder"))
+        );
+        assert!(
+            stubs
+                .iter()
+                .any(|q| q.as_deref() == Some("org.bar.Builder"))
+        );
     }
 
     #[test]
@@ -4072,21 +4035,19 @@ mod tests {
         let mut builder = GraphBuilder::new();
         let base_file = builder.ensure_file_node(Path::new("base.py"));
         let child_file = builder.ensure_file_node(Path::new("child.py"));
-        builder.add_symbol(&type_symbol("base.py", "Base", SymbolType::Class), base_file);
         builder.add_symbol(
-            &function_symbol("base.py", "run", "Base.run"),
+            &type_symbol("base.py", "Base", SymbolType::Class),
             base_file,
         );
-        builder.add_symbol(&type_symbol("child.py", "Child", SymbolType::Class), child_file);
+        builder.add_symbol(&function_symbol("base.py", "run", "Base.run"), base_file);
+        builder.add_symbol(
+            &type_symbol("child.py", "Child", SymbolType::Class),
+            child_file,
+        );
         // Child overrides run — should emit Overrides → Base.run
-        let child_run = builder.add_symbol(
-            &function_symbol("child.py", "run", "Child.run"),
-            child_file,
-        );
-        let caller = builder.add_symbol(
-            &function_symbol("child.py", "main", "main"),
-            child_file,
-        );
+        let child_run =
+            builder.add_symbol(&function_symbol("child.py", "run", "Child.run"), child_file);
+        let caller = builder.add_symbol(&function_symbol("child.py", "main", "main"), child_file);
         builder.build_resolution_indexes();
         builder
             .add_relation(&Relation {
@@ -4108,9 +4069,9 @@ mod tests {
         builder.emit_mro_overrides();
         let (_, edges) = builder.into_graph();
         assert!(
-            edges.iter().any(|e| {
-                e.edge_type == EdgeType::Overrides && e.from == child_run
-            }),
+            edges
+                .iter()
+                .any(|e| { e.edge_type == EdgeType::Overrides && e.from == child_run }),
             "expected Overrides from Child.run, edges={edges:?}"
         );
         let _ = caller;
@@ -4121,12 +4082,16 @@ mod tests {
         let mut builder = GraphBuilder::new();
         let base_file = builder.ensure_file_node(Path::new("base.py"));
         let child_file = builder.ensure_file_node(Path::new("child.py"));
-        builder.add_symbol(&type_symbol("base.py", "Base", SymbolType::Class), base_file);
-        let base_run = builder.add_symbol(
-            &function_symbol("base.py", "run", "Base.run"),
+        builder.add_symbol(
+            &type_symbol("base.py", "Base", SymbolType::Class),
             base_file,
         );
-        builder.add_symbol(&type_symbol("child.py", "Child", SymbolType::Class), child_file);
+        let base_run =
+            builder.add_symbol(&function_symbol("base.py", "run", "Base.run"), base_file);
+        builder.add_symbol(
+            &type_symbol("child.py", "Child", SymbolType::Class),
+            child_file,
+        );
         builder.add_symbol(
             &function_symbol("child.py", "entry", "Child.entry"),
             child_file,
@@ -4169,9 +4134,9 @@ mod tests {
             .unwrap();
         let (_, edges) = builder.into_graph();
         assert!(
-            edges.iter().any(|e| {
-                e.edge_type == EdgeType::Calls && e.to == base_run
-            }),
+            edges
+                .iter()
+                .any(|e| { e.edge_type == EdgeType::Calls && e.to == base_run }),
             "inherited Child.run call must resolve to Base.run, edges={edges:?}"
         );
     }
@@ -4208,10 +4173,7 @@ mod tests {
             mod_file,
         );
         builder.add_symbol(&type_symbol("dog.rb", "Dog", SymbolType::Class), dog_file);
-        builder.add_symbol(
-            &function_symbol("dog.rb", "speak", "Dog#speak"),
-            dog_file,
-        );
+        builder.add_symbol(&function_symbol("dog.rb", "speak", "Dog#speak"), dog_file);
         builder.build_resolution_indexes();
         builder
             .add_relation(&Relation {
@@ -4249,7 +4211,9 @@ mod tests {
             .unwrap();
         let (_, edges) = builder.into_graph();
         assert!(
-            edges.iter().any(|e| e.edge_type == EdgeType::Calls && e.to == bark),
+            edges
+                .iter()
+                .any(|e| e.edge_type == EdgeType::Calls && e.to == bark),
             "Dog#bark via include must resolve to Walkable#bark, edges={edges:?}"
         );
     }
@@ -4309,9 +4273,10 @@ mod tests {
             .expect("route node must keep full METHOD /path name, not {id}");
         assert_ne!(route.name, "{id}");
         assert!(
-            builder.edges.iter().any(|e| {
-                e.edge_type == EdgeType::ExposesRoute && e.to == route.id
-            }),
+            builder
+                .edges
+                .iter()
+                .any(|e| { e.edge_type == EdgeType::ExposesRoute && e.to == route.id }),
             "ExposesRoute edge missing"
         );
     }
@@ -4394,12 +4359,7 @@ mod tests {
             .iter()
             .find(|n| n.name == "OrderService")
             .expect("OrderService");
-        assert!(
-            svc.properties
-                .get("is_external_stub")
-                .map(String::as_str)
-                != Some("true")
-        );
+        assert!(svc.properties.get("is_external_stub").map(String::as_str) != Some("true"));
         let tags = svc
             .properties
             .get("semantic_tags")

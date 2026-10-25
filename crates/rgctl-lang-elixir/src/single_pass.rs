@@ -320,8 +320,8 @@ pub fn extract_all_single_pass(
                         let line = node.start_position().row + 1;
                         let name = format!("<fn@{line}>");
                         let qn = name.clone();
-                        let loc =
-                            ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         ctx.symbols.push(Symbol {
                             name: name.clone(),
                             symbol_type: SymbolType::Function,
@@ -448,7 +448,11 @@ end
                 .iter()
                 .any(|s| s.symbol_type == SymbolType::Module && s.name == "Foo"),
             "expected module Foo, got {:?}",
-            result.symbols.iter().map(|s| (&s.name, s.symbol_type)).collect::<Vec<_>>()
+            result
+                .symbols
+                .iter()
+                .map(|s| (&s.name, s.symbol_type))
+                .collect::<Vec<_>>()
         );
         assert!(
             result

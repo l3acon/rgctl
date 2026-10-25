@@ -27,18 +27,12 @@ fn erb_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn erb_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&erb_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&erb_grammar(), HANDLED_KINDS))
 }
 
 fn erb_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&erb_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&erb_grammar(), MANIFEST_JSON))
 }
-
 
 enum Visit<'a> {
     Pre(Node<'a>, usize),
@@ -103,12 +97,10 @@ pub fn extract_all_single_pass(
                     && ctx.symbols.len() > before
                 {
                     let sym = &ctx.symbols[before];
-                    let loc = ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                    let loc =
+                        ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
                     let name = sym.name.clone();
-                    let qn = sym
-                        .qualified_name
-                        .clone()
-                        .unwrap_or_else(|| name.clone());
+                    let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                     ctx.enter_scope(
                         ScopeKind::Lambda,
                         Some(name),

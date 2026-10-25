@@ -418,12 +418,11 @@ impl SnapshotNodeStore {
             return col.get_node(id);
         }
         let prepared = self.snapshot.prepared()?;
-        let legacy = self.legacy_id_to_index.as_ref().ok_or_else(|| {
-            Error::SerdeError("legacy id index missing for v1 snapshot".into())
-        })?;
-        Ok(legacy
-            .get(&id)
-            .map(|&idx| prepared.nodes[idx].clone()))
+        let legacy = self
+            .legacy_id_to_index
+            .as_ref()
+            .ok_or_else(|| Error::SerdeError("legacy id index missing for v1 snapshot".into()))?;
+        Ok(legacy.get(&id).map(|&idx| prepared.nodes[idx].clone()))
     }
 
     /// Find nodes by bare name using the pre-built name index.
@@ -432,20 +431,17 @@ impl SnapshotNodeStore {
             return col.find_nodes_by_name(name);
         }
         let prepared = self.snapshot.prepared()?;
-        let legacy = self.legacy_id_to_index.as_ref().ok_or_else(|| {
-            Error::SerdeError("legacy id index missing for v1 snapshot".into())
-        })?;
+        let legacy = self
+            .legacy_id_to_index
+            .as_ref()
+            .ok_or_else(|| Error::SerdeError("legacy id index missing for v1 snapshot".into()))?;
         Ok(prepared
             .indexes
             .name_index
             .get(name)
             .map(|ids| {
                 ids.iter()
-                    .filter_map(|id| {
-                        legacy
-                            .get(id)
-                            .map(|&idx| prepared.nodes[idx].clone())
-                    })
+                    .filter_map(|id| legacy.get(id).map(|&idx| prepared.nodes[idx].clone()))
                     .collect()
             })
             .unwrap_or_default())
@@ -467,9 +463,10 @@ impl SnapshotNodeStore {
         let mut out = Vec::new();
         for id in impact_zone_ids {
             if let Some(node) = self.get_node(*id)?
-                && node.node_type == NodeType::Function {
-                    out.push(*id);
-                }
+                && node.node_type == NodeType::Function
+            {
+                out.push(*id);
+            }
         }
         Ok(out)
     }

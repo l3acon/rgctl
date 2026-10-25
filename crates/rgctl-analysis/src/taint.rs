@@ -475,10 +475,7 @@ end
         let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);
         analyzer.detect_patterns("ruby");
         let flows = analyzer.vulnerable_flows();
-        assert!(
-            !flows.is_empty(),
-            "expected params -> SQL execute flow"
-        );
+        assert!(!flows.is_empty(), "expected params -> SQL execute flow");
         assert_eq!(flows[0].source_type, TaintSource::HttpParameter);
         assert_eq!(flows[0].sink_type, TaintSink::SqlQuery);
     }
@@ -492,7 +489,10 @@ def handle_request
 end
 "#;
         let cfg = build_cfg_for_function("ruby", code, "handle_request").unwrap();
-        assert!(cfg.blocks.len() >= 2, "expected CFG statements for Ruby method body");
+        assert!(
+            cfg.blocks.len() >= 2,
+            "expected CFG statements for Ruby method body"
+        );
         let pdg = ProgramDependenceGraph::build(&cfg, code.as_bytes()).unwrap();
         assert!(!pdg.nodes.is_empty(), "expected PDG nodes for Ruby");
         let mut analyzer = TaintAnalyzer::new(&pdg, &cfg);

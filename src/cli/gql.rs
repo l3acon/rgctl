@@ -16,9 +16,7 @@ pub fn run(ctx: &CliContext, args: GqlArgs) -> Result<()> {
     if ctx.format == OutputFormat::Json {
         let mut session = Session::new(&ctx.repo);
         if !session.graph_ready() {
-            anyhow::bail!(
-                "Graph not found (run `rgctl discover` first)"
-            );
+            anyhow::bail!("Graph not found (run `rgctl discover` first)");
         }
         let value = execute(
             &mut session,

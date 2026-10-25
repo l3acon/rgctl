@@ -107,9 +107,7 @@ fn run_slice(repo: &Path, args: &CpgArgs) -> Result<Value> {
         ));
     }
     let source = std::fs::read_to_string(&path).map_err(rgctl_error::Error::from)?;
-    let lang = language_id_from_path(&path)
-        .unwrap_or("rust")
-        .to_string();
+    let lang = language_id_from_path(&path).unwrap_or("rust").to_string();
     let fn_name = args
         .function
         .clone()
@@ -160,7 +158,13 @@ fn run_inspect(graph: Option<&CodeGraph>, repo: &Path, args: &CpgArgs) -> Result
     let pdg = ProgramDependenceGraph::build(&cfg, source.as_bytes()).map_err(ServiceError::from)?;
     let _ = repo;
     if args.op == CpgOp::Pdg {
-        let response = inspect_pdg_json(symbol, &pdg, false, pdg.data_deps.len(), pdg.control_deps.len());
+        let response = inspect_pdg_json(
+            symbol,
+            &pdg,
+            false,
+            pdg.data_deps.len(),
+            pdg.control_deps.len(),
+        );
         return serde_json::to_value(&response).map_err(ServiceError::from);
     }
     cfg.prune_unreachable_blocks();
@@ -174,8 +178,7 @@ fn run_ast(repo: &Path, args: &CpgArgs) -> Result<Value> {
         .map_err(ServiceError::from)?
         .ok_or_else(|| {
             ServiceError::Failed(
-                "AST skeleton archive missing (run `rgctl discover --with-ast-skeleton`)"
-                    .into(),
+                "AST skeleton archive missing (run `rgctl discover --with-ast-skeleton`)".into(),
             )
         })?;
     let matches: Vec<_> = archive
@@ -243,8 +246,7 @@ fn resolve_function(
         .find(|n| n.node_type == NodeType::Function)
         .or_else(|| {
             backend.all_nodes().ok()?.into_iter().find(|n| {
-                n.node_type == NodeType::Function
-                    && (n.name == symbol || n.name.ends_with(symbol))
+                n.node_type == NodeType::Function && (n.name == symbol || n.name.ends_with(symbol))
             })
         })
         .ok_or_else(|| ServiceError::Failed(format!("function symbol not found: {symbol}")))?;

@@ -83,9 +83,7 @@ impl DependencyAnalyzer {
                 .iter()
                 .filter_map(|id| {
                     // Prefer hot name when available (ColdMetadataDb); fall back to full node.
-                    if let Ok(Some((name, _))) =
-                        lookup.node_name_and_path_opt(*id)
-                    {
+                    if let Ok(Some((name, _))) = lookup.node_name_and_path_opt(*id) {
                         return Some(name);
                     }
                     lookup

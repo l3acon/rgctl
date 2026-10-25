@@ -1,6 +1,6 @@
 //! Single-pass AST extraction for Java (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{ExtractCtx, JavaPlugin, BRANCH_KINDS, JAVA_CALL_KINDS};
+use crate::plugin::{BRANCH_KINDS, ExtractCtx, JAVA_CALL_KINDS, JavaPlugin};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
@@ -62,18 +62,12 @@ fn java_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn java_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&java_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&java_grammar(), HANDLED_KINDS))
 }
 
 fn java_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&java_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&java_grammar(), MANIFEST_JSON))
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -241,16 +235,16 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "package_declaration" => {
-                        ctx.symbols
-                            .push(plugin.extract_package_symbol(node, source, &file_path_str)?);
+                        ctx.symbols.push(plugin.extract_package_symbol(
+                            node,
+                            source,
+                            &file_path_str,
+                        )?);
                     }
                     "module_declaration" => {
                         let sym = plugin.extract_module_symbol(node, source, &file_path_str)?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Module,
@@ -400,19 +394,11 @@ pub fn extract_all_single_pass(
     Ok(ExtractAllResult::from_parts(ctx.symbols, relations))
 }
 
-fn enter_function_scope(
-    ctx: &mut SinglePassCtx,
-    node: Node,
-    sym: Symbol,
-    kind: ScopeKind,
-) {
+fn enter_function_scope(ctx: &mut SinglePassCtx, node: Node, sym: Symbol, kind: ScopeKind) {
     let params = sym.parameters.len() as u32;
     let loc = ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
     let name = sym.name.clone();
-    let qn = sym
-        .qualified_name
-        .clone()
-        .unwrap_or_else(|| name.clone());
+    let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
     ctx.symbols.push(sym);
     ctx.enter_scope(
         kind,
@@ -431,10 +417,7 @@ fn enter_function_scope(
 
 fn enter_type_scope(ctx: &mut SinglePassCtx, node: Node, sym: Symbol, kind: ScopeKind) {
     let name = sym.name.clone();
-    let qn = sym
-        .qualified_name
-        .clone()
-        .unwrap_or_else(|| name.clone());
+    let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
     ctx.symbols.push(sym);
     ctx.enter_scope(
         kind,

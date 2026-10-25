@@ -7,10 +7,10 @@ use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 
 use crate::extract_depth::{
-    extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
+    AST_MAX_DEPTH, extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
     extract_macro_definition, extract_mod_symbol, extract_trait_symbols, extract_type_item,
     extract_use_symbols, module_prefix_from_path, push_children, qualify_with_module,
-    walk_depth_relations, AST_MAX_DEPTH,
+    walk_depth_relations,
 };
 use crate::single_pass::{extract_all_single_pass, rust_ast_handlers};
 use std::path::Path;
@@ -162,13 +162,7 @@ impl RustPlugin {
                 if let Some(ty) = parent
                     .child_by_field_name("type")
                     .and_then(|n| n.utf8_text(source).ok())
-                    .map(|s| {
-                        s.rsplit("::")
-                            .next()
-                            .unwrap_or(s)
-                            .trim()
-                            .to_string()
-                    })
+                    .map(|s| s.rsplit("::").next().unwrap_or(s).trim().to_string())
                 {
                     return Some(ty);
                 }
@@ -540,10 +534,20 @@ impl RustPlugin {
                     )?);
                 }
                 "struct_item" => {
-                    symbols.push(self.extract_type_definition(node, source, &file_path_str, false)?);
+                    symbols.push(self.extract_type_definition(
+                        node,
+                        source,
+                        &file_path_str,
+                        false,
+                    )?);
                 }
                 "enum_item" => {
-                    symbols.push(self.extract_type_definition(node, source, &file_path_str, true)?);
+                    symbols.push(self.extract_type_definition(
+                        node,
+                        source,
+                        &file_path_str,
+                        true,
+                    )?);
                 }
                 "use_declaration" => {
                     symbols.extend(extract_use_symbols(node, source, &file_path_str));
@@ -610,10 +614,7 @@ impl RustPlugin {
                                 .and_then(|n| n.utf8_text(source).ok())
                                 .map(str::to_string);
                             if let Some(ref name) = enum_name {
-                                enum_qn = Some(qualify_with_module(
-                                    module_prefix.as_deref(),
-                                    name,
-                                ));
+                                enum_qn = Some(qualify_with_module(module_prefix.as_deref(), name));
                             }
                             break;
                         }
@@ -719,13 +720,14 @@ impl LanguagePlugin for RustPlugin {
             return Ok(Some(metrics));
         }
 
-        let tree = parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: symbol.location.file.clone().into(),
-                line: symbol.location.start_line,
-                message: e,
-            },
-        )?;
+        let tree =
+            parse_with_pool("rust", tree_sitter_rust::LANGUAGE.into(), source).map_err(|e| {
+                Error::ParseError {
+                    file: symbol.location.file.clone().into(),
+                    line: symbol.location.start_line,
+                    message: e,
+                }
+            })?;
 
         let root = tree.root_node();
         let target_line = symbol.location.start_line - 1; // TreeSitter uses 0-indexed lines
@@ -883,10 +885,7 @@ impl User {
         assert_eq!(status.fields.len(), 3);
         assert!(symbols.iter().any(|s| {
             s.name == "Active"
-                && s.metadata
-                    .get("is_enum_variant")
-                    .and_then(|v| v.as_bool())
-                    == Some(true)
+                && s.metadata.get("is_enum_variant").and_then(|v| v.as_bool()) == Some(true)
         }));
     }
 
@@ -1087,10 +1086,7 @@ impl Default for Item {
             .iter()
             .find(|s| s.name == "Item" && s.symbol_type == SymbolType::Struct)
             .expect("struct");
-        assert_eq!(
-            item.qualified_name.as_deref(),
-            Some("item::Item")
-        );
+        assert_eq!(item.qualified_name.as_deref(), Some("item::Item"));
     }
 
     #[test]
@@ -1109,9 +1105,10 @@ fn helper() {}
         let path = Path::new("test.rs");
         let result = plugin.extract_all(path, source).unwrap();
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to.contains("helper")
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to.contains("helper") }),
             "forward Calls -> helper: {:?}",
             result.relations
         );
@@ -1120,11 +1117,13 @@ fn helper() {}
             .iter()
             .find(|s| s.name == "caller")
             .expect("caller");
-        let from_meta =
-            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        let from_meta = complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
         assert_eq!(from_meta.cyclomatic, 2);
         assert_eq!(from_meta.returns, 1);
-        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        let via_api = plugin
+            .calculate_complexity(caller, source)
+            .unwrap()
+            .unwrap();
         assert_eq!(via_api, from_meta);
     }
 
@@ -1147,9 +1146,7 @@ impl Widget {
 fn parse<T>(_s: &str) -> Option<T> { None }
 "#;
         let plugin = RustPlugin::new().unwrap();
-        let result = plugin
-            .extract_all(Path::new("widget.rs"), source)
-            .unwrap();
+        let result = plugin.extract_all(Path::new("widget.rs"), source).unwrap();
         let calls: Vec<_> = result
             .relations
             .iter()
@@ -1200,9 +1197,7 @@ trait Drawable {
 }
 "#;
         let plugin = RustPlugin::new().unwrap();
-        let result = plugin
-            .extract_all(Path::new("depth.rs"), source)
-            .unwrap();
+        let result = plugin.extract_all(Path::new("depth.rs"), source).unwrap();
         let status = result
             .symbols
             .iter()
@@ -1216,10 +1211,7 @@ trait Drawable {
         assert!(
             result.symbols.iter().any(|s| {
                 s.name == "Active"
-                    && s.metadata
-                        .get("is_enum_variant")
-                        .and_then(|v| v.as_bool())
-                        == Some(true)
+                    && s.metadata.get("is_enum_variant").and_then(|v| v.as_bool()) == Some(true)
             }),
             "variant symbol missing: {:?}",
             result.symbols
@@ -1244,10 +1236,7 @@ trait Drawable {
             result.symbols.iter().any(|s| {
                 s.name == "Brush"
                     && s.symbol_type == SymbolType::TypeAlias
-                    && s.metadata
-                        .get("associated")
-                        .and_then(|v| v.as_bool())
-                        == Some(true)
+                    && s.metadata.get("associated").and_then(|v| v.as_bool()) == Some(true)
             }),
             "associated type: {:?}",
             result.symbols
@@ -1255,10 +1244,7 @@ trait Drawable {
         assert!(
             result.symbols.iter().any(|s| {
                 s.name == "draw"
-                    && s.metadata
-                        .get("trait_method")
-                        .and_then(|v| v.as_bool())
-                        == Some(true)
+                    && s.metadata.get("trait_method").and_then(|v| v.as_bool()) == Some(true)
             }),
             "trait method signature: {:?}",
             result.symbols
@@ -1295,9 +1281,10 @@ struct AppState { name: String }
             result.relations
         );
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Injects && r.to.contains("AppState")
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Injects && r.to.contains("AppState") }),
             "State<Arc<AppState>> Injects: {:?}",
             result.relations
         );

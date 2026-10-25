@@ -450,11 +450,7 @@ impl<'a> StructuredQuery<'a> {
     }
 
     /// Resolve a unique symbol or return ambiguity / not-found errors.
-    pub fn resolve_symbol(
-        &self,
-        symbol: &str,
-        filters: &QueryFilters,
-    ) -> Result<Node> {
+    pub fn resolve_symbol(&self, symbol: &str, filters: &QueryFilters) -> Result<Node> {
         let mut matches = self.lookup_name_candidates(symbol, filters.exact)?;
         matches.retain(|n| self.node_passes(n, filters));
         match matches.len() {
@@ -601,12 +597,10 @@ impl<'a> StructuredQuery<'a> {
                     let path = col.node_file_path_str(idx)?.unwrap_or("");
                     let pat = normalize_file_glob(glob);
                     let ok = glob_match(&pat, path)
-                        || (!glob.contains('/')
-                            && !glob.contains('\\')
-                            && {
-                                let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
-                                glob_match(&pat, base) || glob_match(glob, base)
-                            });
+                        || (!glob.contains('/') && !glob.contains('\\') && {
+                            let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+                            glob_match(&pat, base) || glob_match(glob, base)
+                        });
                     if !ok {
                         continue;
                     }
@@ -671,7 +665,10 @@ impl<'a> StructuredQuery<'a> {
             let Some(ann) = self.store.get_node(to)? else {
                 return Ok(());
             };
-            if !normalized.iter().any(|want| annotation_name_matches(&ann, want)) {
+            if !normalized
+                .iter()
+                .any(|want| annotation_name_matches(&ann, want))
+            {
                 return Ok(());
             }
             if !seen.insert(from) {
@@ -884,18 +881,12 @@ impl<'a> StructuredQuery<'a> {
                 return Ok(());
             }
             let (source, target, dir_label, key) = match direction {
-                RelationDirection::In => (
-                    Self::project(&dst),
-                    Self::project(&src),
-                    "in",
-                    (to, from),
-                ),
-                RelationDirection::Out | RelationDirection::Both => (
-                    Self::project(&src),
-                    Self::project(&dst),
-                    "out",
-                    (from, to),
-                ),
+                RelationDirection::In => {
+                    (Self::project(&dst), Self::project(&src), "in", (to, from))
+                }
+                RelationDirection::Out | RelationDirection::Both => {
+                    (Self::project(&src), Self::project(&dst), "out", (from, to))
+                }
             };
             agg.entry(key)
                 .and_modify(|row| row.occurrences = row.occurrences.saturating_add(1))
@@ -978,8 +969,12 @@ impl<'a> StructuredQuery<'a> {
                     {
                         continue;
                     }
-                    if !Self::edge_scope_ok(&src, &dst, filters.scope.as_deref(), filters.scope_mode)
-                    {
+                    if !Self::edge_scope_ok(
+                        &src,
+                        &dst,
+                        filters.scope.as_deref(),
+                        filters.scope_mode,
+                    ) {
                         continue;
                     }
                     let key = (src_id, dst_id, incoming);
@@ -1041,11 +1036,7 @@ impl<'a> StructuredQuery<'a> {
     }
 
     /// Inventory with zero-count enums for type/edge.
-    pub fn inventory(
-        &self,
-        by: InventoryBy,
-        filters: &QueryFilters,
-    ) -> Result<InventoryResult> {
+    pub fn inventory(&self, by: InventoryBy, filters: &QueryFilters) -> Result<InventoryResult> {
         match by {
             InventoryBy::Type => {
                 let mut map: HashMap<NodeType, usize> =
@@ -1163,11 +1154,7 @@ impl<'a> StructuredQuery<'a> {
             InventoryBy::File => {
                 let mut map: HashMap<String, usize> = HashMap::new();
                 for n in self.collect_nodes_hot_scan(None, filters)? {
-                    let key = n
-                        .file_path
-                        .as_deref()
-                        .unwrap_or("<unknown>")
-                        .to_string();
+                    let key = n.file_path.as_deref().unwrap_or("<unknown>").to_string();
                     *map.entry(key).or_insert(0) += 1;
                 }
                 let mut counts: Vec<_> = map
@@ -1558,15 +1545,17 @@ mod tests {
         let base = Node::new(NodeType::Class, "RouteBuilder")
             .with_qualified_name("org.apache.camel.builder.RouteBuilder")
             .with_file_path("<external>");
-        let imp = Node::new(NodeType::Import, "import javax.ws.rs.Path;")
-            .with_file_path("src/Svc.java");
+        let imp =
+            Node::new(NodeType::Import, "import javax.ws.rs.Path;").with_file_path("src/Svc.java");
         let imp_ejb = Node::new(NodeType::Import, "import javax.ejb.MessageDriven;")
             .with_file_path("src/OrderMDB.java");
         let imp_jms = Node::new(NodeType::Import, "import javax.jms.Topic;")
             .with_file_path("src/OrderMDB.java");
-        let imp_eclipselink =
-            Node::new(NodeType::Import, "import org.eclipse.persistence.sessions.Session;")
-                .with_file_path("src/Jpa.java");
+        let imp_eclipselink = Node::new(
+            NodeType::Import,
+            "import org.eclipse.persistence.sessions.Session;",
+        )
+        .with_file_path("src/Jpa.java");
         let mdb_ann = Node::new(NodeType::Annotation, "MessageDriven")
             .with_qualified_name("javax.ejb.MessageDriven")
             .with_file_path("<external>");
@@ -1704,7 +1693,11 @@ mod tests {
             )
             .unwrap();
         assert!(res.total >= 1);
-        assert!(res.entities.iter().any(|e| e.name.starts_with("import javax")));
+        assert!(
+            res.entities
+                .iter()
+                .any(|e| e.name.starts_with("import javax"))
+        );
     }
 
     #[test]
@@ -1832,7 +1825,11 @@ mod tests {
             .inventory(InventoryBy::ImportPrefix, &QueryFilters::default())
             .unwrap();
         assert_eq!(res.by, "import-prefix");
-        let keys: HashMap<_, _> = res.counts.iter().map(|c| (c.key.as_str(), c.count)).collect();
+        let keys: HashMap<_, _> = res
+            .counts
+            .iter()
+            .map(|c| (c.key.as_str(), c.count))
+            .collect();
         assert!(keys.get("javax.ws").copied().unwrap_or(0) >= 1);
         assert!(keys.get("javax.ejb").copied().unwrap_or(0) >= 1);
         assert!(keys.get("javax.jms").copied().unwrap_or(0) >= 1);
@@ -1849,7 +1846,10 @@ mod tests {
             import_package_prefix("import static org.junit.Assert.*;", 2),
             "org.junit"
         );
-        assert_eq!(import_package_prefix("com.fasterxml.jackson.databind.ObjectMapper", 2), "com.fasterxml");
+        assert_eq!(
+            import_package_prefix("com.fasterxml.jackson.databind.ObjectMapper", 2),
+            "com.fasterxml"
+        );
     }
 
     #[test]
@@ -1943,13 +1943,15 @@ mod tests {
             .unwrap_err();
         match err {
             Error::AmbiguousSymbol {
-                count,
-                candidates,
-                ..
+                count, candidates, ..
             } => {
                 assert_eq!(count, 2);
                 assert_eq!(candidates.len(), 2);
-                assert!(candidates.iter().any(|c| c.file.as_deref() == Some("A.java")));
+                assert!(
+                    candidates
+                        .iter()
+                        .any(|c| c.file.as_deref() == Some("A.java"))
+                );
             }
             other => panic!("expected AmbiguousSymbol, got {other:?}"),
         }
@@ -2028,7 +2030,10 @@ mod tests {
 
     #[test]
     fn normalize_file_basename_glob() {
-        assert_eq!(normalize_file_glob("PRTRestServiceRoute.java"), "*PRTRestServiceRoute.java");
+        assert_eq!(
+            normalize_file_glob("PRTRestServiceRoute.java"),
+            "*PRTRestServiceRoute.java"
+        );
         assert_eq!(
             normalize_file_glob("*/printing/**/*.java"),
             "*/printing/**/*.java"
@@ -2041,8 +2046,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("snap.bin");
         let mut backend = MemoryBackend::new();
-        let n = Node::new(NodeType::Function, "ServeHTTP")
-            .with_file_path("/tmp/pkg/util/handler.go");
+        let n =
+            Node::new(NodeType::Function, "ServeHTTP").with_file_path("/tmp/pkg/util/handler.go");
         // No qualified_name — Go/TS style.
         backend.insert_node(n).unwrap();
         write_columnar_from_backend(&backend, &path).unwrap();

@@ -228,17 +228,9 @@ impl CliContext {
 fn classify_cli_error(message: &str) -> (&'static str, &'static str, Option<&'static str>) {
     let lower = message.to_ascii_lowercase();
     if lower.contains("ambiguous symbol") {
-        (
-            "ambiguous_symbol",
-            "AMBIGUOUS_SYMBOL",
-            Some("rgctl status"),
-        )
+        ("ambiguous_symbol", "AMBIGUOUS_SYMBOL", Some("rgctl status"))
     } else if lower.contains("graph not found") || lower.contains("run `rgctl discover`") {
-        (
-            "graph_not_found",
-            "GRAPH_NOT_FOUND",
-            Some("rgctl discover"),
-        )
+        ("graph_not_found", "GRAPH_NOT_FOUND", Some("rgctl discover"))
     } else if lower.contains("cfg") && (lower.contains("not indexed") || lower.contains("archive"))
     {
         (

@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_verilog::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_verilog::LANGUAGE.into())
+                .expect("compile");
         let source = br###"module adder;
 endmodule
 "###;
@@ -39,10 +40,7 @@ endmodule
             .extract_all(Path::new("adder.v"), source)
             .expect("extract_all");
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name.contains("adder")),
+            result.symbols.iter().any(|s| s.name.contains("adder")),
             "expected symbol containing 'adder', got {:?}",
             result.symbols
         );

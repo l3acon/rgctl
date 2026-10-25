@@ -29,9 +29,8 @@ mod tests {
 
     #[test]
     fn extract_nix_functions_and_applies() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_nix::LANGUAGE.into())
-                .expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_nix::LANGUAGE.into())
+            .expect("compile");
         let source = b"let foo = x: x + 1; in foo 2\n";
         let result = plugin
             .extract_all(Path::new("default.nix"), source)
@@ -45,9 +44,10 @@ mod tests {
             result.symbols
         );
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to == "foo"
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to == "foo" }),
             "{:?}",
             result.relations
         );

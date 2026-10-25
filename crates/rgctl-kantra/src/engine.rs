@@ -1,8 +1,10 @@
 //! Kantra evaluation engine.
 
 use crate::cache::{KantraFileCache, hash_file_content};
+use crate::catalog::KantraCatalog;
 use crate::classify::{ClassifiedRule, classify_rules};
 use crate::error::Result;
+use crate::eval::MatchSite;
 use crate::eval::builtin_path::{eval_builtin_json, eval_builtin_xml};
 use crate::eval::compose::eval_compose;
 use crate::eval::dependency::eval_dependency;
@@ -11,9 +13,7 @@ use crate::eval::filecontent::{SourceCache, eval_filecontent};
 use crate::eval::go_referenced::eval_go_referenced;
 use crate::eval::has_tags::eval_has_tags;
 use crate::eval::java_referenced::eval_java_referenced;
-use crate::eval::MatchSite;
 use crate::findings::{KantraFindings, SkippedRule};
-use crate::catalog::KantraCatalog;
 use crate::loader::KantraRuleset;
 use crate::schema::{RuleSupport, WhenClause};
 use std::collections::{HashMap, HashSet};
@@ -158,28 +158,24 @@ impl KantraEngine {
             findings.cache_hits = cache.hits;
             findings.cache_misses = cache.misses;
         }
-        let mut fresh_file_violations: HashMap<String, (String, Vec<crate::findings::KantraViolation>)> =
-            HashMap::new();
+        let mut fresh_file_violations: HashMap<
+            String,
+            (String, Vec<crate::findings::KantraViolation>),
+        > = HashMap::new();
 
         for item in &self.classified {
             let rule = &self.ruleset.doc.rules[item.rule_index];
             if item.support == RuleSupport::Unsupported {
                 findings.skipped_rules.push(SkippedRule {
                     rule_id: rule.rule_id.clone(),
-                    reason: item
-                        .reason
-                        .clone()
-                        .unwrap_or_else(|| "unsupported".into()),
+                    reason: item.reason.clone().unwrap_or_else(|| "unsupported".into()),
                 });
                 continue;
             }
             if item.support == RuleSupport::Partial {
                 findings.skipped_rules.push(SkippedRule {
                     rule_id: rule.rule_id.clone(),
-                    reason: item
-                        .reason
-                        .clone()
-                        .unwrap_or_else(|| "partial".into()),
+                    reason: item.reason.clone().unwrap_or_else(|| "partial".into()),
                 });
             }
 
@@ -265,7 +261,10 @@ fn is_composite(clause: &WhenClause) -> bool {
     )
 }
 
-fn enrich_violations(violations: &mut [crate::findings::KantraViolation], rule: &crate::schema::KantraRule) {
+fn enrich_violations(
+    violations: &mut [crate::findings::KantraViolation],
+    rule: &crate::schema::KantraRule,
+) {
     for v in violations {
         if v.message.is_none() {
             v.message = rule.message.clone();
@@ -282,7 +281,10 @@ fn eval_leaf(
     ctx: &EvalContext<'_>,
 ) -> Result<Vec<crate::findings::KantraViolation>> {
     match clause {
-        WhenClause::FileContent { pattern, file_pattern } => eval_filecontent(
+        WhenClause::FileContent {
+            pattern,
+            file_pattern,
+        } => eval_filecontent(
             &rule.rule_id,
             pattern,
             file_pattern.as_deref(),
@@ -341,7 +343,10 @@ fn eval_leaf(
             upperbound.as_deref(),
             &ctx.graph.nodes,
         )),
-        WhenClause::BuiltinXml { xpath, file_pattern } => Ok(eval_builtin_xml(
+        WhenClause::BuiltinXml {
+            xpath,
+            file_pattern,
+        } => Ok(eval_builtin_xml(
             &rule.rule_id,
             xpath,
             file_pattern.as_deref(),
@@ -380,7 +385,11 @@ fn collect_leaf_sites(
         WhenClause::Not(inner) => collect_leaf_sites(inner, leaf_sites, rule, ctx)?,
         leaf => {
             let hits = eval_leaf(leaf, rule, ctx)?;
-            leaf_sites.push(hits.iter().map(|v| MatchSite::new(&v.file, v.line)).collect());
+            leaf_sites.push(
+                hits.iter()
+                    .map(|v| MatchSite::new(&v.file, v.line))
+                    .collect(),
+            );
         }
     }
     Ok(())
@@ -411,10 +420,7 @@ mod tests {
         .unwrap();
 
         let mut sources = SourceCache::new();
-        sources.insert(
-            "foo.go".into(),
-            Arc::new("UNIQUE_TOKEN_XYZ\n".into()),
-        );
+        sources.insert("foo.go".into(), Arc::new("UNIQUE_TOKEN_XYZ\n".into()));
         let files = vec![dir.path().join("foo.go")];
         let (engine, _) = KantraEngine::load(dir.path()).unwrap();
         let mut ctx = EvalContext {

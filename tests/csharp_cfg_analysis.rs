@@ -1,8 +1,6 @@
 //! C# CFG analysis against the ecommerce-csharp fixture.
 
-use rgctl::analysis::{
-    ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path,
-};
+use rgctl::analysis::{ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path};
 use std::path::{Path, PathBuf};
 
 fn csharp_repo() -> PathBuf {

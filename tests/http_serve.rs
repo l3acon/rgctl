@@ -82,11 +82,7 @@ fn http_serve_serves_dashboard_and_query_api() {
         return;
     };
     let bin = rgctl_bin();
-    assert!(
-        bin.is_file(),
-        "missing rgctl binary at {}",
-        bin.display()
-    );
+    assert!(bin.is_file(), "missing rgctl binary at {}", bin.display());
 
     let port = pick_port();
     let base = format!("http://127.0.0.1:{port}");
@@ -216,14 +212,24 @@ fn spa_fallback_serves_the_shell_for_client_routes_only() {
         .expect("client");
 
     // the room URL, which no file answers
-    let room = client.get(format!("{base}/architecture")).send().expect("GET /architecture");
-    assert_eq!(room.status(), 200, "a client route must serve the shell, not a 404");
+    let room = client
+        .get(format!("{base}/architecture"))
+        .send()
+        .expect("GET /architecture");
+    assert_eq!(
+        room.status(),
+        200,
+        "a client route must serve the shell, not a 404"
+    );
     let content_type = room
         .headers()
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    assert!(content_type.contains("text/html"), "got content-type {content_type:?}");
+    assert!(
+        content_type.contains("text/html"),
+        "got content-type {content_type:?}"
+    );
     // Vite emits `<!DOCTYPE html>` in caps, and the shell mounts into a `#root` div — accept either marker
     let shell_body = room.text().unwrap_or_default().to_lowercase();
     assert!(
@@ -232,10 +238,20 @@ fn spa_fallback_serves_the_shell_for_client_routes_only() {
     );
 
     // the same route with a trailing slash resolves its assets against the wrong directory, so it redirects
-    let slash = client.get(format!("{base}/architecture/")).send().expect("GET /architecture/");
-    assert_eq!(slash.status(), 308, "a trailing slash must be canonicalised");
+    let slash = client
+        .get(format!("{base}/architecture/"))
+        .send()
+        .expect("GET /architecture/");
     assert_eq!(
-        slash.headers().get("location").and_then(|v| v.to_str().ok()),
+        slash.status(),
+        308,
+        "a trailing slash must be canonicalised"
+    );
+    assert_eq!(
+        slash
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok()),
         Some("/architecture")
     );
 
@@ -247,6 +263,12 @@ fn spa_fallback_serves_the_shell_for_client_routes_only() {
     assert_eq!(missing.status(), 404, "a missing asset must stay a 404");
 
     // and the API answers for itself
-    let api = client.get(format!("{base}/api/status")).send().expect("GET /api/status");
-    assert!(api.status().is_success(), "api/status should answer for itself");
+    let api = client
+        .get(format!("{base}/api/status"))
+        .send()
+        .expect("GET /api/status");
+    assert!(
+        api.status().is_success(),
+        "api/status should answer for itself"
+    );
 }

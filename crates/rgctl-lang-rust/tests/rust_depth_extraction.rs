@@ -83,33 +83,24 @@ trait Painter {
         .expect("Color enum");
     assert_eq!(color.fields.len(), 2);
     assert!(out.symbols.iter().any(|s| {
-        s.name == "Red"
-            && s.metadata
-                .get("is_enum_variant")
-                .and_then(|v| v.as_bool())
-                == Some(true)
+        s.name == "Red" && s.metadata.get("is_enum_variant").and_then(|v| v.as_bool()) == Some(true)
     }));
-    assert!(out
-        .symbols
-        .iter()
-        .any(|s| s.name == "Id" && s.symbol_type == SymbolType::TypeAlias));
-    assert!(out
-        .symbols
-        .iter()
-        .any(|s| s.name == "noop" && s.symbol_type == SymbolType::Macro));
+    assert!(
+        out.symbols
+            .iter()
+            .any(|s| s.name == "Id" && s.symbol_type == SymbolType::TypeAlias)
+    );
+    assert!(
+        out.symbols
+            .iter()
+            .any(|s| s.name == "noop" && s.symbol_type == SymbolType::Macro)
+    );
     assert!(out.symbols.iter().any(|s| {
         s.name == "Medium"
-            && s.metadata
-                .get("kind")
-                .and_then(|v| v.as_str())
-                == Some("associated_type")
+            && s.metadata.get("kind").and_then(|v| v.as_str()) == Some("associated_type")
     }));
     assert!(out.symbols.iter().any(|s| {
-        s.name == "paint"
-            && s.metadata
-                .get("trait_method")
-                .and_then(|v| v.as_bool())
-                == Some(true)
+        s.name == "paint" && s.metadata.get("trait_method").and_then(|v| v.as_bool()) == Some(true)
     }));
 }
 
@@ -120,12 +111,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../rust-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_rust::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "rust",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("rust", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

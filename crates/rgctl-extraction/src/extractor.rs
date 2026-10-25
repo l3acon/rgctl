@@ -130,7 +130,7 @@ impl Extractor {
         // Single BLAKE3: hex for FileTracker, raw bytes for FactsKey.
         let digest = blake3::hash(&source);
         let file_hash = Some(digest.to_hex().to_string());
-        if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
+        if let Ok(plugin) = self.registry.get_plugin_for_file_with_source(path, &source) {
             let path_str = path.to_string_lossy();
             let extracted = if let Some(facts) = &self.facts {
                 let key = facts_key_for_hash(plugin.as_ref(), *digest.as_bytes());
@@ -248,7 +248,10 @@ impl Extractor {
             let symbol_start = Instant::now();
             let use_preps = extraction.symbol_preps.len() == extraction.symbols.len();
             if use_preps {
-                for (symbol, prep) in extraction.symbols.iter().zip(extraction.symbol_preps.iter())
+                for (symbol, prep) in extraction
+                    .symbols
+                    .iter()
+                    .zip(extraction.symbol_preps.iter())
                 {
                     builder.add_symbol_with_prep(symbol, file_id, None, Some(prep));
                 }
@@ -449,11 +452,7 @@ fn symbol_body_from_source<'a>(
     };
     let slice = source.get(start_byte..end_byte)?;
     let text = std::str::from_utf8(slice).ok()?.trim_end_matches('\n');
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 fn prepare_symbol_pass1(source: &[u8], symbols: &[Symbol]) -> Vec<SymbolPass1Prep> {
@@ -577,8 +576,7 @@ mod tests {
         use crate::discovery::DiscoveryConfig;
         use std::path::Path;
 
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../rgctl-tests/ecommerce-ruby");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../rgctl-tests/ecommerce-ruby");
         if !root.is_dir() {
             return;
         }

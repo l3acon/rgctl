@@ -115,7 +115,9 @@ fn load_pack_index(analysis_dir: &Path) -> Result<Option<HashMap<Uuid, PackIndex
     let mut magic = [0u8; 4];
     file.read_exact(&mut magic)?;
     if magic != PACK_MAGIC {
-        return Err(Error::SerdeError("invalid analysis pack index magic".into()));
+        return Err(Error::SerdeError(
+            "invalid analysis pack index magic".into(),
+        ));
     }
     let mut ver_buf = [0u8; 4];
     file.read_exact(&mut ver_buf)?;
@@ -191,7 +193,9 @@ impl AnalysisPackReader {
             .checked_add(entry.length as usize)
             .ok_or_else(|| Error::SerdeError("analysis pack record length overflow".into()))?;
         if end > self.mmap.len() {
-            return Err(Error::SerdeError("analysis pack record extends past data file".into()));
+            return Err(Error::SerdeError(
+                "analysis pack record extends past data file".into(),
+            ));
         }
         Ok(Some(&self.mmap[start..end]))
     }

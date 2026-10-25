@@ -10,8 +10,9 @@ pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
 pub fn register(registry: &mut LanguageRegistry) {
-    let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_fsharp::LANGUAGE_FSHARP.into())
-        .expect("compile fsharp tags.scm");
+    let plugin =
+        QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_fsharp::LANGUAGE_FSHARP.into())
+            .expect("compile fsharp tags.scm");
     registry.register_language_plugin(Arc::new(plugin));
 }
 
@@ -30,8 +31,10 @@ mod tests {
 
     #[test]
     fn extract_smoke() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_fsharp::LANGUAGE_FSHARP.into()).expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || {
+            tree_sitter_fsharp::LANGUAGE_FSHARP.into()
+        })
+        .expect("compile");
         let source = br###"module Math
 open System
 
@@ -54,10 +57,9 @@ let add a b =
             result.symbols
         );
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name == "System" && s.symbol_type == rgctl_plugin_api::SymbolType::Import),
+            result.symbols.iter().any(
+                |s| s.name == "System" && s.symbol_type == rgctl_plugin_api::SymbolType::Import
+            ),
             "expected import 'System', got {:?}",
             result.symbols
         );

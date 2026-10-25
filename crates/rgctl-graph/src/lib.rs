@@ -17,10 +17,10 @@ pub mod csr;
 pub mod export;
 /// Streaming compaction of columnar snapshots with a delta segment.
 pub mod graph_compactor;
-/// Universal columnar graph structural invariants.
-pub mod invariants;
 /// String interning for index keys.
 pub mod intern;
+/// Universal columnar graph structural invariants.
+pub mod invariants;
 /// Lazy heap-backed collections for graph schema types.
 pub mod lazy_collections;
 /// Snapshot version migration helpers.
@@ -37,11 +37,11 @@ pub mod segmented_spill;
 pub mod snapshot;
 /// Structural diff between two columnar snapshots.
 pub mod snapshot_diff;
-/// Deterministic mmap structured query (`find` / `callers` / `relations` / `inventory`).
-pub mod structured_query;
 /// Stable cross-snapshot node identity.
 pub mod stable_key;
 pub mod structural_sketch;
+/// Deterministic mmap structured query (`find` / `callers` / `relations` / `inventory`).
+pub mod structured_query;
 
 pub use code_graph::CodeGraph;
 pub use code_index::{CodeIndex, CodeLocation, hash_code};
@@ -50,17 +50,17 @@ pub use columnar_snapshot::{
     reset_cold_ext_deserialization_count, write_columnar_from_backend,
     write_columnar_from_nodes_edges,
 };
-pub use invariants::assert_graph_invariants;
 pub use content_store::{
     CONTENT_STORE_FILE, ContentStore, INLINE_BODY_MAX_BYTES, hash_bytes, hash_text,
 };
 pub use csr::{CodeGraphCsr, edge_type_from_u8, edge_type_to_u8};
 pub use export::{GraphSnapshot, export_json, export_json_to, import_json};
-pub use query::{execute, execute_chunks, stream_query, QueryStream};
 pub use graph_compactor::{
     CompactStats, DeltaSegment, GraphCompactor, compact_repo_snapshot, compact_snapshot_file,
 };
+pub use invariants::assert_graph_invariants;
 pub use migration::{migrate_snapshot, migrate_v1_to_v2};
+pub use query::{QueryStream, execute, execute_chunks, stream_query};
 pub use schema::{AccessType, CallType, GRAPH_SCHEMA_VERSION, GraphParameter, SharedStr};
 pub use segmented_spill::{
     DEFAULT_SORT_RUN_BYTES, FinishedSpill, SegmentedSpill, set_sort_run_bytes_override,
@@ -70,17 +70,11 @@ pub use snapshot::{
     MmappedGraphSnapshot, PreparedGraphSnapshot, PreparedIndexes, SNAPSHOT_FILE, SnapshotNodeStore,
 };
 pub use snapshot_diff::{
-    DiffSink, DiffStats, EdgeDeltaEvent, EdgeDeltaKind, NodeDeltaEvent, NodeDeltaKind, NoopDiffSink,
-    SnapshotPair, VecDiffSink, diff_snapshots,
-};
-pub use structured_query::{
-    ALL_EDGE_TYPES, ALL_NODE_TYPES, CallNeighborsResult, EntityRow, EdgeRow, FindResult,
-    InventoryBy, InventoryCount, InventoryResult, QueryFilters, RelationDirection, RelationsResult,
-    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, import_package_prefix,
-    parse_annotation_list, parse_edge_type, parse_node_type,
+    DiffSink, DiffStats, EdgeDeltaEvent, EdgeDeltaKind, NodeDeltaEvent, NodeDeltaKind,
+    NoopDiffSink, SnapshotPair, VecDiffSink, diff_snapshots,
 };
 pub use stable_key::{
-    MmapNodeKey, NodeRowRef, StableNodeKey, NAMESPACE_RGCTL, deterministic_node_id,
+    MmapNodeKey, NAMESPACE_RGCTL, NodeRowRef, StableNodeKey, deterministic_node_id,
     extension_digest, node_row_ref, node_scope_path_at, stable_key_from_facets,
     stable_key_from_node, stable_key_from_row, stable_key_to_uuid,
 };
@@ -88,6 +82,12 @@ pub use structural_sketch::{
     MIN_TOKEN_LEN, TOKEN_BLOOM_BITS, TOKEN_BLOOM_WORDS, TokenBloom, bloom_jaccard, bloom_popcount,
     build_token_bloom, empty_bloom, keyword_in_bloom, keyword_overlap_score, satisfies_keyword_and,
     tokenize_string_into,
+};
+pub use structured_query::{
+    ALL_EDGE_TYPES, ALL_NODE_TYPES, CallNeighborsResult, EdgeRow, EntityRow, FindResult,
+    InventoryBy, InventoryCount, InventoryResult, QueryFilters, RelationDirection, RelationsResult,
+    STRUCTURED_QUERY_SCHEMA_VERSION, ScopeMode, StructuredQuery, glob_match, import_package_prefix,
+    parse_annotation_list, parse_edge_type, parse_node_type,
 };
 
 /// Normalize path separators for consistent comparison.

@@ -1,14 +1,14 @@
 # rgctl - Code knowledge graph for LLM agents.
 
-[![Release](https://img.shields.io/github/v/release/sshaaf/rgctl?style=for-the-badge&logo=github&color=0ea5e9)](https://github.com/sshaaf/rgctl/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/sshaaf/rgctl/total?style=for-the-badge&logo=github&color=22c55e)](https://github.com/sshaaf/rgctl/releases)
-[![Stars](https://img.shields.io/github/stars/sshaaf/rgctl?style=for-the-badge&logo=github)](https://github.com/sshaaf/rgctl/stargazers)
+[![Release](https://img.shields.io/github/v/release/sshaaf/rgctl?style=for-the-badge&logo=github&color=0ea5e9)](https://github.com/rgctl/rgctl/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/sshaaf/rgctl/total?style=for-the-badge&logo=github&color=22c55e)](https://github.com/rgctl/rgctl/releases)
+[![Stars](https://img.shields.io/github/stars/sshaaf/rgctl?style=for-the-badge&logo=github)](https://github.com/rgctl/rgctl/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
 [![Docs](https://img.shields.io/badge/docs-rgctl.io-2563eb?style=flat-square&logo=readthedocs&logoColor=white)](https://rgctl.io/)
 [![Website](https://img.shields.io/github/actions/workflow/status/sshaaf/rgctl-website/website.yml?branch=main&style=flat-square&label=website)](https://rgctl.io/)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/sshaaf/rgctl/releases/latest)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-555?style=flat-square)](https://github.com/rgctl/rgctl/releases/latest)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-brightgreen?style=flat-square)](https://tree-sitter.github.io/tree-sitter/)
 [![Agents](https://img.shields.io/badge/agents-Cursor%20%7C%20Claude%20%7C%20Codex%20%7C%20Antigravity-111827?style=flat-square)](https://rgctl.io/docs/guides/agent-skill/)
 [![Tier 1](https://img.shields.io/badge/languages-Tier%201%20%2B%20catalog-8b5cf6?style=flat-square)](https://rgctl.io/docs/languages/)
@@ -80,12 +80,12 @@ curl -fsSL https://rgctl.io/install.sh | sh
 rgctl --version
 ```
 
-Installs to `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Or download a prebuilt archive from [GitHub Releases](https://github.com/sshaaf/rgctl/releases/latest) and place `rgctl` on your `PATH`.
+Installs to `${RGCTL_INSTALL_DIR:-$HOME/.local/bin}`. Or download a prebuilt archive from [GitHub Releases](https://github.com/rgctl/rgctl/releases/latest) and place `rgctl` on your `PATH`.
 
 **Or build from source** (Rust **1.85+**):
 
 ```bash
-git clone https://github.com/sshaaf/rgctl.git
+git clone https://github.com/rgctl/rgctl.git
 cd rgctl
 cargo build --release --locked --bin rgctl
 # If ort/ONNX link fails on your platform: add --no-default-features
@@ -170,7 +170,7 @@ Commands are organized into six groups (`rgctl --help`). Full flag tables: **[CL
 Highlights: SCIP overlay (`discover --scip`), git co-change (`discover --with-git` → `metrics --churn` / `relations -e cochangeswith`), cross-language MRO (`relations -e overrides`), park-and-resolve multi-repo merge (`rgctl merge`), Fast-Leiden + $\mu+4\sigma$ hub stripping, pull-based CSR FastPageRank with `NodeRole` filtering, lazy v3 `cfg_pdg.bin` slicing, Type-3/4 fragment clones.
 
 - **CLI command reference:** **[cli command reference](https://rgctl.io/docs/guides/cli-command-reference/)**
-- **Step-by-step feature guides:** **[Guides](https://rgctl.io/docs/guides/)** ([rgctl-website](https://github.com/sshaaf/rgctl-website))
+- **Step-by-step feature guides:** **[Guides](https://rgctl.io/docs/guides/)** ([rgctl-website](https://github.com/rgctl/rgctl-website))
 - **Concepts & architecture overview:** **[Introduction](docs/Introduction.md)**
 - **Full CLI walkthrough (ecommerce-java):** **[User Guide](docs/user-guide.md)**
 

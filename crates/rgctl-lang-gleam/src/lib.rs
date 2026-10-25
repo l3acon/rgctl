@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_gleam::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_gleam::LANGUAGE.into())
+                .expect("compile");
         let source = br###"pub fn add(a: Int, b: Int) -> Int {
   helper(a) + b
 }
@@ -54,10 +55,12 @@ mod tests {
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "add" && r.to == "add"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "add" && r.to == "add"),
             "must not emit self-call add -> add: {:?}",
             result.relations
         );
-
     }
 }

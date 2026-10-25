@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_odin::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_odin::LANGUAGE.into())
+                .expect("compile");
         let source = br###"package math
 
 add :: proc(a, b: int) -> int {
@@ -56,10 +57,12 @@ add :: proc(a, b: int) -> int {
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "add" && r.to == "add"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "add" && r.to == "add"),
             "must not emit self-call add -> add: {:?}",
             result.relations
         );
-
     }
 }

@@ -1,8 +1,6 @@
 //! JavaScript CFG analysis against the ecommerce-javascript fixture.
 
-use rgctl::analysis::{
-    ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path,
-};
+use rgctl::analysis::{ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path};
 use std::path::Path;
 
 const JS_REPO: &str = "/Users/sshaaf/git/rust/rgctl-tests/ecommerce-javascript";

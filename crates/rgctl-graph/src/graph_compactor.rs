@@ -447,12 +447,8 @@ mod tests {
 
         let tmp = TempDir::new().unwrap();
         let base_path = tmp.path().join("base.bin");
-        write_columnar_from_nodes_edges(
-            vec![ship, total, free],
-            vec![e_total, e_free],
-            &base_path,
-        )
-        .unwrap();
+        write_columnar_from_nodes_edges(vec![ship, total, free], vec![e_total, e_free], &base_path)
+            .unwrap();
 
         // Same deterministic IDs; only the total call remains in the new extract.
         let ship2 = Node::new(NodeType::Function, "calculateShipping").with_file_path("ship.rs");
@@ -484,7 +480,11 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        assert_eq!(calls, vec![total_id], "deleted CALL must not resurrect via alive IDs");
+        assert_eq!(
+            calls,
+            vec![total_id],
+            "deleted CALL must not resurrect via alive IDs"
+        );
     }
 
     #[test]
@@ -536,8 +536,7 @@ mod tests {
         let base_path = tmp.path().join("base.bin");
         write_columnar_from_nodes_edges(vec![main_fn, login], vec![call], &base_path).unwrap();
 
-        let authenticate =
-            Node::new(NodeType::Function, "authenticate").with_file_path("auth.rs");
+        let authenticate = Node::new(NodeType::Function, "authenticate").with_file_path("auth.rs");
         assert_ne!(authenticate.id, login_id);
 
         let mut delta = DeltaSegment::new();

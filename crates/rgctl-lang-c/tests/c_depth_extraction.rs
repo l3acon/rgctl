@@ -35,10 +35,7 @@ struct Point { int x; int y; };
                 && s.metadata.get("kind").and_then(|v| v.as_str()) == Some("union_specifier")
         }),
         "union U missing: {:?}",
-        out.symbols
-            .iter()
-            .map(|s| &s.name)
-            .collect::<Vec<_>>()
+        out.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
     );
     // `#define` macros are not indexed as graph Macro nodes (linux cold node cap).
     assert!(
@@ -61,12 +58,8 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../c-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_c::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "c",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("c", MANIFEST, &lang)
+        .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

@@ -7,16 +7,16 @@ use crate::cfg::ControlFlowGraph;
 use crate::cfg_builder::build_cfg_for_function;
 use crate::cfg_pdg_archive::CfgPdgArchive;
 use crate::clones::{
-    path_excluded, CloneError, FragmentCloneFilters, FragmentCloneGroup, FragmentCloneReport,
-    FragmentMember, FragmentSeedInfo, CLONE_REPORT_SCHEMA_VERSION_V2, MODE_FRAGMENT,
+    CLONE_REPORT_SCHEMA_VERSION_V2, CloneError, FragmentCloneFilters, FragmentCloneGroup,
+    FragmentCloneReport, FragmentMember, FragmentSeedInfo, MODE_FRAGMENT, path_excluded,
 };
 use crate::sese::extract_sese_regions;
 use crate::wl_hash::WeisfeilerLehmanHasher;
+use rgctl_graph::SnapshotNodeStore;
 use rgctl_graph::schema::{Node, NodeType};
 use rgctl_graph::structural_sketch::{
-    bloom_popcount, build_token_bloom, TokenBloom, TOKEN_BLOOM_WORDS,
+    TOKEN_BLOOM_WORDS, TokenBloom, bloom_popcount, build_token_bloom,
 };
-use rgctl_graph::SnapshotNodeStore;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -107,14 +107,9 @@ pub fn resolve_cfg_for_function(
         Err(_) => return Ok(None),
     };
 
-    let ext = full_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let ext_lang = language_from_ext(ext);
-    let language = node
-        .get_property("language")
-        .unwrap_or(&ext_lang);
+    let language = node.get_property("language").unwrap_or(&ext_lang);
 
     match build_cfg_for_function(language, &source, &node.name) {
         Ok(cfg) => Ok(Some(cfg)),
@@ -160,17 +155,25 @@ pub fn query_fragment_clones(
     query: FragmentSeedQuery,
     filters: FragmentCloneFilters,
 ) -> Result<FragmentCloneReport, CloneError> {
-    let graph_digest = store.content_digest().map_err(CloneError::Graph)?.to_string();
+    let graph_digest = store
+        .content_digest()
+        .map_err(CloneError::Graph)?
+        .to_string();
 
     // 1. Resolve seed node
     let (seed_node, seed_lines) = resolve_seed_node(store, &query)?;
 
     // 2. Resolve CFG for seed node
-    let seed_cfg = resolve_cfg_for_function(repo_root, &seed_node)?
-        .ok_or_else(|| CloneError::Graph(rgctl_error::Error::NotFound(format!("CFG for seed '{}'", seed_node.name))))?;
+    let seed_cfg = resolve_cfg_for_function(repo_root, &seed_node)?.ok_or_else(|| {
+        CloneError::Graph(rgctl_error::Error::NotFound(format!(
+            "CFG for seed '{}'",
+            seed_node.name
+        )))
+    })?;
 
     // 3. Extract SESE hammocks and locate target seed hammock
-    let seed_regions = extract_sese_regions(&seed_cfg, filters.min_statements, filters.max_statements);
+    let seed_regions =
+        extract_sese_regions(&seed_cfg, filters.min_statements, filters.max_statements);
     if seed_regions.is_empty() {
         return Ok(FragmentCloneReport {
             schema_version: CLONE_REPORT_SCHEMA_VERSION_V2,
@@ -249,7 +252,8 @@ pub fn query_fragment_clones(
             continue;
         };
 
-        let cand_regions = extract_sese_regions(&cand_cfg, filters.min_statements, filters.max_statements);
+        let cand_regions =
+            extract_sese_regions(&cand_cfg, filters.min_statements, filters.max_statements);
         for r in cand_regions {
             let h = WeisfeilerLehmanHasher::hash_region(&cand_cfg, &r);
             if h == seed_hash {
@@ -267,7 +271,9 @@ pub fn query_fragment_clones(
     }
 
     matched_members.sort_by(|a, b| (&a.file, a.start_line).cmp(&(&b.file, b.start_line)));
-    matched_members.dedup_by(|a, b| a.file == b.file && a.start_line == b.start_line && a.end_line == b.end_line);
+    matched_members.dedup_by(|a, b| {
+        a.file == b.file && a.start_line == b.start_line && a.end_line == b.end_line
+    });
 
     let groups = if matched_members.len() >= 2 {
         vec![FragmentCloneGroup {
@@ -297,7 +303,10 @@ pub fn discover_fragment_clones(
     repo_root: &Path,
     filters: FragmentCloneFilters,
 ) -> Result<FragmentCloneReport, CloneError> {
-    let graph_digest = store.content_digest().map_err(CloneError::Graph)?.to_string();
+    let graph_digest = store
+        .content_digest()
+        .map_err(CloneError::Graph)?
+        .to_string();
 
     let Some(col) = store.columnar() else {
         return Err(CloneError::Graph(rgctl_error::Error::Other(
@@ -348,7 +357,9 @@ pub fn discover_fragment_clones(
     let mut groups = Vec::new();
     for (structural_hash, mut members) in hash_to_members {
         members.sort_by(|a, b| (&a.file, a.start_line).cmp(&(&b.file, b.start_line)));
-        members.dedup_by(|a, b| a.file == b.file && a.start_line == b.start_line && a.end_line == b.end_line);
+        members.dedup_by(|a, b| {
+            a.file == b.file && a.start_line == b.start_line && a.end_line == b.end_line
+        });
 
         if members.len() >= 2 {
             groups.push(FragmentCloneGroup {
@@ -360,7 +371,13 @@ pub fn discover_fragment_clones(
         }
     }
 
-    groups.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| b.members[0].statement_count.cmp(&a.members[0].statement_count)));
+    groups.sort_by(|a, b| {
+        b.size.cmp(&a.size).then_with(|| {
+            b.members[0]
+                .statement_count
+                .cmp(&a.members[0].statement_count)
+        })
+    });
 
     Ok(FragmentCloneReport {
         schema_version: CLONE_REPORT_SCHEMA_VERSION_V2,
@@ -380,10 +397,16 @@ fn resolve_seed_node(
     if let Some(ref sym) = query.symbol {
         // Look up by function symbol name
         let Some(col) = store.columnar() else {
-            return Err(CloneError::Graph(rgctl_error::Error::Other("columnar store required".into())));
+            return Err(CloneError::Graph(rgctl_error::Error::Other(
+                "columnar store required".into(),
+            )));
         };
         let indexes = col.indexes_shared().map_err(CloneError::Graph)?;
-        let function_ids = indexes.1.get(&NodeType::Function).cloned().unwrap_or_default();
+        let function_ids = indexes
+            .1
+            .get(&NodeType::Function)
+            .cloned()
+            .unwrap_or_default();
 
         let mut matches = Vec::new();
         for id in function_ids {
@@ -395,12 +418,19 @@ fn resolve_seed_node(
         }
 
         if matches.is_empty() {
-            return Err(CloneError::Graph(rgctl_error::Error::NotFound(format!("symbol '{sym}'"))));
+            return Err(CloneError::Graph(rgctl_error::Error::NotFound(format!(
+                "symbol '{sym}'"
+            ))));
         }
         if matches.len() > 1 {
             // Disambiguate by file if provided
             if let Some(ref file) = query.file {
-                if let Some(m) = matches.iter().find(|n| n.file_path.as_deref().unwrap_or("").ends_with(file.as_str())) {
+                if let Some(m) = matches.iter().find(|n| {
+                    n.file_path
+                        .as_deref()
+                        .unwrap_or("")
+                        .ends_with(file.as_str())
+                }) {
                     return Ok((m.clone(), query.lines));
                 }
             }
@@ -428,15 +458,25 @@ fn resolve_seed_node(
     if let Some(ref file) = query.file {
         let (start, end) = query.lines.unwrap_or((1, usize::MAX));
         let Some(col) = store.columnar() else {
-            return Err(CloneError::Graph(rgctl_error::Error::Other("columnar store required".into())));
+            return Err(CloneError::Graph(rgctl_error::Error::Other(
+                "columnar store required".into(),
+            )));
         };
         let indexes = col.indexes_shared().map_err(CloneError::Graph)?;
-        let function_ids = indexes.1.get(&NodeType::Function).cloned().unwrap_or_default();
+        let function_ids = indexes
+            .1
+            .get(&NodeType::Function)
+            .cloned()
+            .unwrap_or_default();
 
         let mut best: Option<Node> = None;
         for id in function_ids {
             if let Ok(Some(n)) = store.get_node(id) {
-                if n.file_path.as_deref().unwrap_or("").ends_with(file.as_str()) {
+                if n.file_path
+                    .as_deref()
+                    .unwrap_or("")
+                    .ends_with(file.as_str())
+                {
                     let s = n.start_line.unwrap_or(0);
                     let e = n.end_line.unwrap_or(usize::MAX);
                     if s <= start && e >= end {
@@ -453,8 +493,12 @@ fn resolve_seed_node(
             return Ok((n, query.lines));
         }
 
-        return Err(CloneError::Graph(rgctl_error::Error::NotFound(format!("function in '{file}' spanning lines {start}-{end}"))));
+        return Err(CloneError::Graph(rgctl_error::Error::NotFound(format!(
+            "function in '{file}' spanning lines {start}-{end}"
+        ))));
     }
 
-    Err(CloneError::Graph(rgctl_error::Error::InvalidQuery("no seed symbol or file:lines specified".into())))
+    Err(CloneError::Graph(rgctl_error::Error::InvalidQuery(
+        "no seed symbol or file:lines specified".into(),
+    )))
 }

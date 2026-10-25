@@ -9,11 +9,7 @@ use tree_sitter::{Node, Parser};
 /// Cap AST walk depth (matches CFG expression walk limit in `rgctl-analysis`).
 const MAX_TREE_DEPTH: usize = 2048;
 
-fn push_traverse_children<'a>(
-    stack: &mut Vec<TraverseFrame<'a>>,
-    node: Node<'a>,
-    depth: usize,
-) {
+fn push_traverse_children<'a>(stack: &mut Vec<TraverseFrame<'a>>, node: Node<'a>, depth: usize) {
     let mut cursor = node.walk();
     let children: Vec<Node<'a>> = node.children(&mut cursor).collect();
     for child in children.into_iter().rev() {
@@ -86,9 +82,7 @@ impl ExtractCtx {
                 return Some(u.clone());
             }
         }
-        self.usings
-            .first()
-            .map(|u| format!("{u}.{type_name}"))
+        self.usings.first().map(|u| format!("{u}.{type_name}"))
     }
 }
 
@@ -442,7 +436,13 @@ impl CSharpPlugin {
         let mut symbols = Vec::new();
         let mut ctx = ExtractCtx::default();
         self.seed_ctx_from_tree(root, source, &mut ctx);
-        self.traverse(root, source, &file_path.to_string_lossy(), &mut ctx, &mut symbols)?;
+        self.traverse(
+            root,
+            source,
+            &file_path.to_string_lossy(),
+            &mut ctx,
+            &mut symbols,
+        )?;
         Ok(symbols)
     }
 
@@ -471,14 +471,7 @@ impl CSharpPlugin {
         let mut relations = Vec::new();
         let mut ctx = ExtractCtx::default();
         self.seed_ctx_from_tree(root, source, &mut ctx);
-        self.walk_csharp_calls(
-            root,
-            source,
-            file_path,
-            symbols,
-            &ctx,
-            &mut relations,
-        );
+        self.walk_csharp_calls(root, source, file_path, symbols, &ctx, &mut relations);
         self.collect_non_call_relations(root, source, file_path, symbols, &ctx, &mut relations)?;
         Ok(relations)
     }
@@ -674,13 +667,8 @@ impl CSharpPlugin {
                             .qualified_name
                             .clone()
                             .unwrap_or_else(|| from_fn.name.clone());
-                        let (to_type_hint, to_qualified_hint) = self.infer_csharp_call_hints(
-                            node,
-                            source,
-                            ctx,
-                            from_fn,
-                            &class_fields,
-                        );
+                        let (to_type_hint, to_qualified_hint) =
+                            self.infer_csharp_call_hints(node, source, ctx, from_fn, &class_fields);
                         let same_file_matches: Vec<_> = symbols
                             .iter()
                             .filter(|s| {
@@ -694,9 +682,7 @@ impl CSharpPlugin {
                                 .qualified_name
                                 .clone()
                                 .unwrap_or_else(|| callee.clone()),
-                            _ => to_qualified_hint
-                                .clone()
-                                .unwrap_or_else(|| callee.clone()),
+                            _ => to_qualified_hint.clone().unwrap_or_else(|| callee.clone()),
                         };
                         relations.push(Relation {
                             from,
@@ -759,7 +745,10 @@ impl CSharpPlugin {
             }
             "identifier" | "generic_name" => {
                 if let Some(hint) = ctx.hint_from_usings(&method_name) {
-                    return (Some(method_name.clone()), Some(format!("{hint}.{method_name}")));
+                    return (
+                        Some(method_name.clone()),
+                        Some(format!("{hint}.{method_name}")),
+                    );
                 }
             }
             _ => {}
@@ -1354,7 +1343,11 @@ fn collect_attributes(node: Node, source: &[u8]) -> Vec<(String, Option<String>)
     attrs
 }
 
-fn collect_attributes_from_list(list: Node, source: &[u8], attrs: &mut Vec<(String, Option<String>)>) {
+fn collect_attributes_from_list(
+    list: Node,
+    source: &[u8],
+    attrs: &mut Vec<(String, Option<String>)>,
+) {
     let mut cursor = list.walk();
     for child in list.children(&mut cursor) {
         if child.kind() == "attribute" {
@@ -1383,7 +1376,13 @@ fn type_text(node: Node, source: &[u8]) -> Option<String> {
 }
 
 fn simple_type_name(raw: &str) -> String {
-    raw.split('<').next().unwrap_or(raw).rsplit('.').next().unwrap_or(raw).to_string()
+    raw.split('<')
+        .next()
+        .unwrap_or(raw)
+        .rsplit('.')
+        .next()
+        .unwrap_or(raw)
+        .to_string()
 }
 
 fn collect_base_list_relations(

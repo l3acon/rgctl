@@ -81,8 +81,15 @@ fn c_ecommerce_import_graph_normalized() {
         "MATCH (n:Import) WHERE n.file_path LIKE '*.c' RETURN n LIMIT 10",
     );
     let count = data.get("count").and_then(|c| c.as_u64()).unwrap_or(0);
-    assert!(count > 0, "expected Import nodes from .c files, got {count}");
-    let rows = data.get("rows").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+    assert!(
+        count > 0,
+        "expected Import nodes from .c files, got {count}"
+    );
+    let rows = data
+        .get("rows")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
     for row in rows {
         let name = row
             .get("name")

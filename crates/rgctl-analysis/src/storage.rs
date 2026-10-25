@@ -4,8 +4,8 @@
 //! Not graph topology.
 
 use crate::analysis_pack::{
-    pack_function_ids, AnalysisPackWriter, SharedPackReader, SharedPackWriter,
-    ANALYSIS_PACK_INDEX_FILE,
+    ANALYSIS_PACK_INDEX_FILE, AnalysisPackWriter, SharedPackReader, SharedPackWriter,
+    pack_function_ids,
 };
 use crate::cfg::ControlFlowGraph;
 use crate::dominance::DominatorTree;
@@ -117,12 +117,18 @@ impl AnalysisStorage {
 
     /// Open an append-only pack writer (replaces per-function files during discover).
     pub fn open_pack_writer(&self) -> Result<SharedPackWriter> {
-        Ok(Mutex::new(Some(AnalysisPackWriter::create(&self.base_dir)?)))
+        Ok(Mutex::new(Some(AnalysisPackWriter::create(
+            &self.base_dir,
+        )?)))
     }
 
     /// Finish the pack writer and write the offset index.
     pub fn finish_pack(pack: SharedPackWriter) -> Result<()> {
-        if let Some(writer) = pack.lock().map_err(|e| Error::SerdeError(e.to_string()))?.take() {
+        if let Some(writer) = pack
+            .lock()
+            .map_err(|e| Error::SerdeError(e.to_string()))?
+            .take()
+        {
             let analysis_dir = writer
                 .data_path()
                 .parent()
@@ -151,9 +157,7 @@ impl AnalysisStorage {
         bytes: &[u8],
         pack: &SharedPackWriter,
     ) -> Result<()> {
-        let mut guard = pack
-            .lock()
-            .map_err(|e| Error::SerdeError(e.to_string()))?;
+        let mut guard = pack.lock().map_err(|e| Error::SerdeError(e.to_string()))?;
         let writer = guard
             .as_mut()
             .ok_or_else(|| Error::SerdeError("analysis pack writer not open".into()))?;
@@ -568,10 +572,7 @@ impl AnalysisStorage {
                     .collect());
             }
             let ids = pack_function_ids(&self.base_dir)?;
-            return Ok(ids
-                .into_iter()
-                .map(|id| self.bin_path(id))
-                .collect());
+            return Ok(ids.into_iter().map(|id| self.bin_path(id)).collect());
         }
         if !self.base_dir.exists() {
             return Ok(Vec::new());

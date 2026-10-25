@@ -43,7 +43,12 @@ contract C {
         let result = plugin
             .extract_all(Path::new("C.sol"), source)
             .expect("extract_all");
-        assert!(result.symbols.iter().any(|s| s.name == "C" && s.symbol_type == SymbolType::Class));
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "C" && s.symbol_type == SymbolType::Class)
+        );
         let g_sym = result
             .symbols
             .iter()

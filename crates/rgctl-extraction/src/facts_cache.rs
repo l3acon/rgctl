@@ -193,11 +193,7 @@ impl FactsCache {
 
     /// Look up a cached extraction (JSON-decodes **only** this entry on hit).
     pub fn get(&self, key: &FactsKey) -> Option<ExtractAllResult> {
-        let bytes = self
-            .entries
-            .read()
-            .ok()
-            .and_then(|m| m.get(key).cloned());
+        let bytes = self.entries.read().ok().and_then(|m| m.get(key).cloned());
         match bytes {
             Some(raw) => match serde_json::from_slice::<ExtractAllResult>(&raw) {
                 Ok(value) => {

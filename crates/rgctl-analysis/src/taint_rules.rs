@@ -5,7 +5,7 @@
 //! remains opt-in (`--with-taint`); language packs are scoped to the active set.
 //!
 //! Merge precedence: built-in < `.rgctl/taint-rules.d/` < `--taint-rules` < overlays.
-//! See issue <https://github.com/sshaaf/rgctl/issues/16>.
+//! See issue <https://github.com/rgctl/rgctl/issues/16>.
 
 use crate::language_profile::canonical_language_id;
 use crate::taint::{Sanitizer, TaintSink, TaintSource};
@@ -199,12 +199,12 @@ impl CompiledMatcher {
             },
             MatchSpec::AnySubstring { values } => Self::AnySubstring(values.clone()),
             MatchSpec::AllSubstrings { values } => Self::AllSubstrings(values.clone()),
-            MatchSpec::Regex { value } => Self::Regex(Regex::new(value).map_err(|source| {
-                TaintRuleError::Regex {
+            MatchSpec::Regex { value } => {
+                Self::Regex(Regex::new(value).map_err(|source| TaintRuleError::Regex {
                     rule_id: rule_id.to_string(),
                     source,
-                }
-            })?),
+                })?)
+            }
             MatchSpec::AllOf { of } => {
                 let mut parts = Vec::with_capacity(of.len());
                 for child in of {
@@ -237,11 +237,7 @@ impl CompiledLanguageRules {
     pub fn classify(
         &self,
         text: &str,
-    ) -> (
-        Option<TaintSource>,
-        Option<TaintSink>,
-        Option<Sanitizer>,
-    ) {
+    ) -> (Option<TaintSource>, Option<TaintSink>, Option<Sanitizer>) {
         let source = self
             .sources
             .iter()
@@ -264,13 +260,12 @@ impl CompiledLanguageRules {
         let matcher = CompiledMatcher::compile(&rule.match_spec, &rule.id)?;
         match rule.role {
             RuleRole::Source => {
-                let source = parse_source_kind(&rule.kind).ok_or_else(|| {
-                    TaintRuleError::UnknownKind {
+                let source =
+                    parse_source_kind(&rule.kind).ok_or_else(|| TaintRuleError::UnknownKind {
                         role: rule.role,
                         kind: rule.kind.clone(),
                         rule_id: rule.id.clone(),
-                    }
-                })?;
+                    })?;
                 self.sources.push(CompiledRule {
                     matcher,
                     source: Some(source),
@@ -279,11 +274,12 @@ impl CompiledLanguageRules {
                 });
             }
             RuleRole::Sink => {
-                let sink = parse_sink_kind(&rule.kind).ok_or_else(|| TaintRuleError::UnknownKind {
-                    role: rule.role,
-                    kind: rule.kind.clone(),
-                    rule_id: rule.id.clone(),
-                })?;
+                let sink =
+                    parse_sink_kind(&rule.kind).ok_or_else(|| TaintRuleError::UnknownKind {
+                        role: rule.role,
+                        kind: rule.kind.clone(),
+                        rule_id: rule.id.clone(),
+                    })?;
                 self.sinks.push(CompiledRule {
                     matcher,
                     source: None,
@@ -292,13 +288,12 @@ impl CompiledLanguageRules {
                 });
             }
             RuleRole::Sanitizer => {
-                let sanitizer = parse_sanitizer_kind(&rule.kind, rule.detail.as_deref()).ok_or_else(
-                    || TaintRuleError::UnknownKind {
+                let sanitizer = parse_sanitizer_kind(&rule.kind, rule.detail.as_deref())
+                    .ok_or_else(|| TaintRuleError::UnknownKind {
                         role: rule.role,
                         kind: rule.kind.clone(),
                         rule_id: rule.id.clone(),
-                    },
-                )?;
+                    })?;
                 self.sanitizers.push(CompiledRule {
                     matcher,
                     source: None,
@@ -451,16 +446,14 @@ impl TaintRuleSet {
     /// Rules for a language id (canonicalized).
     pub fn for_language(&self, language: &str) -> Option<&CompiledLanguageRules> {
         let key = canonical_language_id(language).unwrap_or(language);
-        self.by_language
-            .get(key)
-            .or_else(|| {
-                // typescript shares javascript pack.
-                if key == "typescript" {
-                    self.by_language.get("javascript")
-                } else {
-                    None
-                }
-            })
+        self.by_language.get(key).or_else(|| {
+            // typescript shares javascript pack.
+            if key == "typescript" {
+                self.by_language.get("javascript")
+            } else {
+                None
+            }
+        })
     }
 
     /// Number of languages with compiled rules.
@@ -631,13 +624,22 @@ mod tests {
     fn bundled_loads_all_tier1() {
         let set = TaintRuleSet::bundled().expect("bundled");
         for lang in [
-            "python", "javascript", "typescript", "rust", "go", "java", "csharp", "c", "cpp",
-            "php", "ruby", "puppet", "kotlin", "groovy",
+            "python",
+            "javascript",
+            "typescript",
+            "rust",
+            "go",
+            "java",
+            "csharp",
+            "c",
+            "cpp",
+            "php",
+            "ruby",
+            "puppet",
+            "kotlin",
+            "groovy",
         ] {
-            assert!(
-                set.for_language(lang).is_some(),
-                "missing rules for {lang}"
-            );
+            assert!(set.for_language(lang).is_some(), "missing rules for {lang}");
         }
     }
 

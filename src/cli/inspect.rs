@@ -227,7 +227,11 @@ fn node_to_symbol_candidate(n: &Node) -> SymbolCandidate {
 }
 
 /// Fuzzy name suggestions for NotFound (substring / length distance; capped).
-pub(crate) fn suggest_function_names(backend: &MemoryBackend, needle: &str, limit: usize) -> Vec<String> {
+pub(crate) fn suggest_function_names(
+    backend: &MemoryBackend,
+    needle: &str,
+    limit: usize,
+) -> Vec<String> {
     let needle_l = needle.to_ascii_lowercase();
     let Ok(nodes) = backend.all_nodes() else {
         return Vec::new();
@@ -356,11 +360,7 @@ fn resolve_symbol_function(
 ) -> Result<(Node, String)> {
     use rgctl_analysis::{candidates_from_backend, parse_fqn_symbol, resolve_symbol_uuid};
 
-    let parsed = parse_fqn_symbol(
-        symbol,
-        class.map(str::to_string),
-        file.map(str::to_string),
-    );
+    let parsed = parse_fqn_symbol(symbol, class.map(str::to_string), file.map(str::to_string));
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
 
