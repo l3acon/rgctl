@@ -311,8 +311,8 @@ function UnderstandRoom({
           </p>
         </Panel>
       )}
-      {lens === "cfgpddg" && <CfgPdgLens entry={entry} />}
-      {lens !== "spine" && lens !== "code" && lens !== "cfgpddg" && <LensPlaceholder lens={lens} />}
+      {lens === "cfgpdg" && <CfgPdgLens entry={entry} />}
+      {lens !== "spine" && lens !== "code" && lens !== "cfgpdg" && <LensPlaceholder lens={lens} />}
     </div>
   );
 }

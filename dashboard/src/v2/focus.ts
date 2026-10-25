@@ -79,7 +79,7 @@ export const ROOMS = [
 export const LENSES = [
   { id: "spine", label: "Spine" },
   { id: "code", label: "Code" },
-  { id: "cfgpddg", label: "CFG·PDG" },
+  { id: "cfgpdg", label: "CFG·PDG" },
   { id: "dataflow", label: "Dataflow" },
   { id: "slice", label: "Slice/Trace" },
   { id: "blast", label: "Blast" },
