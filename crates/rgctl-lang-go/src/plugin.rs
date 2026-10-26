@@ -190,10 +190,10 @@ impl GoPlugin {
                             names.push(param_child.utf8_text(source)?.to_string());
                         }
                         "type_identifier" | "pointer_type" | "slice_type" | "qualified_type"
-                        | "map_type" | "channel_type" | "function_type" | "array_type" => {
-                            if param_type.is_none() {
-                                param_type = Some(param_child.utf8_text(source)?.to_string());
-                            }
+                        | "map_type" | "channel_type" | "function_type" | "array_type"
+                            if param_type.is_none() =>
+                        {
+                            param_type = Some(param_child.utf8_text(source)?.to_string());
                         }
                         _ => {}
                     }

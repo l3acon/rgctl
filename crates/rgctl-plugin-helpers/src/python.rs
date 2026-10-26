@@ -238,19 +238,19 @@ fn collect_base_relations(
         }
         "subscript" => {
             let generic_text = node.utf8_text(source).ok().map(str::to_string);
-            if let Some(value) = node.child_by_field_name("value") {
-                if let Some(base) = python_simple_type_name(value, source) {
-                    push_extends(
-                        class_name,
-                        &base,
-                        node,
-                        source,
-                        file_path,
-                        language,
-                        generic_text.as_deref(),
-                        relations,
-                    );
-                }
+            if let Some(value) = node.child_by_field_name("value")
+                && let Some(base) = python_simple_type_name(value, source)
+            {
+                push_extends(
+                    class_name,
+                    &base,
+                    node,
+                    source,
+                    file_path,
+                    language,
+                    generic_text.as_deref(),
+                    relations,
+                );
             }
         }
         "argument_list" | "tuple" => {
@@ -272,6 +272,7 @@ fn collect_base_relations(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_extends(
     class_name: &str,
     base: &str,
@@ -314,7 +315,7 @@ pub fn decorators_for_node(node: Node, source: &[u8]) -> Vec<(String, Option<Str
                 return sibling_decs;
             }
             let mut out = sibling_decs;
-            out.extend(child_decs.drain(..));
+            out.append(&mut child_decs);
             return out;
         }
     }
@@ -325,10 +326,10 @@ fn collect_decorator_children(node: Node, source: &[u8]) -> Vec<(String, Option<
     let mut out = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "decorator" {
-            if let Some(parsed) = decorator_name_and_args(child, source) {
-                out.push(parsed);
-            }
+        if child.kind() == "decorator"
+            && let Some(parsed) = decorator_name_and_args(child, source)
+        {
+            out.push(parsed);
         }
     }
     out

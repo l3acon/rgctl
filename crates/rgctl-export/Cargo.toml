@@ -13,3 +13,6 @@ crossbeam-channel = "0.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
+
+[lints.clippy]
+collapsible_if = "allow"

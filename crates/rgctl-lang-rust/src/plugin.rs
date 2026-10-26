@@ -76,18 +76,18 @@ impl RustPlugin {
         }
 
         // Look for doc comments
-        if let Some(prev_sibling) = node.prev_sibling() {
-            if prev_sibling.kind() == "line_comment" {
-                let comment = prev_sibling.utf8_text(source)?;
-                if comment.starts_with("///") || comment.starts_with("//!") {
-                    documentation = Some(
-                        comment
-                            .trim_start_matches("///")
-                            .trim_start_matches("//!")
-                            .trim()
-                            .to_string(),
-                    );
-                }
+        if let Some(prev_sibling) = node.prev_sibling()
+            && prev_sibling.kind() == "line_comment"
+        {
+            let comment = prev_sibling.utf8_text(source)?;
+            if comment.starts_with("///") || comment.starts_with("//!") {
+                documentation = Some(
+                    comment
+                        .trim_start_matches("///")
+                        .trim_start_matches("//!")
+                        .trim()
+                        .to_string(),
+                );
             }
         }
 
@@ -208,13 +208,13 @@ impl RustPlugin {
                 }
 
                 // Pattern field may wrap the identifier (e.g. `mut name`)
-                if name.is_none() {
-                    if let Some(pattern) = child.child_by_field_name("pattern") {
-                        name = pattern
-                            .utf8_text(source)
-                            .ok()
-                            .map(|s| s.trim_start_matches("mut ").trim().to_string());
-                    }
+                if name.is_none()
+                    && let Some(pattern) = child.child_by_field_name("pattern")
+                {
+                    name = pattern
+                        .utf8_text(source)
+                        .ok()
+                        .map(|s| s.trim_start_matches("mut ").trim().to_string());
                 }
 
                 if let Some(name) = name {
@@ -595,12 +595,11 @@ impl RustPlugin {
                         }
                         found
                     };
-                    if !under_trait {
-                        if let Some(at) =
+                    if !under_trait
+                        && let Some(at) =
                             extract_associated_type(node, source, &file_path_str, None)
-                        {
-                            symbols.push(at);
-                        }
+                    {
+                        symbols.push(at);
                     }
                 }
                 "enum_variant" => {
@@ -620,12 +619,11 @@ impl RustPlugin {
                         }
                         cur = parent;
                     }
-                    if let (Some(en), Some(eqn)) = (enum_name, enum_qn) {
-                        if let Some(v) =
+                    if let (Some(en), Some(eqn)) = (enum_name, enum_qn)
+                        && let Some(v) =
                             extract_enum_variant_symbol(node, source, &file_path_str, &en, &eqn)
-                        {
-                            symbols.push(v);
-                        }
+                    {
+                        symbols.push(v);
                     }
                 }
                 "extern_crate_declaration" => {

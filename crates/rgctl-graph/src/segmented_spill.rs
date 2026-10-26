@@ -558,14 +558,13 @@ fn k_way_merge(run_paths: &[PathBuf], output: &Path, key_len: usize) -> Result<(
 
     let mut heap = BinaryHeap::new();
     for (i, reader) in readers.iter_mut().enumerate() {
-        match read_record_or_eof(reader, key_len)? {
-            Some(rec) => heap.push(HeapEntry {
+        if let Some(rec) = read_record_or_eof(reader, key_len)? {
+            heap.push(HeapEntry {
                 key: rec.key,
                 key_len: rec.key_len,
                 blob: rec.blob,
                 run_idx: i,
-            }),
-            None => {}
+            })
         }
     }
 

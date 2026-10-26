@@ -76,11 +76,11 @@ impl GraphFingerprint {
         let snapshot_path = repo_root
             .join(rgctl_graph::code_graph::GRAPH_DIR)
             .join(rgctl_graph::snapshot::SNAPSHOT_FILE);
-        if let Some(ref digest) = self.graph_digest {
-            if snapshot_path.exists() {
-                let mmap = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)?;
-                return Ok(mmap.content_digest()? == digest);
-            }
+        if let Some(ref digest) = self.graph_digest
+            && snapshot_path.exists()
+        {
+            let mmap = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)?;
+            return Ok(mmap.content_digest()? == digest);
         }
         let graph_db = repo_root
             .join(rgctl_graph::code_graph::GRAPH_DIR)

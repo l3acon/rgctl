@@ -172,13 +172,12 @@ fn print_dom_text_summary(dom: &DominatorTree, frontiers: bool) {
             .map(|p| format!("B{}", p.0))
             .unwrap_or_else(|| "-".into());
         println!("  B{} idom {parent}", id.0);
-        if frontiers {
-            if let Some(df) = dom.frontiers.get(id) {
-                if !df.is_empty() {
-                    let list: Vec<_> = df.iter().map(|b| format!("B{}", b.0)).collect();
-                    println!("       DF {{{}}}", list.join(", "));
-                }
-            }
+        if frontiers
+            && let Some(df) = dom.frontiers.get(id)
+            && !df.is_empty()
+        {
+            let list: Vec<_> = df.iter().map(|b| format!("B{}", b.0)).collect();
+            println!("       DF {{{}}}", list.join(", "));
         }
     }
     if ids.len() > 40 {
@@ -371,10 +370,10 @@ fn resolve_symbol_function(
                 let node = backend
                     .get_node(id)?
                     .ok_or_else(|| anyhow::anyhow!("function symbol not found: {symbol}"))?;
-                if let Some(line) = line {
-                    if node.start_line != Some(line) {
-                        return emit_not_found(ctx, backend, symbol, &parsed.target_name);
-                    }
+                if let Some(line) = line
+                    && node.start_line != Some(line)
+                {
+                    return emit_not_found(ctx, backend, symbol, &parsed.target_name);
                 }
                 return load_source(node);
             }

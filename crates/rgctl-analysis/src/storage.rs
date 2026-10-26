@@ -244,13 +244,13 @@ impl AnalysisStorage {
             })
             .unwrap_or((0, 0));
         let mut index = self.load_analysis_index().unwrap_or_default();
-        if let Some(prev) = index.get(&stable_key) {
-            if prev.function_id != analysis.function_id {
-                let old_bin = self.bin_path(prev.function_id);
-                let old_json = self.json_path(prev.function_id);
-                let _ = fs::remove_file(old_bin);
-                let _ = fs::remove_file(old_json);
-            }
+        if let Some(prev) = index.get(&stable_key)
+            && prev.function_id != analysis.function_id
+        {
+            let old_bin = self.bin_path(prev.function_id);
+            let old_json = self.json_path(prev.function_id);
+            let _ = fs::remove_file(old_bin);
+            let _ = fs::remove_file(old_json);
         }
         index.insert(
             stable_key.clone(),
@@ -301,13 +301,13 @@ impl AnalysisStorage {
     ) -> Result<()> {
         let mut index = self.load_analysis_index().unwrap_or_default();
         for entry in entries {
-            if let Some(prev) = index.get(&entry.stable_key) {
-                if prev.function_id != entry.function_id {
-                    let old_bin = self.bin_path(prev.function_id);
-                    let old_json = self.json_path(prev.function_id);
-                    let _ = fs::remove_file(old_bin);
-                    let _ = fs::remove_file(old_json);
-                }
+            if let Some(prev) = index.get(&entry.stable_key)
+                && prev.function_id != entry.function_id
+            {
+                let old_bin = self.bin_path(prev.function_id);
+                let old_json = self.json_path(prev.function_id);
+                let _ = fs::remove_file(old_bin);
+                let _ = fs::remove_file(old_json);
             }
             index.insert(entry.stable_key.clone(), entry.clone());
         }
@@ -589,14 +589,14 @@ impl AnalysisStorage {
 
     /// Load analysis for a function by ID (pack preferred, then per-function bincode, JSON fallback).
     pub fn load_function(&self, function_id: Uuid) -> Result<Option<FunctionAnalysis>> {
-        if let Some(reader) = self.pack_reader.get()? {
-            if let Some(bytes) = reader.record_bytes(function_id)? {
-                let mut analysis = decode_function_analysis_bincode(bytes)?;
-                if let Some(pdg) = analysis.pdg.as_mut() {
-                    Arc::make_mut(pdg).restore_derived_indexes();
-                }
-                return Ok(Some(analysis));
+        if let Some(reader) = self.pack_reader.get()?
+            && let Some(bytes) = reader.record_bytes(function_id)?
+        {
+            let mut analysis = decode_function_analysis_bincode(bytes)?;
+            if let Some(pdg) = analysis.pdg.as_mut() {
+                Arc::make_mut(pdg).restore_derived_indexes();
             }
+            return Ok(Some(analysis));
         }
         let bin_path = self.bin_path(function_id);
         if bin_path.exists() {
@@ -611,21 +611,21 @@ impl AnalysisStorage {
 
     /// Load all function analyses (pack preferred, then per-function files).
     pub fn load_all(&self) -> Result<Vec<FunctionAnalysis>> {
-        if let Some(reader) = self.pack_reader.get()? {
-            if !reader.is_empty() {
-                let mut analyses = Vec::with_capacity(reader.len());
-                for id in reader.function_ids() {
-                    if let Some(bytes) = reader.record_bytes(id)? {
-                        if let Ok(mut analysis) = decode_function_analysis_bincode(bytes) {
-                            if let Some(pdg) = analysis.pdg.as_mut() {
-                                Arc::make_mut(pdg).restore_derived_indexes();
-                            }
-                            analyses.push(analysis);
-                        }
+        if let Some(reader) = self.pack_reader.get()?
+            && !reader.is_empty()
+        {
+            let mut analyses = Vec::with_capacity(reader.len());
+            for id in reader.function_ids() {
+                if let Some(bytes) = reader.record_bytes(id)?
+                    && let Ok(mut analysis) = decode_function_analysis_bincode(bytes)
+                {
+                    if let Some(pdg) = analysis.pdg.as_mut() {
+                        Arc::make_mut(pdg).restore_derived_indexes();
                     }
+                    analyses.push(analysis);
                 }
-                return Ok(analyses);
             }
+            return Ok(analyses);
         }
         let paths = self.analysis_paths()?;
         let mut by_id: HashMap<Uuid, (bool, FunctionAnalysis)> = HashMap::new();

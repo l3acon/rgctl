@@ -152,10 +152,10 @@ pub fn classify_boundaries(
             Some((k, id, r)) => (k, id, Some(r)),
             None => (BoundaryKind::Internal, "default-internal".into(), None),
         };
-        if let Some(ref f) = filters {
-            if !f.contains(&kind) {
-                continue;
-            }
+        if let Some(ref f) = filters
+            && !f.contains(&kind)
+        {
+            continue;
         }
         if !method_tokens.is_empty() {
             let mut node_methods = HashSet::new();

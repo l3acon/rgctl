@@ -26,3 +26,6 @@ sysinfo = "0.30"
 
 [features]
 default = []
+
+[lints.clippy]
+collapsible_if = "allow"

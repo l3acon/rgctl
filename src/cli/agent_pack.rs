@@ -173,7 +173,7 @@ fn collect_skills(
     out: &mut Vec<PackArtifact>,
     seen_dest: &mut HashMap<PathBuf, ()>,
 ) -> Result<(), String> {
-    for (path, _) in pack_files() {
+    for path in pack_files().keys() {
         let path = path.to_string_lossy();
         if !path.starts_with(skills_prefix) {
             continue;
@@ -205,7 +205,7 @@ fn collect_commands(
     out: &mut Vec<PackArtifact>,
     seen_dest: &mut HashMap<PathBuf, ()>,
 ) -> Result<(), String> {
-    for (path, _) in pack_files() {
+    for path in pack_files().keys() {
         let path = path.to_string_lossy();
         if !path.starts_with(commands_prefix) {
             continue;

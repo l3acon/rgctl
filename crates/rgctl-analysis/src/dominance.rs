@@ -338,7 +338,7 @@ fn intersect_post_dom_sets(
         .filter(|b| {
             succs
                 .iter()
-                .all(|s| post_dom.get(s).map_or(false, |set| set.contains(*b)))
+                .all(|s| post_dom.get(s).is_some_and(|set| set.contains(*b)))
         })
         .copied()
         .collect()

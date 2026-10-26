@@ -289,7 +289,7 @@ impl ColumnarView {
         if start >= self.node_count as u32 {
             return Err(format!("node index {start} out of range"));
         }
-        let max_depth = max_depth.max(1).min(32);
+        let max_depth = max_depth.clamp(1, 32);
         let callers_adj = self.caller_adjacency();
 
         let seed = self.materialize_light(start)?;

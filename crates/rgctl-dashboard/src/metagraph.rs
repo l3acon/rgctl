@@ -105,11 +105,7 @@ fn is_metagraph_member(node: &rgctl_graph::schema::Node) -> bool {
 
 /// Doc `:Module` kinds we bucket; code package modules have no `kind` property.
 fn module_kind_allowed(kind: Option<&str>) -> bool {
-    match kind {
-        None => true,
-        Some("heading") | Some("code_block") => true,
-        _ => false,
-    }
+    matches!(kind, None | Some("heading") | Some("code_block"))
 }
 
 fn metagraph_edge_kind(edge_type: EdgeType) -> Option<&'static str> {

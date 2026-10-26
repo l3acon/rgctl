@@ -431,10 +431,10 @@ pub fn iter_bloom_functions(store: &SnapshotNodeStore) -> Result<Vec<Node>> {
         let Some(node) = store.get_node(id)? else {
             continue;
         };
-        if let Some(bloom) = node.token_bloom.as_ref() {
-            if bloom_popcount(bloom) > 0 {
-                out.push(node);
-            }
+        if let Some(bloom) = node.token_bloom.as_ref()
+            && bloom_popcount(bloom) > 0
+        {
+            out.push(node);
         }
     }
     Ok(out)
@@ -448,30 +448,30 @@ fn member_passes(node: &Node, filters: &CloneFilters) -> bool {
     if loc < filters.effective_min_loc() {
         return false;
     }
-    if let Some(ref path) = node.file_path {
-        if path_excluded(path.as_ref(), &filters.exclude) {
-            return false;
-        }
+    if let Some(ref path) = node.file_path
+        && path_excluded(path.as_ref(), &filters.exclude)
+    {
+        return false;
     }
-    if let Some(ref want) = filters.language {
-        if !language_matches(node, want) {
-            return false;
-        }
+    if let Some(ref want) = filters.language
+        && !language_matches(node, want)
+    {
+        return false;
     }
     true
 }
 
 fn language_matches(node: &Node, want: &str) -> bool {
     let want = want.to_ascii_lowercase();
-    if let Some(lang) = node.get_property("language") {
-        if lang.eq_ignore_ascii_case(&want) {
-            return true;
-        }
+    if let Some(lang) = node.get_property("language")
+        && lang.eq_ignore_ascii_case(&want)
+    {
+        return true;
     }
     let Some(path) = node.file_path.as_deref() else {
         return false;
     };
-    let path: &str = path.as_ref();
+    let path: &str = path;
     let ext = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
@@ -550,10 +550,10 @@ pub fn group_exact_from_nodes(nodes: &[Node], opts: &ExactCloneOptions) -> Vec<C
         if members.len() < 2 {
             continue;
         }
-        if let Some(seed) = opts.seed_id {
-            if !members.iter().any(|n| n.id == seed) {
-                continue;
-            }
+        if let Some(seed) = opts.seed_id
+            && !members.iter().any(|n| n.id == seed)
+        {
+            continue;
         }
         let mut clone_members: Vec<CloneMember> =
             members.iter().map(|n| CloneMember::from_node(n)).collect();
@@ -612,12 +612,12 @@ pub fn exact_clones_with_cache(
     write_sidecar: bool,
 ) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
-    if opts.seed_id.is_none() {
-        if let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_EXACT)? {
-            if cached.mode == MODE_EXACT && cached.filters == opts.filters {
-                return Ok(cached);
-            }
-        }
+    if opts.seed_id.is_none()
+        && let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_EXACT)?
+        && cached.mode == MODE_EXACT
+        && cached.filters == opts.filters
+    {
+        return Ok(cached);
     }
     let report = build_exact_report(store, opts)?;
     if write_sidecar && report.seed.is_none() {
@@ -861,15 +861,13 @@ pub fn bloom_clones_with_cache(
     write_sidecar: bool,
 ) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
-    if opts.seed_id.is_none() {
-        if let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_BLOOM)? {
-            if cached.mode == MODE_BLOOM
-                && cached.filters == opts.filters
-                && cached.threshold == Some(opts.threshold)
-            {
-                return Ok(cached);
-            }
-        }
+    if opts.seed_id.is_none()
+        && let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_BLOOM)?
+        && cached.mode == MODE_BLOOM
+        && cached.filters == opts.filters
+        && cached.threshold == Some(opts.threshold)
+    {
+        return Ok(cached);
     }
     let report = build_bloom_report(store, opts)?;
     if write_sidecar && report.seed.is_none() {

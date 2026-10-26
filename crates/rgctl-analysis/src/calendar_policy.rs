@@ -141,17 +141,17 @@ pub fn evaluate_calendar_disposition(
         }
     }
 
-    if config.enforce_sla {
-        if let Some(sla_days) = config.violation_sla_days {
-            let rule = delta.violation.rule_id();
-            if let Some(age_days) = ledger.violation_age_days(delta.key.as_u64(), rule, now_secs) {
-                if age_days > sla_days as u64 {
-                    return CalendarDisposition {
-                        severity: Some(CalendarSeverity::Fail),
-                        override_blocking: Some(true),
-                    };
-                }
-            }
+    if config.enforce_sla
+        && let Some(sla_days) = config.violation_sla_days
+    {
+        let rule = delta.violation.rule_id();
+        if let Some(age_days) = ledger.violation_age_days(delta.key.as_u64(), rule, now_secs)
+            && age_days > sla_days as u64
+        {
+            return CalendarDisposition {
+                severity: Some(CalendarSeverity::Fail),
+                override_blocking: Some(true),
+            };
         }
     }
 
@@ -234,7 +234,7 @@ pub fn iso_date_plus_days(iso: &str, delta_days: i64) -> Option<u64> {
 fn civil_date_to_day_number(year: i64, month: u32, day: u32) -> u64 {
     let y = if month <= 2 { year - 1 } else { year };
     let era = if y >= 0 { y / 400 } else { (y - 399) / 400 };
-    let yoe = (y - era * 400) as i64;
+    let yoe = y - era * 400;
     let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy as i64;
     (era * 146_097 + doe - 719_468) as u64

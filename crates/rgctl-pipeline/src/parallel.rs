@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 /// Default Rayon worker stack (OS default, typically ~2 MiB on macOS).
 /// Used for extract, preload, Kantra, and other shallow work.
-const DEFAULT_WORKER_STACK_SIZE: usize = 0;
+const _DEFAULT_WORKER_STACK_SIZE: usize = 0; // rayon default
 
 /// CFG / field-write workers that may still hit deep native stacks before iterative
 /// lowering completes on every path.
@@ -41,11 +41,8 @@ fn get_pool(key: PoolKey) -> Arc<ThreadPool> {
     let mut builder =
         rayon::ThreadPoolBuilder::new().thread_name(|idx| format!("rgctl-worker-{idx}"));
     match key.stack {
-        PoolStack::Default => {
-            if DEFAULT_WORKER_STACK_SIZE > 0 {
-                builder = builder.stack_size(DEFAULT_WORKER_STACK_SIZE);
-            }
-        }
+        // DEFAULT_WORKER_STACK_SIZE is 0 → rayon default stack.
+        PoolStack::Default => {}
         PoolStack::Large => {
             builder = builder.stack_size(LARGE_WORKER_STACK_SIZE);
         }

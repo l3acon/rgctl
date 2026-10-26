@@ -399,10 +399,10 @@ impl<'a> StructuredQuery<'a> {
         let Some(c) = class else {
             return true;
         };
-        if let Some(qn) = node.qualified_name.as_deref() {
-            if qn.contains(c) {
-                return true;
-            }
+        if let Some(qn) = node.qualified_name.as_deref()
+            && qn.contains(c)
+        {
+            return true;
         }
         if let Some(v) = node.get_property("class") {
             return v == c;
@@ -439,14 +439,14 @@ impl<'a> StructuredQuery<'a> {
         true
     }
 
+    #[allow(clippy::type_complexity)]
     fn indexes(
         &self,
     ) -> Result<Option<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>>> {
-        Ok(self
-            .store
+        self.store
             .columnar()
             .map(|c| c.indexes_shared())
-            .transpose()?)
+            .transpose()
     }
 
     /// Resolve a unique symbol or return ambiguity / not-found errors.
@@ -479,10 +479,10 @@ impl<'a> StructuredQuery<'a> {
     }
 
     fn lookup_name_candidates(&self, symbol: &str, exact: bool) -> Result<Vec<Node>> {
-        if let Ok(uuid) = Uuid::parse_str(symbol) {
-            if let Some(n) = self.store.get_node(uuid)? {
-                return Ok(vec![n]);
-            }
+        if let Ok(uuid) = Uuid::parse_str(symbol)
+            && let Some(n) = self.store.get_node(uuid)?
+        {
+            return Ok(vec![n]);
         }
         if exact || !is_glob_pattern(symbol) {
             if let Some(indexes) = self.indexes()? {
@@ -548,10 +548,10 @@ impl<'a> StructuredQuery<'a> {
             }
         }
 
-        if let Some(annots) = filters.annotation_names.as_ref() {
-            if !annots.is_empty() {
-                return self.find_by_annotation(annots, pattern, filters);
-            }
+        if let Some(annots) = filters.annotation_names.as_ref()
+            && !annots.is_empty()
+        {
+            return self.find_by_annotation(annots, pattern, filters);
         }
 
         let candidates = if let Some(pat) = pattern {
@@ -582,10 +582,10 @@ impl<'a> StructuredQuery<'a> {
             let need_cold = Self::filters_need_cold_ext(filters);
             let mut out = Vec::new();
             for idx in 0..col.node_count() {
-                if let Some(want) = type_filter {
-                    if col.node_type_at(idx)? != want {
-                        continue;
-                    }
+                if let Some(want) = type_filter
+                    && col.node_type_at(idx)? != want
+                {
+                    continue;
                 }
                 if let Some(want_line) = filters.line {
                     let row = col.node_row_at(idx)?;
@@ -626,10 +626,10 @@ impl<'a> StructuredQuery<'a> {
             let Some(n) = self.store.get_node(id)? else {
                 continue;
             };
-            if let Some(t) = type_filter {
-                if n.node_type != t {
-                    continue;
-                }
+            if let Some(t) = type_filter
+                && n.node_type != t
+            {
+                continue;
             }
             if self.node_passes(&n, filters) {
                 out.push(n);
@@ -831,6 +831,7 @@ impl<'a> StructuredQuery<'a> {
     }
 
     /// Seeded or seedless relations.
+    #[allow(clippy::too_many_arguments)]
     pub fn relations(
         &self,
         symbol: Option<&str>,
@@ -922,6 +923,7 @@ impl<'a> StructuredQuery<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn relations_seeded(
         &self,
         symbol: &str,
@@ -982,10 +984,10 @@ impl<'a> StructuredQuery<'a> {
                         .and_modify(|row| {
                             row.occurrences = row.occurrences.saturating_add(1);
                             // Keep the shortest hop when collapsing duplicates.
-                            if let (Some(h), Some(prev)) = (Some(hop), row.hops) {
-                                if h < prev {
-                                    row.hops = Some(h);
-                                }
+                            if let (Some(h), Some(prev)) = (Some(hop), row.hops)
+                                && h < prev
+                            {
+                                row.hops = Some(h);
                             }
                         })
                         .or_insert(EdgeRow {
@@ -1310,7 +1312,7 @@ impl InventoryBy {
 
 /// Parse CLI node type string.
 pub fn parse_node_type(s: &str) -> Result<NodeType> {
-    let key = s.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let key = s.to_ascii_lowercase().replace(['-', '_'], "");
     for t in ALL_NODE_TYPES {
         if node_type_cli(*t).replace('_', "") == key {
             return Ok(*t);
@@ -1329,7 +1331,7 @@ pub fn parse_node_type(s: &str) -> Result<NodeType> {
 
 /// Parse CLI edge type string.
 pub fn parse_edge_type(s: &str) -> Result<EdgeType> {
-    let key = s.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let key = s.to_ascii_lowercase().replace(['-', '_'], "");
     if matches!(key.as_str(), "cochange" | "cochangeswith" | "cochanges") {
         return Ok(EdgeType::CoChangesWith);
     }
@@ -1479,19 +1481,19 @@ fn annotation_name_matches(node: &Node, want: &str) -> bool {
     if node.name == want {
         return true;
     }
-    if let Some(simple) = node.name.rsplit('.').next() {
-        if simple == want {
-            return true;
-        }
+    if let Some(simple) = node.name.rsplit('.').next()
+        && simple == want
+    {
+        return true;
     }
     if let Some(qn) = node.qualified_name.as_deref() {
         if qn == want {
             return true;
         }
-        if let Some(simple) = qn.rsplit('.').next() {
-            if simple == want {
-                return true;
-            }
+        if let Some(simple) = qn.rsplit('.').next()
+            && simple == want
+        {
+            return true;
         }
     }
     false

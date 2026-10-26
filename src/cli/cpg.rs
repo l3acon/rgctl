@@ -421,6 +421,7 @@ fn run_mutations(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_flows(
     ctx: &CliContext,
     file: String,

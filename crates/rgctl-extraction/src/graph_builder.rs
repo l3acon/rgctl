@@ -556,7 +556,7 @@ impl GraphBuilder {
             .or_else(|| symbol.metadata.get("module_path"))
             .and_then(|v| v.as_str())
             .or_else(|| symbol.qualified_name.as_deref().filter(|q| *q != "*"))
-            .or_else(|| symbol.signature.as_deref())
+            .or(symbol.signature.as_deref())
             .map(clean_import_module_text)
             .filter(|m| !m.is_empty())
             .or_else(|| infer_import_module_from_name(&symbol.name));
@@ -1372,20 +1372,20 @@ impl GraphBuilder {
         if let Some(module) = by_file.get(to_name) {
             return Some(module.clone());
         }
-        if let Some(hint) = to_type_hint {
-            if let Some(module) = by_file.get(hint) {
-                return Some(module.clone());
-            }
+        if let Some(hint) = to_type_hint
+            && let Some(module) = by_file.get(hint)
+        {
+            return Some(module.clone());
         }
         // `UserService.charge` / `UserService::charge` → bind on receiver prefix.
         let prefix = to_name
             .split(['.', ':'])
             .next()
             .filter(|s| !s.is_empty() && *s != to_name);
-        if let Some(prefix) = prefix {
-            if let Some(module) = by_file.get(prefix) {
-                return Some(module.clone());
-            }
+        if let Some(prefix) = prefix
+            && let Some(module) = by_file.get(prefix)
+        {
+            return Some(module.clone());
         }
         // Wildcard import fallback.
         by_file.get("*").cloned()
@@ -2079,12 +2079,12 @@ fn infer_import_module_from_name(name: &str) -> Option<String> {
 fn infer_import_binding_from_name(name: &str, cleaned_module: &str) -> Option<String> {
     let trimmed = name.trim().trim_end_matches(';').trim();
     // C# alias: `using Alias = Namespace.Type`
-    if let Some(rest) = trimmed.strip_prefix("using ") {
-        if let Some((lhs, _)) = rest.split_once('=') {
-            let alias = lhs.trim();
-            if !alias.is_empty() && !alias.contains(' ') {
-                return Some(alias.to_string());
-            }
+    if let Some(rest) = trimmed.strip_prefix("using ")
+        && let Some((lhs, _)) = rest.split_once('=')
+    {
+        let alias = lhs.trim();
+        if !alias.is_empty() && !alias.contains(' ') {
+            return Some(alias.to_string());
         }
     }
     // ECMAScript/Python `module:binding` / `module:* as alias` (skip Rust `::`)
@@ -2155,22 +2155,21 @@ fn references_allows_external_stub(relation: &Relation) -> bool {
     {
         return true;
     }
-    match relation
-        .to_type_hint
-        .as_deref()
-        .map(|s| s.to_ascii_lowercase())
-        .as_deref()
-    {
+    matches!(
+        relation
+            .to_type_hint
+            .as_deref()
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
         Some("puppetresource")
-        | Some("puppetclass")
-        | Some("class")
-        | Some("interface")
-        | Some("enum")
-        | Some("annotation")
-        | Some("module")
-        | Some("struct") => true,
-        _ => false,
-    }
+            | Some("puppetclass")
+            | Some("class")
+            | Some("interface")
+            | Some("enum")
+            | Some("annotation")
+            | Some("module")
+            | Some("struct")
+    )
 }
 
 fn stub_node_type_for_target(relation: &Relation) -> NodeType {
@@ -2373,22 +2372,25 @@ fn type_simple_name(name: &str) -> &str {
 
 /// Split `Owner.method` / `Owner::method` / Ruby `Owner#method`.
 fn split_owner_method(qn: &str) -> Option<(&str, &str)> {
-    if let Some((owner, method)) = qn.rsplit_once("::") {
-        if !owner.is_empty() && !method.is_empty() {
-            let method = method.split('<').next().unwrap_or(method);
-            let owner = owner.split('<').next().unwrap_or(owner);
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once("::")
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        let method = method.split('<').next().unwrap_or(method);
+        let owner = owner.split('<').next().unwrap_or(owner);
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('#') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('#')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('.') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('.')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
     None
 }

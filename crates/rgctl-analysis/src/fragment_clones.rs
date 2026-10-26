@@ -47,10 +47,10 @@ pub fn stage1_filter_functions(
             continue;
         };
 
-        if let Some(ref path) = node.file_path {
-            if path_excluded(path.as_ref(), &filters.exclude) {
-                continue;
-            }
+        if let Some(ref path) = node.file_path
+            && path_excluded(path.as_ref(), &filters.exclude)
+        {
+            continue;
         }
 
         // If seed has no tokens, everything passes Stage 1
@@ -86,10 +86,10 @@ pub fn resolve_cfg_for_function(
 ) -> Result<Option<ControlFlowGraph>, CloneError> {
     // 1. Fast path: check CFG/PDG archive Table of Contents
     let archive_path = CfgPdgArchive::default_path(repo_root);
-    if archive_path.is_file() {
-        if let Ok(Some(record)) = CfgPdgArchive::load_record_from_path(&archive_path, node.id) {
-            return Ok(Some((*record.cfg).clone()));
-        }
+    if archive_path.is_file()
+        && let Ok(Some(record)) = CfgPdgArchive::load_record_from_path(&archive_path, node.id)
+    {
+        return Ok(Some((*record.cfg).clone()));
     }
 
     // 2. Fallback path: on-demand parse source with tree-sitter
@@ -327,10 +327,10 @@ pub fn discover_fragment_clones(
             continue;
         };
 
-        if let Some(ref path) = node.file_path {
-            if path_excluded(path.as_ref(), &filters.exclude) {
-                continue;
-            }
+        if let Some(ref path) = node.file_path
+            && path_excluded(path.as_ref(), &filters.exclude)
+        {
+            continue;
         }
 
         let Ok(Some(cfg)) = resolve_cfg_for_function(repo_root, &node) else {
@@ -410,10 +410,10 @@ fn resolve_seed_node(
 
         let mut matches = Vec::new();
         for id in function_ids {
-            if let Ok(Some(n)) = store.get_node(id) {
-                if n.name == *sym || n.qualified_name.as_deref() == Some(sym.as_str()) {
-                    matches.push(n);
-                }
+            if let Ok(Some(n)) = store.get_node(id)
+                && (n.name == *sym || n.qualified_name.as_deref() == Some(sym.as_str()))
+            {
+                matches.push(n);
             }
         }
 
@@ -424,15 +424,15 @@ fn resolve_seed_node(
         }
         if matches.len() > 1 {
             // Disambiguate by file if provided
-            if let Some(ref file) = query.file {
-                if let Some(m) = matches.iter().find(|n| {
+            if let Some(ref file) = query.file
+                && let Some(m) = matches.iter().find(|n| {
                     n.file_path
                         .as_deref()
                         .unwrap_or("")
                         .ends_with(file.as_str())
-                }) {
-                    return Ok((m.clone(), query.lines));
-                }
+                })
+            {
+                return Ok((m.clone(), query.lines));
             }
 
             return Err(CloneError::Graph(rgctl_error::Error::AmbiguousSymbol {
@@ -471,20 +471,19 @@ fn resolve_seed_node(
 
         let mut best: Option<Node> = None;
         for id in function_ids {
-            if let Ok(Some(n)) = store.get_node(id) {
-                if n.file_path
+            if let Ok(Some(n)) = store.get_node(id)
+                && n.file_path
                     .as_deref()
                     .unwrap_or("")
                     .ends_with(file.as_str())
-                {
-                    let s = n.start_line.unwrap_or(0);
-                    let e = n.end_line.unwrap_or(usize::MAX);
-                    if s <= start && e >= end {
-                        best = Some(n);
-                        break;
-                    } else if s <= end && e >= start {
-                        best = Some(n);
-                    }
+            {
+                let s = n.start_line.unwrap_or(0);
+                let e = n.end_line.unwrap_or(usize::MAX);
+                if s <= start && e >= end {
+                    best = Some(n);
+                    break;
+                } else if s <= end && e >= start {
+                    best = Some(n);
                 }
             }
         }

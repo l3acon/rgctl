@@ -1520,12 +1520,8 @@ fn find_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
 
 fn find_direct_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == kind {
-            return Some(child);
-        }
-    }
-    None
+    node.children(&mut cursor)
+        .find(|&child| child.kind() == kind)
 }
 
 fn field_visibility(node: Node, source: &[u8]) -> Option<String> {

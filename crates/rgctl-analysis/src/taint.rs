@@ -356,22 +356,20 @@ impl<'a> TaintAnalyzer<'a> {
                     sanitizers.push(san.clone());
                 }
             }
-            if let Some(ref engine) = self.type_inference {
-                if let Some(typ) = engine.get_type(*node_id, variable) {
-                    if self
-                        .dom_tree
-                        .dominates(self.pdg.nodes[node_id].block, sink_block)
-                    {
-                        match typ {
-                            InferredType::Int | InferredType::Float => {
-                                sanitizers.push(Sanitizer::TypeCast("numeric".into()));
-                            }
-                            InferredType::Bool => {
-                                sanitizers.push(Sanitizer::TypeCast("boolean".into()));
-                            }
-                            _ => {}
-                        }
+            if let Some(ref engine) = self.type_inference
+                && let Some(typ) = engine.get_type(*node_id, variable)
+                && self
+                    .dom_tree
+                    .dominates(self.pdg.nodes[node_id].block, sink_block)
+            {
+                match typ {
+                    InferredType::Int | InferredType::Float => {
+                        sanitizers.push(Sanitizer::TypeCast("numeric".into()));
                     }
+                    InferredType::Bool => {
+                        sanitizers.push(Sanitizer::TypeCast("boolean".into()));
+                    }
+                    _ => {}
                 }
             }
         }

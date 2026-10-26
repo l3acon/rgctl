@@ -127,14 +127,11 @@ pub fn run(ctx: &CliContext, args: ClonesArgs) -> Result<()> {
         };
 
         let mut parsed_lines = None;
-        if let Some(ref l) = args.lines {
-            if let Some((s_str, e_str)) = l.split_once('-') {
-                if let (Ok(s), Ok(e)) =
-                    (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>())
-                {
-                    parsed_lines = Some((s, e));
-                }
-            }
+        if let Some(ref l) = args.lines
+            && let Some((s_str, e_str)) = l.split_once('-')
+            && let (Ok(s), Ok(e)) = (s_str.trim().parse::<usize>(), e_str.trim().parse::<usize>())
+        {
+            parsed_lines = Some((s, e));
         }
 
         let seed_input = args.seed.as_ref().or(args.symbol.as_ref());

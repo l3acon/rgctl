@@ -419,11 +419,10 @@ async fn dashboard_fallback(
 
         // Redirect before serving: a trailing slash would otherwise serve the shell at a depth where its own
         // relative asset URLs do not resolve.
-        if is_client_route(&method, &path) {
-            if let Some(target) = without_trailing_slash(&path, query.as_deref()) {
-                return (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, target)])
-                    .into_response();
-            }
+        if is_client_route(&method, &path)
+            && let Some(target) = without_trailing_slash(&path, query.as_deref())
+        {
+            return (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, target)]).into_response();
         }
 
         let svc = ServeDir::new(&state.dashboard_dir).append_index_html_on_directories(true);

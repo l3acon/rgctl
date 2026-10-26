@@ -52,13 +52,13 @@ pub fn run(ctx: &CliContext, args: GqlArgs) -> Result<()> {
         execute_with_community(backend, &args.query, community.as_ref())?
     };
 
-    if args.explain {
-        if let Some(plan) = result.plan {
-            for step in &plan.steps {
-                println!("{}: {}", step.operation, step.detail);
-            }
-            println!();
+    if args.explain
+        && let Some(plan) = result.plan
+    {
+        for step in &plan.steps {
+            println!("{}: {}", step.operation, step.detail);
         }
+        println!();
     }
 
     for row in &result.rows {

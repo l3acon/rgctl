@@ -18,6 +18,7 @@ mod single_pass;
 pub use plugin::CSharpPlugin;
 
 /// Register this language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(CSharpPlugin::new().expect("init CSharpPlugin")));
 }

@@ -466,10 +466,10 @@ impl Node {
             return;
         }
         self.id = crate::stable_key::deterministic_node_id(
-            self.file_path.as_deref().map(|s| s.as_ref()),
+            self.file_path.as_deref(),
             self.name.as_ref(),
             self.node_type,
-            self.qualified_name.as_deref().map(|s| s.as_ref()),
+            self.qualified_name.as_deref(),
         );
     }
 

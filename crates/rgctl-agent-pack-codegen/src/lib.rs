@@ -195,8 +195,8 @@ fn emit_command(
 fn command_filename(cmd: &CommandEntry, style: &str, ext: &str) -> String {
     let base = match style {
         "colon" => format!("rgctl:{}", cmd.id),
-        "dollar" => format!("rgctl-{}", cmd.id),
-        "slash" | "hyphen" | _ => format!("rgctl-{}", cmd.id),
+        // dollar / slash / hyphen / unknown → hyphenated filename
+        _ => format!("rgctl-{}", cmd.id),
     };
     if ext.is_empty() {
         base
@@ -316,17 +316,16 @@ fn ensure_rgctl_managed_frontmatter(
     if existing.contains("rgctl-managed: true") {
         return Ok(());
     }
-    if existing.starts_with("---\n") {
-        let rest = &existing[4..];
-        if let Some(end) = rest.find("\n---\n") {
-            let front = &rest[..end];
-            let body = &rest[end + 5..];
-            let updated = format!(
-                "---\n{front}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n{body}"
-            );
-            fs::write(skill_path, updated).map_err(|e| e.to_string())?;
-            return Ok(());
-        }
+    if let Some(rest) = existing.strip_prefix("---\n")
+        && let Some(end) = rest.find("\n---\n")
+    {
+        let front = &rest[..end];
+        let body = &rest[end + 5..];
+        let updated = format!(
+            "---\n{front}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n{body}"
+        );
+        fs::write(skill_path, updated).map_err(|e| e.to_string())?;
+        return Ok(());
     }
     let updated = format!(
         "---\nname: {skill_id}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n\n{existing}"

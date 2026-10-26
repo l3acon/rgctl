@@ -165,12 +165,13 @@ impl<'a> BlastRadiusAnalyzer<'a> {
                 continue;
             };
             for pred in view.incoming_filtered(caller_idx, CALL_EDGES) {
-                if let Some(uuid) = view.get_uuid(pred) {
-                    if function_ids.contains(&uuid) && uuid != symbol_id {
-                        let next_depth = depth + 1;
-                        if next_depth <= self.max_depth {
-                            queue.push_back((uuid, next_depth));
-                        }
+                if let Some(uuid) = view.get_uuid(pred)
+                    && function_ids.contains(&uuid)
+                    && uuid != symbol_id
+                {
+                    let next_depth = depth + 1;
+                    if next_depth <= self.max_depth {
+                        queue.push_back((uuid, next_depth));
                     }
                 }
             }

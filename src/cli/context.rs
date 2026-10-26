@@ -81,15 +81,15 @@ impl CliContext {
             "error_code": error_code,
             "message": message,
         });
-        if let Some(c) = candidates {
-            if !c.is_empty() {
-                value["candidates"] = serde_json::to_value(c)?;
-            }
+        if let Some(c) = candidates
+            && !c.is_empty()
+        {
+            value["candidates"] = serde_json::to_value(c)?;
         }
-        if let Some(s) = suggestions {
-            if !s.is_empty() {
-                value["suggestions"] = serde_json::to_value(s)?;
-            }
+        if let Some(s) = suggestions
+            && !s.is_empty()
+        {
+            value["suggestions"] = serde_json::to_value(s)?;
         }
         if let Some(cmd) = recovery_command {
             value["recovery_command"] = serde_json::Value::String(cmd.to_string());
@@ -173,10 +173,10 @@ impl CliContext {
 
     pub fn emit_bytes(&self, bytes: &[u8]) -> Result<()> {
         if let Some(path) = &self.output {
-            if let Some(parent) = path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    fs::create_dir_all(parent)?;
-                }
+            if let Some(parent) = path.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent)?;
             }
             fs::write(path, bytes)?;
         } else {
@@ -187,12 +187,11 @@ impl CliContext {
                 }
                 return Ok(());
             }
-            if !bytes.ends_with(b"\n") {
-                if let Err(e) = out.write_all(b"\n") {
-                    if e.kind() != io::ErrorKind::BrokenPipe {
-                        return Err(e.into());
-                    }
-                }
+            if !bytes.ends_with(b"\n")
+                && let Err(e) = out.write_all(b"\n")
+                && e.kind() != io::ErrorKind::BrokenPipe
+            {
+                return Err(e.into());
             }
         }
         Ok(())

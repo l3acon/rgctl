@@ -58,24 +58,24 @@ fn field_access_def(node: Node, source: &[u8]) -> Option<DefVar> {
             }
         }
         // Last identifier is the member; everything before is the receiver expression.
-        if let Some((last, prefix)) = named.split_last() {
-            if matches!(last.kind(), "identifier" | "simple_identifier") {
-                let member = last.utf8_text(source).ok()?.to_string();
-                let receiver = if prefix.is_empty() {
-                    None
-                } else if prefix.len() == 1 {
-                    prefix[0].utf8_text(source).ok().map(str::to_string)
-                } else {
-                    // Multi-hop `a.b.c` — use full prefix text as receiver (best-effort).
-                    let start = prefix[0].start_byte();
-                    let end = prefix[prefix.len() - 1].end_byte();
-                    std::str::from_utf8(&source[start..end])
-                        .ok()
-                        .map(str::to_string)
-                };
-                if let Some(receiver) = receiver {
-                    return Some(DefVar::Field { receiver, member });
-                }
+        if let Some((last, prefix)) = named.split_last()
+            && matches!(last.kind(), "identifier" | "simple_identifier")
+        {
+            let member = last.utf8_text(source).ok()?.to_string();
+            let receiver = if prefix.is_empty() {
+                None
+            } else if prefix.len() == 1 {
+                prefix[0].utf8_text(source).ok().map(str::to_string)
+            } else {
+                // Multi-hop `a.b.c` — use full prefix text as receiver (best-effort).
+                let start = prefix[0].start_byte();
+                let end = prefix[prefix.len() - 1].end_byte();
+                std::str::from_utf8(&source[start..end])
+                    .ok()
+                    .map(str::to_string)
+            };
+            if let Some(receiver) = receiver {
+                return Some(DefVar::Field { receiver, member });
             }
         }
         return node
@@ -394,21 +394,19 @@ fn collect_def_use_node<'a>(
         | "type_identifier"
         | "variable_name" => {
             if is_def_target {
-                if let Ok(name) = node.utf8_text(source) {
-                    if kind == "identifier"
+                if let Ok(name) = node.utf8_text(source)
+                    && (kind == "identifier"
                         || kind == "shorthand_field_identifier"
-                        || kind == "variable_name"
-                    {
-                        defined.insert(DefVar::local(name.trim_start_matches('$')));
-                    }
+                        || kind == "variable_name")
+                {
+                    defined.insert(DefVar::local(name.trim_start_matches('$')));
                 }
-            } else if kind == "identifier"
+            } else if (kind == "identifier"
                 || kind == "shorthand_field_identifier"
-                || kind == "variable_name"
+                || kind == "variable_name")
+                && let Ok(name) = node.utf8_text(source)
             {
-                if let Ok(name) = node.utf8_text(source) {
-                    used.insert(name.trim_start_matches('$').to_string());
-                }
+                used.insert(name.trim_start_matches('$').to_string());
             }
         }
 

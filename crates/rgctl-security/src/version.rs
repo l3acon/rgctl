@@ -16,15 +16,16 @@ pub trait VersionEngine: Send + Sync {
         introduced: Option<&str>,
         fixed: Option<&str>,
     ) -> Result<bool, SecurityError> {
-        if let Some(intro) = introduced {
-            if intro != "0" && self.cmp_versions(version, intro)? == std::cmp::Ordering::Less {
-                return Ok(false);
-            }
+        if let Some(intro) = introduced
+            && intro != "0"
+            && self.cmp_versions(version, intro)? == std::cmp::Ordering::Less
+        {
+            return Ok(false);
         }
-        if let Some(fix) = fixed {
-            if self.cmp_versions(version, fix)? != std::cmp::Ordering::Less {
-                return Ok(false);
-            }
+        if let Some(fix) = fixed
+            && self.cmp_versions(version, fix)? != std::cmp::Ordering::Less
+        {
+            return Ok(false);
         }
         Ok(true)
     }
@@ -109,7 +110,7 @@ fn parse_maven(v: &str) -> MavenToken {
     };
     let mut nums = Vec::new();
     let mut qualifier = String::new();
-    for part in core.split(|c| c == '.' || c == '-') {
+    for part in core.split(['.', '-']) {
         if part.is_empty() {
             continue;
         }

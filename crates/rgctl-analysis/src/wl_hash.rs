@@ -154,25 +154,26 @@ impl WeisfeilerLehmanHasher {
         // 2b. Inter-block control-flow edges
         let region_block_set: HashSet<_> = region.blocks.iter().copied().collect();
         for edge in &cfg.edges {
-            if region_block_set.contains(&edge.from) && region_block_set.contains(&edge.to) {
-                if let (Some(&(from_start, from_end)), Some(&(to_start, to_end))) = (
+            if region_block_set.contains(&edge.from)
+                && region_block_set.contains(&edge.to)
+                && let (Some(&(from_start, from_end)), Some(&(to_start, to_end))) = (
                     block_stmt_ranges.get(&edge.from),
                     block_stmt_ranges.get(&edge.to),
-                ) {
-                    if from_end > from_start && to_end > to_start {
-                        let last_from = from_end - 1;
-                        let first_to = to_start;
-                        let tag = match edge.edge_type {
-                            CfgEdgeType::Next => CanonicalEdgeTag::Next,
-                            CfgEdgeType::IfTrue => CanonicalEdgeTag::IfTrue,
-                            CfgEdgeType::IfFalse => CanonicalEdgeTag::IfFalse,
-                            CfgEdgeType::Jump => CanonicalEdgeTag::Jump,
-                            CfgEdgeType::Return => CanonicalEdgeTag::Next,
-                            CfgEdgeType::Exception => CanonicalEdgeTag::Jump,
-                        };
-                        edges.push((last_from, first_to, tag));
-                    }
-                }
+                )
+                && from_end > from_start
+                && to_end > to_start
+            {
+                let last_from = from_end - 1;
+                let first_to = to_start;
+                let tag = match edge.edge_type {
+                    CfgEdgeType::Next => CanonicalEdgeTag::Next,
+                    CfgEdgeType::IfTrue => CanonicalEdgeTag::IfTrue,
+                    CfgEdgeType::IfFalse => CanonicalEdgeTag::IfFalse,
+                    CfgEdgeType::Jump => CanonicalEdgeTag::Jump,
+                    CfgEdgeType::Return => CanonicalEdgeTag::Next,
+                    CfgEdgeType::Exception => CanonicalEdgeTag::Jump,
+                };
+                edges.push((last_from, first_to, tag));
             }
         }
 

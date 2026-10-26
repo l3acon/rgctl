@@ -910,9 +910,7 @@ impl JavaScriptPlugin {
 fn export_specifier_source_module(node: Node, source: &[u8]) -> Option<String> {
     let mut cur = node;
     for _ in 0..8 {
-        let Some(parent) = cur.parent() else {
-            return None;
-        };
+        let parent = cur.parent()?;
         if parent.kind() == "export_statement" {
             let src = parent.child_by_field_name("source")?;
             let raw = src.utf8_text(source).ok()?.trim();

@@ -210,10 +210,10 @@ fn filter_watch_path(repo: &Path, path: &Path, extensions: &HashSet<String>) -> 
         return None;
     }
     // Skip editor swap / temp noise
-    if let Some(name) = rel.file_name().and_then(|n| n.to_str()) {
-        if name.starts_with('.') || name.ends_with('~') || name.ends_with(".swp") {
-            return None;
-        }
+    if let Some(name) = rel.file_name().and_then(|n| n.to_str())
+        && (name.starts_with('.') || name.ends_with('~') || name.ends_with(".swp"))
+    {
+        return None;
     }
     let ext = rel
         .extension()

@@ -12,6 +12,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     if let Ok(plugin) =
         QueryLanguagePlugin::from_config(&CONFIG, || ts_parser_perl::LANGUAGE.into())

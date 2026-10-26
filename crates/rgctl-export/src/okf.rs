@@ -57,10 +57,7 @@ pub fn export_okf_json(
             })
             .ok()
             .flatten();
-        let to_label = backend
-            .with_node(edge.to, |n| link_target_label(n))
-            .ok()
-            .flatten();
+        let to_label = backend.with_node(edge.to, link_target_label).ok().flatten();
         if let (Some(from), Some(to)) = (from_qn, to_label) {
             links.push(json!({
                 "source": from,

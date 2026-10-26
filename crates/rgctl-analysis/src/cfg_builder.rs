@@ -121,17 +121,16 @@ impl ParsedSourceFile {
                 return Some(func_node);
             }
         }
-        if let Some(locs) = self.locations_by_name.get(function_name) {
-            if let Some(loc) = locs
+        if let Some(locs) = self.locations_by_name.get(function_name)
+            && let Some(loc) = locs
                 .iter()
                 .find(|l| l.start_line == start_line)
                 .or_else(|| locs.first())
-            {
-                return self
-                    .tree
-                    .root_node()
-                    .named_descendant_for_byte_range(loc.start_byte, loc.end_byte);
-            }
+        {
+            return self
+                .tree
+                .root_node()
+                .named_descendant_for_byte_range(loc.start_byte, loc.end_byte);
         }
         None
     }
@@ -280,19 +279,19 @@ fn collect_function_locations(
 ) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if function_kinds.contains(&node.kind()) {
-            if let Some(func_name) = callable_name_for_cfg(node, source, language) {
-                let loc = FunctionLocation {
-                    start_byte: node.start_byte(),
-                    end_byte: node.end_byte(),
-                    start_line: node.start_position().row + 1,
-                    end_line: node.end_position().row + 1,
-                };
-                out.by_name.entry(func_name.clone()).or_default().push(loc);
-                out.by_name_first.entry(func_name.clone()).or_insert(loc);
-                out.by_span
-                    .insert((loc.start_line, loc.end_line, func_name), loc);
-            }
+        if function_kinds.contains(&node.kind())
+            && let Some(func_name) = callable_name_for_cfg(node, source, language)
+        {
+            let loc = FunctionLocation {
+                start_byte: node.start_byte(),
+                end_byte: node.end_byte(),
+                start_line: node.start_position().row + 1,
+                end_line: node.end_position().row + 1,
+            };
+            out.by_name.entry(func_name.clone()).or_default().push(loc);
+            out.by_name_first.entry(func_name.clone()).or_insert(loc);
+            out.by_span
+                .insert((loc.start_line, loc.end_line, func_name), loc);
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -316,14 +315,13 @@ fn callable_name_for_cfg(node: Node<'_>, source: &[u8], language: &str) -> Optio
                 if matches!(
                     child.kind(),
                     "class_identifier" | "identifier" | "node_name" | "string"
-                ) {
-                    if let Ok(t) = child.utf8_text(source) {
-                        let name = t.trim_matches('\'').trim_matches('"');
-                        if node.kind() == "node_definition" {
-                            return Some(format!("node:{name}"));
-                        }
-                        return Some(name.to_string());
+                ) && let Ok(t) = child.utf8_text(source)
+                {
+                    let name = t.trim_matches('\'').trim_matches('"');
+                    if node.kind() == "node_definition" {
+                        return Some(format!("node:{name}"));
                     }
+                    return Some(name.to_string());
                 }
             }
             extract_name_from_node(node, source).ok().flatten()
@@ -460,20 +458,19 @@ fn find_function_by_name<'a>(
     // `lambda_expression` in the whole file (document order). This matches
     // the extractor's numbering only when a single enclosing callable
     // contains lambdas; see java-grammar-remainder honesty notes.
-    if let Some(pos) = name.rfind("$lambda$") {
-        if let Ok(idx) = name[pos + "$lambda$".len()..].parse::<usize>() {
-            return find_java_lambda_expression(node, idx);
-        }
+    if let Some(pos) = name.rfind("$lambda$")
+        && let Ok(idx) = name[pos + "$lambda$".len()..].parse::<usize>()
+    {
+        return find_java_lambda_expression(node, idx);
     }
 
     let mut stack = vec![node];
     while let Some(node) = stack.pop() {
-        if function_kinds.contains(&node.kind()) {
-            if let Some(func_name) = callable_name_for_cfg(node, source, language) {
-                if func_name == name {
-                    return Some(node);
-                }
-            }
+        if function_kinds.contains(&node.kind())
+            && let Some(func_name) = callable_name_for_cfg(node, source, language)
+            && func_name == name
+        {
+            return Some(node);
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -865,33 +862,33 @@ impl<'a> CfgBuilder<'a> {
 
             "call" => {
                 // Elixir: almost all control flow is a `call` (`if`, `case`, `def`, …).
-                if matches!(self.language, "elixir" | "ex") {
-                    if let Some(head) = elixir_call_head(node, source) {
-                        match head {
-                            "if" => return self.visit_elixir_if(node, source, false),
-                            "unless" => return self.visit_elixir_if(node, source, true),
-                            "case" | "cond" => return self.visit_elixir_case_like(node, source),
-                            "for" | "with" => return self.visit_elixir_if(node, source, false),
-                            "try" => {
-                                if let Some(body) = node
-                                    .child_by_field_name("do_block")
-                                    .or_else(|| find_direct_child_kind(node, "do_block"))
-                                {
-                                    return self.visit_block(body, source).map(|_| ());
-                                }
+                if matches!(self.language, "elixir" | "ex")
+                    && let Some(head) = elixir_call_head(node, source)
+                {
+                    match head {
+                        "if" => return self.visit_elixir_if(node, source, false),
+                        "unless" => return self.visit_elixir_if(node, source, true),
+                        "case" | "cond" => return self.visit_elixir_case_like(node, source),
+                        "for" | "with" => return self.visit_elixir_if(node, source, false),
+                        "try" => {
+                            if let Some(body) = node
+                                .child_by_field_name("do_block")
+                                .or_else(|| find_direct_child_kind(node, "do_block"))
+                            {
+                                return self.visit_block(body, source).map(|_| ());
                             }
-                            "def" | "defp" | "defmacro" | "defmacrop" | "defmodule" => {
-                                // Nested defs: do not treat as expression; walk do_block only.
-                                if let Some(body) = node
-                                    .child_by_field_name("do_block")
-                                    .or_else(|| find_direct_child_kind(node, "do_block"))
-                                {
-                                    return self.visit_block(body, source).map(|_| ());
-                                }
-                                return Ok(());
-                            }
-                            _ => {}
                         }
+                        "def" | "defp" | "defmacro" | "defmacrop" | "defmodule" => {
+                            // Nested defs: do not treat as expression; walk do_block only.
+                            if let Some(body) = node
+                                .child_by_field_name("do_block")
+                                .or_else(|| find_direct_child_kind(node, "do_block"))
+                            {
+                                return self.visit_block(body, source).map(|_| ());
+                            }
+                            return Ok(());
+                        }
+                        _ => {}
                     }
                 }
                 if let Some(block) = node.child_by_field_name("block") {
@@ -1176,11 +1173,11 @@ impl<'a> CfgBuilder<'a> {
                         only_block = Some(child);
                     }
                 }
-                if named == 1 {
-                    if let Some(block) = only_block {
-                        self.visit_block(block, source)?;
-                        return Ok(());
-                    }
+                if named == 1
+                    && let Some(block) = only_block
+                {
+                    self.visit_block(block, source)?;
+                    return Ok(());
                 }
                 let kind = Self::classify_expression(node, source);
                 self.add_statement(node, source, kind)?;
@@ -1588,10 +1585,10 @@ impl<'a> CfgBuilder<'a> {
                 self.add_statement(child, source, StatementKind::Declaration)?;
                 resource_line = child.start_position().row + 1;
                 // Best-effort: first identifier in the declaration.
-                if let Some(id) = find_child_kind(child, "identifier") {
-                    if let Ok(t) = id.utf8_text(source) {
-                        resource_name = t.trim().to_string();
-                    }
+                if let Some(id) = find_child_kind(child, "identifier")
+                    && let Ok(t) = id.utf8_text(source)
+                {
+                    resource_name = t.trim().to_string();
                 }
             }
         }
@@ -1629,10 +1626,10 @@ impl<'a> CfgBuilder<'a> {
     fn visit_lock_statement(&mut self, node: Node, source: &[u8]) -> Result<()> {
         let mut obj = "obj".to_string();
         let line = node.start_position().row + 1;
-        if let Some(id) = node.named_child(0) {
-            if let Ok(t) = id.utf8_text(source) {
-                obj = t.trim().to_string();
-            }
+        if let Some(id) = node.named_child(0)
+            && let Ok(t) = id.utf8_text(source)
+        {
+            obj = t.trim().to_string();
         }
         let exit_call = vec![DeferredCall {
             text: format!("Monitor.Exit({obj})"),
@@ -2092,8 +2089,6 @@ impl<'a> CfgBuilder<'a> {
                 .add_edge(cond_block, false_target, CfgEdgeType::IfFalse);
         }
 
-        let true_end;
-        let true_reaches;
         self.flow_active = true;
         self.current_block = true_block;
         if let Some(consequence) = node
@@ -2139,8 +2134,8 @@ impl<'a> CfgBuilder<'a> {
                 self.visit_statement(consequence, source)?;
             }
         }
-        true_end = self.current_block;
-        true_reaches = self.flow_active;
+        let true_end = self.current_block;
+        let true_reaches = self.flow_active;
 
         let mut false_end = false_target;
         let false_reaches;
@@ -2171,9 +2166,8 @@ impl<'a> CfgBuilder<'a> {
                     self.visit_if(alt, source)?;
                 } else if is_block_like(alt.kind()) {
                     self.visit_block(alt, source)?;
-                } else if alt.kind() == "else_clause" || alt.kind() == "else_statement" {
-                    self.visit_statement(alt, source)?;
                 } else {
+                    // else_clause / else_statement / other: visit as statement
                     self.visit_statement(alt, source)?;
                 }
                 false_end = self.current_block;
@@ -2501,12 +2495,10 @@ impl<'a> CfgBuilder<'a> {
             }
         } else {
             let mut c = node.walk();
-            let mut idx = 0u32;
-            for child in node.children(&mut c) {
-                if node.field_name_for_child(idx) == Some("update") {
+            for (idx, child) in node.children(&mut c).enumerate() {
+                if node.field_name_for_child(idx as u32) == Some("update") {
                     update_nodes.push(child);
                 }
-                idx += 1;
             }
         }
 
@@ -2993,15 +2985,14 @@ impl<'a> CfgBuilder<'a> {
             if let Some(id) = decl
                 .child_by_field_name("name")
                 .or_else(|| find_child_kind(decl, "identifier"))
+                && let Ok(t) = id.utf8_text(source)
             {
-                if let Ok(t) = id.utf8_text(source) {
-                    resource_name = t.trim().to_string();
-                }
-            }
-        } else if let Some(id) = find_child_kind(node, "identifier") {
-            if let Ok(t) = id.utf8_text(source) {
                 resource_name = t.trim().to_string();
             }
+        } else if let Some(id) = find_child_kind(node, "identifier")
+            && let Ok(t) = id.utf8_text(source)
+        {
+            resource_name = t.trim().to_string();
         }
         self.finally_stack.push(vec![DeferredCall {
             text: format!("{resource_name}.Dispose()"),
@@ -3196,13 +3187,13 @@ impl<'a> CfgBuilder<'a> {
             }
         }
         // `break Outer` — named child may be the label
-        if let Some(n) = node.named_child(0) {
-            if n.kind() == "label_name" || n.kind() == "label" || n.kind() == "identifier" {
-                return n
-                    .utf8_text(source)
-                    .ok()
-                    .map(|s| s.trim().trim_start_matches('\'').to_string());
-            }
+        if let Some(n) = node.named_child(0)
+            && (n.kind() == "label_name" || n.kind() == "label" || n.kind() == "identifier")
+        {
+            return n
+                .utf8_text(source)
+                .ok()
+                .map(|s| s.trim().trim_start_matches('\'').to_string());
         }
         None
     }
@@ -3253,11 +3244,11 @@ impl<'a> CfgBuilder<'a> {
     fn visit_continue(&mut self, node: Node, source: &[u8]) -> Result<()> {
         self.add_statement(node, source, StatementKind::Jump)?;
         let label = Self::jump_label_of(node, source);
-        if let Some(ctx) = self.find_breakable(label.as_deref()) {
-            if let Some(cont) = ctx.continue_target {
-                self.cfg
-                    .add_edge(self.current_block, cont, CfgEdgeType::Jump);
-            }
+        if let Some(ctx) = self.find_breakable(label.as_deref())
+            && let Some(cont) = ctx.continue_target
+        {
+            self.cfg
+                .add_edge(self.current_block, cont, CfgEdgeType::Jump);
         }
         self.flow_active = false;
         self.current_block = self.new_block();
@@ -3389,12 +3380,11 @@ impl<'a> CfgBuilder<'a> {
                 continue;
             }
             // Java label identifier is the first named child — skip it.
-            if child.kind() == "identifier" {
-                if let Ok(t) = child.utf8_text(source) {
-                    if t.trim().trim_start_matches('\'') == label {
-                        continue;
-                    }
-                }
+            if child.kind() == "identifier"
+                && let Ok(t) = child.utf8_text(source)
+                && t.trim().trim_start_matches('\'') == label
+            {
+                continue;
             }
             let attach_label = matches!(
                 child.kind(),
@@ -3574,10 +3564,10 @@ impl<'a> CfgBuilder<'a> {
             }
         }
 
-        if arms.is_empty() {
-            if let Some(body) = node.child_by_field_name("body") {
-                arms.push(body);
-            }
+        if arms.is_empty()
+            && let Some(body) = node.child_by_field_name("body")
+        {
+            arms.push(body);
         }
 
         let mut pending_fail: Option<BlockId> = None;
@@ -3958,10 +3948,11 @@ impl<'a> CfgBuilder<'a> {
             } else {
                 let mut c = arm.walk();
                 let children: Vec<Node> = arm.children(&mut c).filter(|c| c.is_named()).collect();
-                if let Some(last) = children.last() {
-                    if last.kind() != "when_condition" && last.kind() != "when_entry" {
-                        self.visit_statement(*last, source)?;
-                    }
+                if let Some(last) = children.last()
+                    && last.kind() != "when_condition"
+                    && last.kind() != "when_entry"
+                {
+                    self.visit_statement(*last, source)?;
                 }
             }
             if self.flow_active {
@@ -4172,10 +4163,10 @@ impl<'a> CfgBuilder<'a> {
 
             if let Some(block) = catch_node.child_by_field_name("body") {
                 self.visit_block(block, source)?;
-            } else if catch_node.kind() == "catch_clause" {
-                if let Some(block) = find_child_kind(*catch_node, "block") {
-                    self.visit_block(block, source)?;
-                }
+            } else if catch_node.kind() == "catch_clause"
+                && let Some(block) = find_child_kind(*catch_node, "block")
+            {
+                self.visit_block(block, source)?;
             }
             if self.flow_active {
                 self.unwind_finallies(source)?;
@@ -4338,12 +4329,12 @@ fn is_switch_default_case(case: Node, source: &[u8]) -> bool {
         return true;
     }
     // C/C++: `default:` is a `case_statement` with no `value` field.
-    if case.kind() == "case_statement" && case.child_by_field_name("value").is_none() {
-        if let Ok(t) = case.utf8_text(source) {
-            if t.trim().starts_with("default") {
-                return true;
-            }
-        }
+    if case.kind() == "case_statement"
+        && case.child_by_field_name("value").is_none()
+        && let Ok(t) = case.utf8_text(source)
+        && t.trim().starts_with("default")
+    {
+        return true;
     }
     let mut c = case.walk();
     for child in case.children(&mut c) {
@@ -4351,12 +4342,11 @@ fn is_switch_default_case(case: Node, source: &[u8]) -> bool {
         if child.kind() == "default" || child.kind() == "default_switch_label" {
             return true;
         }
-        if matches!(child.kind(), "switch_label" | "default_label") {
-            if let Ok(t) = child.utf8_text(source) {
-                if t.trim().starts_with("default") {
-                    return true;
-                }
-            }
+        if matches!(child.kind(), "switch_label" | "default_label")
+            && let Ok(t) = child.utf8_text(source)
+            && t.trim().starts_with("default")
+        {
+            return true;
         }
     }
     false
@@ -4655,21 +4645,20 @@ fn switch_case_keys(case: Node, source: &[u8]) -> Vec<String> {
                 }
             }
             "case_statement" => {
-                if let Some(v) = child.child_by_field_name("value") {
-                    if let Ok(t) = v.utf8_text(source) {
-                        keys.push(t.trim().to_string());
-                    }
+                if let Some(v) = child.child_by_field_name("value")
+                    && let Ok(t) = v.utf8_text(source)
+                {
+                    keys.push(t.trim().to_string());
                 }
             }
             _ => {}
         }
     }
-    if keys.is_empty() {
-        if let Some(v) = case.child_by_field_name("value") {
-            if let Ok(t) = v.utf8_text(source) {
-                keys.push(t.trim().to_string());
-            }
-        }
+    if keys.is_empty()
+        && let Some(v) = case.child_by_field_name("value")
+        && let Ok(t) = v.utf8_text(source)
+    {
+        keys.push(t.trim().to_string());
     }
     keys
 }
@@ -4695,8 +4684,8 @@ fn case_label_constant(label: Node, source: &[u8]) -> Option<String> {
             return ch.utf8_text(source).ok().map(|s| s.trim().to_string());
         }
         // `constant_pattern` wraps the literal.
-        if let Some(inner) = ch.named_child(0) {
-            if matches!(
+        if let Some(inner) = ch.named_child(0)
+            && matches!(
                 inner.kind(),
                 "integer_literal"
                     | "real_literal"
@@ -4705,9 +4694,9 @@ fn case_label_constant(label: Node, source: &[u8]) -> Option<String> {
                     | "boolean_literal"
                     | "null_literal"
                     | "identifier"
-            ) {
-                return inner.utf8_text(source).ok().map(|s| s.trim().to_string());
-            }
+            )
+        {
+            return inner.utf8_text(source).ok().map(|s| s.trim().to_string());
         }
     }
     // `case 1:` text fallback

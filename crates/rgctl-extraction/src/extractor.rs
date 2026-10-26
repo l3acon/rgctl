@@ -140,18 +140,18 @@ impl Extractor {
                         .first()
                         .map(|s| s.location.file.as_str())
                         .or_else(|| hit.relations.first().map(|r| r.location.file.as_str()));
-                    if let Some(old) = old_file {
-                        if old != path_str.as_ref() {
-                            if Path::new(old).file_stem() != path.file_stem() {
-                                return None;
-                            }
-                            let new_file = path_str.to_string();
-                            for sym in &mut hit.symbols {
-                                sym.location.file = new_file.clone();
-                            }
-                            for rel in &mut hit.relations {
-                                rel.location.file = new_file.clone();
-                            }
+                    if let Some(old) = old_file
+                        && old != path_str.as_ref()
+                    {
+                        if Path::new(old).file_stem() != path.file_stem() {
+                            return None;
+                        }
+                        let new_file = path_str.to_string();
+                        for sym in &mut hit.symbols {
+                            sym.location.file = new_file.clone();
+                        }
+                        for rel in &mut hit.relations {
+                            rel.location.file = new_file.clone();
                         }
                     }
                     Some(hit)

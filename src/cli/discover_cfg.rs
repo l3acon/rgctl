@@ -314,8 +314,8 @@ pub fn run_cfg_analysis_batch(
         );
     }
 
-    for (group, outcomes) in groups.iter().zip(nested.into_iter()) {
-        for (&func_idx, outcome) in group.func_indices.iter().zip(outcomes.into_iter()) {
+    for (group, outcomes) in groups.iter().zip(nested) {
+        for (&func_idx, outcome) in group.func_indices.iter().zip(outcomes) {
             let func = &functions[func_idx];
             match outcome {
                 Err(reason) => {
@@ -343,10 +343,10 @@ pub fn run_cfg_analysis_batch(
                     if let Some(bytes) = w.archive_bytes {
                         result.archive_record_bytes.push((w.function_id, bytes));
                     }
-                    if let Some(bytes) = w.analysis_bytes {
-                        if !w.skip_persist {
-                            save_bytes.push((w.function_id, bytes));
-                        }
+                    if let Some(bytes) = w.analysis_bytes
+                        && !w.skip_persist
+                    {
+                        save_bytes.push((w.function_id, bytes));
                     }
                 }
             }
@@ -714,14 +714,14 @@ fn compute_function_cfg(
     }
 
     // Merge single-pass file locals into CFG before field-write extraction / PDG.
-    if let Some(start) = func_node.start_line {
-        if let Some(locals) = file_locals.get(&(start, func_node.name.to_string())) {
-            for (k, v) in locals {
-                cfg_data
-                    .local_types
-                    .entry(k.clone())
-                    .or_insert_with(|| v.clone());
-            }
+    if let Some(start) = func_node.start_line
+        && let Some(locals) = file_locals.get(&(start, func_node.name.to_string()))
+    {
+        for (k, v) in locals {
+            cfg_data
+                .local_types
+                .entry(k.clone())
+                .or_insert_with(|| v.clone());
         }
     }
 
@@ -775,15 +775,15 @@ fn compute_function_cfg(
         taint_rules,
     )?;
 
-    if let (Some(start), Some(log)) = (total_start, timings) {
-        if let Ok(mut entries) = log.lock() {
-            entries.push(CfgFunctionTiming {
-                file_path: file_path.to_string(),
-                function_name: func_node.name.to_string(),
-                blocks: work.blocks,
-                total_ns: start.elapsed().as_nanos() as u64,
-            });
-        }
+    if let (Some(start), Some(log)) = (total_start, timings)
+        && let Ok(mut entries) = log.lock()
+    {
+        entries.push(CfgFunctionTiming {
+            file_path: file_path.to_string(),
+            function_name: func_node.name.to_string(),
+            blocks: work.blocks,
+            total_ns: start.elapsed().as_nanos() as u64,
+        });
     }
 
     Some(work)
@@ -859,12 +859,10 @@ fn compute_from_cfg(
     } else {
         (None, 0, 0)
     };
-    if enable_taint {
-        if let (Some(stage), Some(start)) = (stage, taint_start) {
-            stage
-                .taint_ns
-                .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        }
+    if enable_taint && let (Some(stage), Some(start)) = (stage, taint_start) {
+        stage
+            .taint_ns
+            .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
     }
 
     let analysis = FunctionAnalysis {

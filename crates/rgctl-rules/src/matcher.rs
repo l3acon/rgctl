@@ -85,10 +85,10 @@ impl RuleMatcher {
             },
             MatchLeaf::CallsAny { symbols } => {
                 for target_id in &ctx.outgoing_calls {
-                    if let Ok(Some(target)) = backend.get_node(*target_id) {
-                        if symbols.iter().any(|s| target.name.contains(s)) {
-                            return Ok(true);
-                        }
+                    if let Ok(Some(target)) = backend.get_node(*target_id)
+                        && symbols.iter().any(|s| target.name.contains(s))
+                    {
+                        return Ok(true);
                     }
                 }
                 Ok(false)

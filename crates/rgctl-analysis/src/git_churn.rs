@@ -107,11 +107,7 @@ pub fn compute_and_apply_git_churn(
         if node.node_type != NodeType::File {
             continue;
         }
-        let raw = node
-            .file_path
-            .as_deref()
-            .map(|s| s.as_ref())
-            .unwrap_or(node.name.as_str());
+        let raw = node.file_path.as_deref().unwrap_or(node.name.as_str());
         let path = normalize_node_repo_path(repo_root, canon_root.as_deref(), raw);
         if path.is_empty() || file_path_to_dense.contains_key(&path) {
             continue;
@@ -187,12 +183,12 @@ pub fn compute_and_apply_git_churn(
         files.sort_unstable_by_key(|(idx, _, _)| *idx);
         let mut dedup: Vec<(u32, u64, u64)> = Vec::with_capacity(files.len());
         for (idx, added, deleted) in files {
-            if let Some(last) = dedup.last_mut() {
-                if last.0 == idx {
-                    last.1 = last.1.saturating_add(added);
-                    last.2 = last.2.saturating_add(deleted);
-                    continue;
-                }
+            if let Some(last) = dedup.last_mut()
+                && last.0 == idx
+            {
+                last.1 = last.1.saturating_add(added);
+                last.2 = last.2.saturating_add(deleted);
+                continue;
             }
             dedup.push((idx, added, deleted));
         }
@@ -451,10 +447,10 @@ fn normalize_node_repo_path(repo_root: &Path, canon_root: Option<&Path>, raw: &s
         if let Ok(rel) = p.strip_prefix(canon) {
             return normalize_repo_path(&rel.to_string_lossy());
         }
-        if let Ok(canon_p) = p.canonicalize() {
-            if let Ok(rel) = canon_p.strip_prefix(canon) {
-                return normalize_repo_path(&rel.to_string_lossy());
-            }
+        if let Ok(canon_p) = p.canonicalize()
+            && let Ok(rel) = canon_p.strip_prefix(canon)
+        {
+            return normalize_repo_path(&rel.to_string_lossy());
         }
     }
     normalize_repo_path(raw)

@@ -352,26 +352,26 @@ pub fn extract_all_single_pass(
                         }
                         pushed_scope = true;
                     }
-                    "catch_block" | "rescue_block" | "after_block" | "else_block" => {
-                        if ctx.scopes.current_function().is_some() {
-                            let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
-                            let scope_depth = ctx.scopes.depth();
-                            ctx.scopes.push(ScopeFrame::new(
-                                ScopeKind::GuardBlock,
-                                None,
-                                String::new(),
-                                node.start_byte(),
-                                node.end_byte(),
-                                scope_depth,
-                            ));
-                            stack.push(Visit::LeaveGuard);
-                        }
+                    "catch_block" | "rescue_block" | "after_block" | "else_block"
+                        if ctx.scopes.current_function().is_some() =>
+                    {
+                        let delta = 1 + ctx
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
+                        let scope_depth = ctx.scopes.depth();
+                        ctx.scopes.push(ScopeFrame::new(
+                            ScopeKind::GuardBlock,
+                            None,
+                            String::new(),
+                            node.start_byte(),
+                            node.end_byte(),
+                            scope_depth,
+                        ));
+                        stack.push(Visit::LeaveGuard);
                     }
                     _ => {}
                 }

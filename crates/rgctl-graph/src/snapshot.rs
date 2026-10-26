@@ -312,10 +312,10 @@ impl SnapshotNodeStore {
         }
         let mut out = Vec::new();
         for id in self.all_node_ids() {
-            if let Some(node) = self.get_node(id)? {
-                if node.node_type == node_type {
-                    out.push(node);
-                }
+            if let Some(node) = self.get_node(id)?
+                && node.node_type == node_type
+            {
+                out.push(node);
             }
         }
         Ok(out)

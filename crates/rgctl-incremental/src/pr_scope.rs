@@ -315,39 +315,25 @@ pub fn parse_name_status_z(stdout: &[u8]) -> ChangeSet {
         idx += 1;
 
         match letter {
-            Some('A') => {
-                if idx < parts.len() {
-                    added.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('A') if idx < parts.len() => {
+                added.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('M') | Some('T') => {
-                if idx < parts.len() {
-                    changed.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('M') | Some('T') if idx < parts.len() => {
+                changed.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('D') => {
-                if idx < parts.len() {
-                    deleted.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('D') if idx < parts.len() => {
+                deleted.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('R') | Some('C') => {
-                if idx + 1 < parts.len() {
-                    let old_path =
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned();
-                    let new_path =
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx + 1])).into_owned();
-                    renamed.push((old_path, new_path));
-                    idx += 2;
-                }
+            Some('R') | Some('C') if idx + 1 < parts.len() => {
+                let old_path =
+                    normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned();
+                let new_path =
+                    normalize_path_str(&String::from_utf8_lossy(parts[idx + 1])).into_owned();
+                renamed.push((old_path, new_path));
+                idx += 2;
             }
             _ => {}
         }

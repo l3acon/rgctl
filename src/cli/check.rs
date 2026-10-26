@@ -98,17 +98,17 @@ pub fn run(ctx: &CliContext, args: CheckArgs) -> Result<()> {
         }
         if let Ok(result) = engine.analyze(id) {
             for node_id in &result.impact_zone_ids {
-                if let Some(score) = centrality.get(node_id) {
-                    if score.betweenness > centrality_threshold {
-                        violation_rows.push(json!({
-                            "symbol": symbol,
-                            "violation": format!("{}", PolicyViolation::CascadeHazard {
-                                node: *node_id,
-                                betweenness: score.betweenness,
-                                threshold: centrality_threshold,
-                            }),
-                        }));
-                    }
+                if let Some(score) = centrality.get(node_id)
+                    && score.betweenness > centrality_threshold
+                {
+                    violation_rows.push(json!({
+                        "symbol": symbol,
+                        "violation": format!("{}", PolicyViolation::CascadeHazard {
+                            node: *node_id,
+                            betweenness: score.betweenness,
+                            threshold: centrality_threshold,
+                        }),
+                    }));
                 }
             }
         }

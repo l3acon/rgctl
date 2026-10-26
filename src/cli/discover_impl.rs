@@ -881,14 +881,14 @@ pub(crate) fn run_full_analysis(
                 .unwrap_or(0)
         } else if !batch.field_writes.is_empty() || batch.recomputed > 0 {
             let mut writes = batch.field_writes;
-            if batch.cache_hits > 0 {
-                if let Ok(Some(existing)) = FieldWriteIndex::open_if_exists(store) {
-                    let recomputed_ids: std::collections::HashSet<_> =
-                        batch.index_entries.iter().map(|e| e.function_id).collect();
-                    for w in existing.writes {
-                        if !recomputed_ids.contains(&w.function_id) {
-                            writes.push(w);
-                        }
+            if batch.cache_hits > 0
+                && let Ok(Some(existing)) = FieldWriteIndex::open_if_exists(store)
+            {
+                let recomputed_ids: std::collections::HashSet<_> =
+                    batch.index_entries.iter().map(|e| e.function_id).collect();
+                for w in existing.writes {
+                    if !recomputed_ids.contains(&w.function_id) {
+                        writes.push(w);
                     }
                 }
             }
@@ -949,18 +949,19 @@ pub(crate) fn run_full_analysis(
 
         if with_ast_skeleton {
             let mut records = batch.skeletons;
-            if batch.cache_hits > 0 && records.len() < success_count {
-                if let Ok(Some(existing)) = AstSkeletonArchive::open_if_exists(store) {
-                    let seen: std::collections::HashSet<_> =
-                        records.iter().filter_map(|r| r.function_id).collect();
-                    for rec in existing.records {
-                        let keep = match rec.function_id {
-                            Some(id) => !seen.contains(&id),
-                            None => true,
-                        };
-                        if keep {
-                            records.push(rec);
-                        }
+            if batch.cache_hits > 0
+                && records.len() < success_count
+                && let Ok(Some(existing)) = AstSkeletonArchive::open_if_exists(store)
+            {
+                let seen: std::collections::HashSet<_> =
+                    records.iter().filter_map(|r| r.function_id).collect();
+                for rec in existing.records {
+                    let keep = match rec.function_id {
+                        Some(id) => !seen.contains(&id),
+                        None => true,
+                    };
+                    if keep {
+                        records.push(rec);
                     }
                 }
             }
@@ -1079,17 +1080,18 @@ pub(crate) fn run_full_analysis(
         drop(view);
         debug!("{}", mem_monitor.report());
 
-        if with_kantra && !kantra_index_only {
-            if let Some(ref graph) = kantra_eval_graph {
-                super::kantra_discover::run_kantra_enrich(
-                    store,
-                    &cold,
-                    &analysis_results,
-                    &engine,
-                    graph,
-                    &mut profile,
-                )?;
-            }
+        if with_kantra
+            && !kantra_index_only
+            && let Some(ref graph) = kantra_eval_graph
+        {
+            super::kantra_discover::run_kantra_enrich(
+                store,
+                &cold,
+                &analysis_results,
+                &engine,
+                graph,
+                &mut profile,
+            )?;
         }
 
         build_time = blast_start.elapsed();

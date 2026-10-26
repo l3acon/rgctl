@@ -115,10 +115,10 @@ pub fn normalize_function_selector(
     requested: &str,
     locations: Option<&HashMap<String, FunctionLocation>>,
 ) -> String {
-    if let Some(locs) = locations {
-        if locs.contains_key(requested) {
-            return requested.to_string();
-        }
+    if let Some(locs) = locations
+        && locs.contains_key(requested)
+    {
+        return requested.to_string();
     }
     let bare = if let Some(idx) = requested.rfind("::") {
         &requested[idx + 2..]
@@ -127,10 +127,10 @@ pub fn normalize_function_selector(
     } else {
         requested
     };
-    if let Some(locs) = locations {
-        if locs.contains_key(bare) {
-            return bare.to_string();
-        }
+    if let Some(locs) = locations
+        && locs.contains_key(bare)
+    {
+        return bare.to_string();
     }
     // No index: still prefer bare method for Class::method so CFG lookup can succeed.
     if bare != requested && !bare.is_empty() {

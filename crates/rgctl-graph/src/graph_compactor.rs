@@ -96,13 +96,13 @@ fn dedupe_entries_prefer_delta(entries: &mut Vec<CompactNodeEntry>) {
     entries.sort_by_key(|entry| entry.id);
     let mut out: Vec<CompactNodeEntry> = Vec::with_capacity(entries.len());
     for entry in entries.drain(..) {
-        if let Some(last) = out.last_mut() {
-            if last.id == entry.id {
-                if matches!(entry.source, CompactNodeSource::Delta(_)) {
-                    *last = entry;
-                }
-                continue;
+        if let Some(last) = out.last_mut()
+            && last.id == entry.id
+        {
+            if matches!(entry.source, CompactNodeSource::Delta(_)) {
+                *last = entry;
             }
+            continue;
         }
         out.push(entry);
     }

@@ -271,15 +271,14 @@ pub fn extract_all_single_pass(
                     _ => {}
                 }
 
-                if KOTLIN_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if KOTLIN_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 if ctx.scopes.current_function().is_some() {
@@ -312,15 +311,14 @@ pub fn extract_all_single_pass(
                                 .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
-                        "return_expression" | "jump_expression" => {
-                            if kind == "return_expression"
+                        "return_expression" | "jump_expression"
+                            if (kind == "return_expression"
                                 || node
                                     .utf8_text(source)
                                     .ok()
-                                    .is_some_and(|t| t.trim_start().starts_with("return"))
-                            {
-                                ctx.scopes.note_return();
-                            }
+                                    .is_some_and(|t| t.trim_start().starts_with("return"))) =>
+                        {
+                            ctx.scopes.note_return();
                         }
                         _ => {}
                     }

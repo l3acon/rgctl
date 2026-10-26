@@ -71,10 +71,10 @@ pub fn complexity_from_metadata(symbol: &Symbol) -> Option<ComplexityMetrics> {
 
 /// Persist complexity onto a symbol's JSON metadata.
 pub fn attach_complexity(symbol: &mut Symbol, metrics: &ComplexityMetrics) {
-    if let Ok(v) = serde_json::to_value(metrics) {
-        if let Some(obj) = symbol.metadata.as_object_mut() {
-            obj.insert(COMPLEXITY_META_KEY.to_string(), v);
-        }
+    if let Ok(v) = serde_json::to_value(metrics)
+        && let Some(obj) = symbol.metadata.as_object_mut()
+    {
+        obj.insert(COMPLEXITY_META_KEY.to_string(), v);
     }
 }
 

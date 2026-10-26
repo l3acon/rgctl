@@ -131,26 +131,27 @@ fn try_fast_cached_lookup(
 
     let lookup_db = MacroCallLookupDb::default_path(&ctx.repo);
     if MacroCallLookupDb::is_valid_for_repo(&lookup_db, &ctx.repo)? {
-        if parsed.class_filter.is_none() && parsed.file_filter.is_none() {
-            if let Some(row) = MacroCallLookupDb::lookup(&lookup_db, &parsed.target_name)? {
-                let entry = MacroCallLookupDb::index_entry_from_lookup_row(row);
-                let prepared = view
-                    .as_ref()
-                    .map(|v| prepare_cache_impact(v, &entry, max_depth))
-                    .unwrap_or(PreparedImpact {
-                        impact_ids: entry.impact_zone_ids.clone(),
-                        score: entry.score,
-                        caller_depth_limit: None,
-                    });
-                return Ok(Some(build_from_cache_entry(
-                    &entry,
-                    skipped_gatekeeping(),
-                    lookup,
-                    &prepared.impact_ids,
-                    prepared.score,
-                    prepared.caller_depth_limit,
-                )));
-            }
+        if parsed.class_filter.is_none()
+            && parsed.file_filter.is_none()
+            && let Some(row) = MacroCallLookupDb::lookup(&lookup_db, &parsed.target_name)?
+        {
+            let entry = MacroCallLookupDb::index_entry_from_lookup_row(row);
+            let prepared = view
+                .as_ref()
+                .map(|v| prepare_cache_impact(v, &entry, max_depth))
+                .unwrap_or(PreparedImpact {
+                    impact_ids: entry.impact_zone_ids.clone(),
+                    score: entry.score,
+                    caller_depth_limit: None,
+                });
+            return Ok(Some(build_from_cache_entry(
+                &entry,
+                skipped_gatekeeping(),
+                lookup,
+                &prepared.impact_ids,
+                prepared.score,
+                prepared.caller_depth_limit,
+            )));
         }
         if let Some(entry) = MacroCallLookupDb::lookup_resolved(&lookup_db, parsed)? {
             let prepared = view
@@ -302,14 +303,14 @@ fn resolve_target_uuid_impl(
     }
 
     let index_path = MacroCallIndex::default_path(&ctx.repo);
-    if let Some(index) = MacroCallIndex::load(&index_path)? {
-        if index.is_valid_for_repo(&ctx.repo)? {
-            let mut candidates = index.get_candidates(&parsed.target_name);
-            filter_candidates_by_line(&mut candidates, line, backend, store);
-            if !candidates.is_empty() {
-                let id = map_resolve_err(ctx, resolve_symbol_uuid(&candidates, parsed), parsed)?;
-                return Ok((id, parsed.target_name.clone()));
-            }
+    if let Some(index) = MacroCallIndex::load(&index_path)?
+        && index.is_valid_for_repo(&ctx.repo)?
+    {
+        let mut candidates = index.get_candidates(&parsed.target_name);
+        filter_candidates_by_line(&mut candidates, line, backend, store);
+        if !candidates.is_empty() {
+            let id = map_resolve_err(ctx, resolve_symbol_uuid(&candidates, parsed), parsed)?;
+            return Ok((id, parsed.target_name.clone()));
         }
     }
 
@@ -448,19 +449,18 @@ fn resolve_blast_result(
     symbol_id: uuid::Uuid,
     graph_digest: Option<&str>,
 ) -> Result<BlastRadiusResult> {
-    if let Some(digest) = graph_digest {
-        if let Some(engine) = try_load_engine(repo, digest)? {
-            return Ok(engine.analyze(symbol_id)?);
-        }
+    if let Some(digest) = graph_digest
+        && let Some(engine) = try_load_engine(repo, digest)?
+    {
+        return Ok(engine.analyze(symbol_id)?);
     }
 
     let index_path = MacroCallIndex::default_path(repo);
-    if let Some(index) = MacroCallIndex::load(&index_path)? {
-        if index.is_valid_for(backend) || index.is_valid_for_repo(repo)? {
-            if let Some(entry) = index.get(symbol_id) {
-                return Ok(MacroCallIndex::to_blast_result(entry, symbol_id));
-            }
-        }
+    if let Some(index) = MacroCallIndex::load(&index_path)?
+        && (index.is_valid_for(backend) || index.is_valid_for_repo(repo)?)
+        && let Some(entry) = index.get(symbol_id)
+    {
+        return Ok(MacroCallIndex::to_blast_result(entry, symbol_id));
     }
 
     let engine = BlastRadiusEngine::build(backend)?;
@@ -551,8 +551,8 @@ pub fn run(ctx: &CliContext, args: BlastRadiusArgs) -> Result<()> {
             return emit_output(ctx, &args, response);
         }
 
-        if let Some(session) = ctx.snapshot_session()? {
-            if try_snapshot_lite_path(
+        if let Some(session) = ctx.snapshot_session()?
+            && try_snapshot_lite_path(
                 ctx,
                 &args,
                 &parsed,
@@ -560,9 +560,8 @@ pub fn run(ctx: &CliContext, args: BlastRadiusArgs) -> Result<()> {
                 session.digest.as_ref(),
             )?
             .is_some()
-            {
-                return Ok(());
-            }
+        {
+            return Ok(());
         }
     }
 

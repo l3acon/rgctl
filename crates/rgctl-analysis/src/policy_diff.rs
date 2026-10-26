@@ -50,6 +50,7 @@ pub struct PolicyDelta {
 }
 
 /// Evaluate policy on scoped entities and classify violations temporally.
+#[allow(clippy::too_many_arguments)]
 pub fn evaluate_temporal(
     base_store: &SnapshotNodeStore,
     head_store: &SnapshotNodeStore,

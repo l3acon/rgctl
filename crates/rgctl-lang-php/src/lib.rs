@@ -16,6 +16,7 @@ mod single_pass;
 pub use plugin::PhpPlugin;
 
 /// Register the PHP language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(PhpPlugin::new().expect("init PhpPlugin")));
 }

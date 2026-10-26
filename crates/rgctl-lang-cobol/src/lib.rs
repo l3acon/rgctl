@@ -11,6 +11,7 @@ use std::sync::Arc;
 pub use extract::CobolPlugin;
 
 /// Register the COBOL language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(CobolPlugin));
 }

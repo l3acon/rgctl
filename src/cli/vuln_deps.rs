@@ -162,19 +162,18 @@ fn graph_package_signals(
     };
     let q = rgctl_graph::StructuredQuery::new(store.as_ref());
     let mut import_hits = 0usize;
-    if let Some(m) = deps.matched.first() {
-        if let Ok(res) = resolve_package(&m.name) {
-            if let Some(prefix) = res.import_prefixes.first() {
-                let mut filters = rgctl_graph::QueryFilters {
-                    node_type: Some(rgctl_graph::schema::NodeType::Import),
-                    limit: Some(50),
-                    ..Default::default()
-                };
-                filters.scope = Some(prefix.clone());
-                if let Ok(found) = q.find(Some(&format!("{prefix}*")), &filters) {
-                    import_hits = found.total;
-                }
-            }
+    if let Some(m) = deps.matched.first()
+        && let Ok(res) = resolve_package(&m.name)
+        && let Some(prefix) = res.import_prefixes.first()
+    {
+        let mut filters = rgctl_graph::QueryFilters {
+            node_type: Some(rgctl_graph::schema::NodeType::Import),
+            limit: Some(50),
+            ..Default::default()
+        };
+        filters.scope = Some(prefix.clone());
+        if let Ok(found) = q.find(Some(&format!("{prefix}*")), &filters) {
+            import_hits = found.total;
         }
     }
     let mut callers = Vec::new();
@@ -216,10 +215,9 @@ fn symbol_in_graph(ctx: &CliContext, sink: &str) -> bool {
                 limit: Some(5),
                 ..Default::default()
             },
-        ) {
-            if found.total > 0 {
-                return true;
-            }
+        ) && found.total > 0
+        {
+            return true;
         }
     }
     false
@@ -259,7 +257,7 @@ pub fn run_sink_taint(ctx: &CliContext, sink: String, source: String, depth: usi
         }
     }
     // Ensure overlays compile (declarative engine).
-    let _ = rgctl_security::rules_with_osv_overlays(None, &[sink.clone()])
+    let _ = rgctl_security::rules_with_osv_overlays(None, std::slice::from_ref(&sink))
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let result =
         build_sink_first_result(&sink, depth, cfg_available, sink_in_graph, callers, vec![]);

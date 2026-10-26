@@ -198,10 +198,10 @@ impl FieldWriteIndex {
                 if q.exclude_ctors && w.is_constructor {
                     return false;
                 }
-                if let Some(m) = &q.member {
-                    if w.member != *m {
-                        return false;
-                    }
+                if let Some(m) = &q.member
+                    && w.member != *m
+                {
+                    return false;
                 }
                 match w.kind {
                     FieldWriteKind::Unresolved => {
@@ -269,20 +269,20 @@ fn is_constructor_node(node: &Node) -> bool {
 }
 
 fn function_name_looks_like_ctor(name: &str, func: Option<&Node>) -> bool {
-    if let Some(node) = func {
-        if let Some(enclosing) = enclosing_type_name(node) {
-            return name == enclosing;
-        }
+    if let Some(node) = func
+        && let Some(enclosing) = enclosing_type_name(node)
+    {
+        return name == enclosing;
     }
     false
 }
 
 fn enclosing_type_name(node: &Node) -> Option<String> {
     if let Some(qn) = &node.qualified_name {
-        if qn.ends_with(".<init>") || qn.contains("::<init>") {
-            if let Some(owner) = qn.strip_suffix(".<init>") {
-                return Some(owner.to_string());
-            }
+        if (qn.ends_with(".<init>") || qn.contains("::<init>"))
+            && let Some(owner) = qn.strip_suffix(".<init>")
+        {
+            return Some(owner.to_string());
         }
         if let Some((owner, _)) = qn.rsplit_once('#') {
             return Some(owner.to_string());
@@ -363,11 +363,11 @@ fn merge_type_env(
     type_env: &mut HashMap<String, String>,
 ) {
     *type_env = type_env_from_node(func);
-    if let Some(node) = func {
-        if let Some(enclosing) = enclosing_type_name(node) {
-            type_env.insert("this".into(), enclosing.clone());
-            type_env.insert("self".into(), enclosing);
-        }
+    if let Some(node) = func
+        && let Some(enclosing) = enclosing_type_name(node)
+    {
+        type_env.insert("this".into(), enclosing.clone());
+        type_env.insert("self".into(), enclosing);
     }
     for (k, v) in &cfg.local_types {
         type_env.entry(k.clone()).or_insert_with(|| v.clone());

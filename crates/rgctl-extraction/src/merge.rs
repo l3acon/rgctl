@@ -204,14 +204,13 @@ fn resolve_repo_rgctl_dir(path: &Path) -> Result<PathBuf> {
 
 fn repo_display_name(path: &Path, rgctl_dir: &Path) -> String {
     // Prefer the repository root name (parent of `.rgctl`).
-    if rgctl_dir.ends_with(ARTIFACT_DIR_NAME) {
-        if let Some(name) = rgctl_dir
+    if rgctl_dir.ends_with(ARTIFACT_DIR_NAME)
+        && let Some(name) = rgctl_dir
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|s| s.to_str())
-        {
-            return name.to_string();
-        }
+    {
+        return name.to_string();
     }
     path.file_name()
         .and_then(|s| s.to_str())
@@ -240,10 +239,10 @@ fn namespace_node(mut node: Node, repo_name: &str) -> (Uuid, Node) {
     }
     if node.file_path.is_some() {
         node.id = deterministic_node_id(
-            node.file_path.as_deref().map(|s| s.as_ref()),
+            node.file_path.as_deref(),
             node.name.as_ref(),
             node.node_type,
-            node.qualified_name.as_deref().map(|s| s.as_ref()),
+            node.qualified_name.as_deref(),
         );
     }
     (old_id, node)
@@ -310,19 +309,19 @@ impl CrossRepoExportIndex {
 
     fn resolve_parked(&self, rec: &ParkedRelationRecord, src_repo: usize) -> ResolveOutcome {
         // Tier 1 — exact cross-repo qualified hint.
-        if let Some(hint) = rec.to_qualified_hint.as_deref() {
-            if let Some(cands) = self.by_qualified.get(hint) {
-                let cross: Vec<_> = cands
-                    .iter()
-                    .copied()
-                    .filter(|(ri, _)| *ri != src_repo)
-                    .collect();
-                if cross.len() == 1 {
-                    return ResolveOutcome::Resolved(cross[0].1);
-                }
-                if cross.len() > 1 {
-                    return ResolveOutcome::Ambiguous;
-                }
+        if let Some(hint) = rec.to_qualified_hint.as_deref()
+            && let Some(cands) = self.by_qualified.get(hint)
+        {
+            let cross: Vec<_> = cands
+                .iter()
+                .copied()
+                .filter(|(ri, _)| *ri != src_repo)
+                .collect();
+            if cross.len() == 1 {
+                return ResolveOutcome::Resolved(cross[0].1);
+            }
+            if cross.len() > 1 {
+                return ResolveOutcome::Ambiguous;
             }
         }
 
@@ -331,75 +330,75 @@ impl CrossRepoExportIndex {
         // Tier 2 — module-path trailing suffix disambiguation.
         if let Some(hint) = rec.import_module_hint.as_deref() {
             let hint_segs = normalize_module_path_segments(hint);
-            if !hint_segs.is_empty() {
-                if let Some(cands) = self.by_name.get(&simple) {
-                    let mut best_score = 0usize;
-                    let mut best: Vec<Uuid> = Vec::new();
-                    for cand in cands.iter().filter(|c| c.repo_idx != src_repo) {
-                        let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
-                        if score < 1 {
-                            continue;
-                        }
-                        if score > best_score {
-                            best_score = score;
-                            best.clear();
-                            best.push(cand.node_id);
-                        } else if score == best_score {
-                            best.push(cand.node_id);
-                        }
+            if !hint_segs.is_empty()
+                && let Some(cands) = self.by_name.get(&simple)
+            {
+                let mut best_score = 0usize;
+                let mut best: Vec<Uuid> = Vec::new();
+                for cand in cands.iter().filter(|c| c.repo_idx != src_repo) {
+                    let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
+                    if score < 1 {
+                        continue;
                     }
-                    best.sort();
-                    best.dedup();
-                    if best.len() == 1 {
-                        return ResolveOutcome::Resolved(best[0]);
+                    if score > best_score {
+                        best_score = score;
+                        best.clear();
+                        best.push(cand.node_id);
+                    } else if score == best_score {
+                        best.push(cand.node_id);
                     }
-                    if best.len() > 1 {
-                        return ResolveOutcome::Ambiguous;
-                    }
+                }
+                best.sort();
+                best.dedup();
+                if best.len() == 1 {
+                    return ResolveOutcome::Resolved(best[0]);
+                }
+                if best.len() > 1 {
+                    return ResolveOutcome::Ambiguous;
                 }
             }
         }
 
         // Tier 3 — type hint + member match.
-        if let Some(type_hint) = rec.to_type_hint.as_deref() {
-            if let Some(cands) = self.by_name.get(&simple) {
-                let mut matches: Vec<&ExportCandidate> = cands
-                    .iter()
-                    .filter(|c| c.repo_idx != src_repo)
-                    .filter(|c| {
-                        let q = &c.qualified_name;
-                        q.contains(&format!("{type_hint}::{simple}"))
-                            || q.contains(&format!("{type_hint}.{simple}"))
-                            || q.eq_ignore_ascii_case(&format!("{type_hint}.{simple}"))
-                            || (c.name_matches_owner(type_hint) && c.name_is(&simple))
-                    })
-                    .collect();
-                if let Some(hint) = rec.import_module_hint.as_deref() {
-                    let hint_segs = normalize_module_path_segments(hint);
-                    if matches.len() > 1 && !hint_segs.is_empty() {
-                        let mut best_score = 0usize;
-                        let mut filtered = Vec::new();
-                        for cand in &matches {
-                            let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
-                            if score > best_score {
-                                best_score = score;
-                                filtered.clear();
-                                filtered.push(*cand);
-                            } else if score == best_score && score >= 1 {
-                                filtered.push(*cand);
-                            }
-                        }
-                        if best_score >= 1 {
-                            matches = filtered;
+        if let Some(type_hint) = rec.to_type_hint.as_deref()
+            && let Some(cands) = self.by_name.get(&simple)
+        {
+            let mut matches: Vec<&ExportCandidate> = cands
+                .iter()
+                .filter(|c| c.repo_idx != src_repo)
+                .filter(|c| {
+                    let q = &c.qualified_name;
+                    q.contains(&format!("{type_hint}::{simple}"))
+                        || q.contains(&format!("{type_hint}.{simple}"))
+                        || q.eq_ignore_ascii_case(&format!("{type_hint}.{simple}"))
+                        || (c.name_matches_owner(type_hint) && c.name_is(&simple))
+                })
+                .collect();
+            if let Some(hint) = rec.import_module_hint.as_deref() {
+                let hint_segs = normalize_module_path_segments(hint);
+                if matches.len() > 1 && !hint_segs.is_empty() {
+                    let mut best_score = 0usize;
+                    let mut filtered = Vec::new();
+                    for cand in &matches {
+                        let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
+                        if score > best_score {
+                            best_score = score;
+                            filtered.clear();
+                            filtered.push(*cand);
+                        } else if score == best_score && score >= 1 {
+                            filtered.push(*cand);
                         }
                     }
+                    if best_score >= 1 {
+                        matches = filtered;
+                    }
                 }
-                if matches.len() == 1 {
-                    return ResolveOutcome::Resolved(matches[0].node_id);
-                }
-                if matches.len() > 1 {
-                    return ResolveOutcome::Ambiguous;
-                }
+            }
+            if matches.len() == 1 {
+                return ResolveOutcome::Resolved(matches[0].node_id);
+            }
+            if matches.len() > 1 {
+                return ResolveOutcome::Ambiguous;
             }
         }
 

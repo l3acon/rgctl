@@ -625,28 +625,26 @@ fn build_spine(
             parent.insert(caller, node);
             *neighbor_budget = neighbor_budget.saturating_sub(1);
             q.push_back((caller, d + 1));
-            // Prefer delta-touched callers as chain leaves.
-            if prefer.contains(&caller) {
-                best_leaf = Some(caller);
-            } else if best_leaf.is_none() {
+            // Prefer delta-touched callers as chain leaves; otherwise first caller.
+            if prefer.contains(&caller) || best_leaf.is_none() {
                 best_leaf = Some(caller);
             }
         }
     }
 
     let mut up_chain = Vec::new();
-    if let Some(mut leaf) = best_leaf {
-        if leaf != seed {
-            up_chain.push(side.display_name(leaf));
-            while let Some(&p) = parent.get(&leaf) {
-                if p == seed {
-                    break;
-                }
-                up_chain.push(side.display_name(p));
-                leaf = p;
+    if let Some(mut leaf) = best_leaf
+        && leaf != seed
+    {
+        up_chain.push(side.display_name(leaf));
+        while let Some(&p) = parent.get(&leaf) {
+            if p == seed {
+                break;
             }
-            up_chain.reverse();
+            up_chain.push(side.display_name(p));
+            leaf = p;
         }
+        up_chain.reverse();
     }
 
     let mut path = up_chain;

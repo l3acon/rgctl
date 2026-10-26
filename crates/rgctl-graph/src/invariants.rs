@@ -29,12 +29,12 @@ fn inv_err(msg: impl Into<String>) -> Error {
 fn check_inv1_sorted_unique_nodes(col: &ColumnarGraphMmap) -> Result<()> {
     let mut prev: Option<Uuid> = None;
     for (idx, id) in col.node_ids_by_index() {
-        if let Some(p) = prev {
-            if id <= p {
-                return Err(inv_err(format!(
-                    "INV-1: node_rows not strictly sorted/unique at index {idx}: {id} <= {p}"
-                )));
-            }
+        if let Some(p) = prev
+            && id <= p
+        {
+            return Err(inv_err(format!(
+                "INV-1: node_rows not strictly sorted/unique at index {idx}: {id} <= {p}"
+            )));
         }
         prev = Some(id);
     }
@@ -61,13 +61,13 @@ fn check_inv2_sorted_unique_edges(col: &ColumnarGraphMmap) -> Result<()> {
                 "INV-2: dangling edge to={to} at index {idx}"
             )));
         }
-        if let Some(p) = prev {
-            if key <= p {
-                return Err(inv_err(format!(
-                    "INV-2: edge_rows not strictly sorted/unique at index {idx}: {:?} <= {:?}",
-                    key, p
-                )));
-            }
+        if let Some(p) = prev
+            && key <= p
+        {
+            return Err(inv_err(format!(
+                "INV-2: edge_rows not strictly sorted/unique at index {idx}: {:?} <= {:?}",
+                key, p
+            )));
         }
         prev = Some(key);
     }
@@ -170,12 +170,10 @@ fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
                     )));
                 }
             }
-            EdgeType::Contains => {
-                if !is_container(from_type) {
-                    return Err(inv_err(format!(
-                        "INV-3: Contains source must be a container, got {from_type:?} ({from})"
-                    )));
-                }
+            EdgeType::Contains if !is_container(from_type) => {
+                return Err(inv_err(format!(
+                    "INV-3: Contains source must be a container, got {from_type:?} ({from})"
+                )));
             }
             _ => {}
         }

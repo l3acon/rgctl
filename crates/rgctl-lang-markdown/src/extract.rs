@@ -671,9 +671,7 @@ fn finalize_section_bodies(ctx: &mut ExtractCtx<'_>) {
     for (i, rec) in records.iter().enumerate() {
         let body_start = rec.heading_end_byte;
         let body_end = records
-            .iter()
-            .skip(i + 1)
-            .next()
+            .get(i + 1)
             .map(|r| r.heading_start_byte)
             .unwrap_or(ctx.source.len());
         if body_start >= body_end {

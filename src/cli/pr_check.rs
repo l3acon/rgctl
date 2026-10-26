@@ -251,28 +251,28 @@ fn evaluate_pr_check(
     if args.strict && paths.is_empty() {
         anyhow::bail!("strict diff scope: no changed files between refs");
     }
-    if let Some(max) = max_changed_files {
-        if paths.len() > max {
-            anyhow::bail!(
-                "changed file count {} exceeds policy size_limits.max_changed_files {}",
-                paths.len(),
-                max
-            );
-        }
+    if let Some(max) = max_changed_files
+        && paths.len() > max
+    {
+        anyhow::bail!(
+            "changed file count {} exceeds policy size_limits.max_changed_files {}",
+            paths.len(),
+            max
+        );
     }
 
     let unified = resolve_unified_diff(ctx, &temporal, synthetic_head)?;
     let hunk_index = HunkIndex::from_unified_diff(&unified);
     let scope = EntityScope::new(&pair.head, &paths, Some(&hunk_index));
     let scope_keys = scope.changed_entities()?;
-    if let Some(max) = max_scoped_entities {
-        if scope_keys.len() > max {
-            anyhow::bail!(
-                "scoped entity count {} exceeds policy size_limits.max_scoped_entities {}",
-                scope_keys.len(),
-                max
-            );
-        }
+    if let Some(max) = max_scoped_entities
+        && scope_keys.len() > max
+    {
+        anyhow::bail!(
+            "scoped entity count {} exceeds policy size_limits.max_scoped_entities {}",
+            scope_keys.len(),
+            max
+        );
     }
 
     let head_seed_ids = scope_entity_ids(&pair.head, &scope_keys)?;
@@ -298,7 +298,7 @@ fn evaluate_pr_check(
         &head_engine,
         &base_engine,
         &scope_keys,
-        &registry,
+        registry,
         &centrality,
     )?;
 

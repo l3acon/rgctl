@@ -661,10 +661,9 @@ pub fn visit_depth_relation_node(
     if matches!(
         node.kind(),
         "struct_item" | "enum_item" | "function_item" | "impl_item" | "trait_item"
-    ) {
-        if let Some(owner) = item_owner_name(node, source, symbols) {
-            emit_item_attributes(node, &owner, source, file, relations);
-        }
+    ) && let Some(owner) = item_owner_name(node, source, symbols)
+    {
+        emit_item_attributes(node, &owner, source, file, relations);
     }
 
     let from = from_fn
@@ -673,53 +672,50 @@ pub fn visit_depth_relation_node(
 
     match node.kind() {
         "struct_expression" => {
-            if let Some(ref from) = from {
-                if let Some(ty) = node
+            if let Some(ref from) = from
+                && let Some(ty) = node
                     .child_by_field_name("name")
                     .and_then(|n| rust_type_name(n, source))
-                {
-                    push_relation(
-                        relations,
-                        from,
-                        &ty,
-                        RelationType::Instantiates,
-                        loc(node, file),
-                        serde_json::json!({ "language": "rust" }),
-                    );
-                }
+            {
+                push_relation(
+                    relations,
+                    from,
+                    &ty,
+                    RelationType::Instantiates,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         "call_expression" | "macro_invocation" => {
-            if let Some(ref from) = from {
-                if let Some(ty) = instantiates_from_call(node, source) {
-                    push_relation(
-                        relations,
-                        from,
-                        &ty,
-                        RelationType::Instantiates,
-                        loc(node, file),
-                        serde_json::json!({ "language": "rust" }),
-                    );
-                }
+            if let Some(ref from) = from
+                && let Some(ty) = instantiates_from_call(node, source)
+            {
+                push_relation(
+                    relations,
+                    from,
+                    &ty,
+                    RelationType::Instantiates,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         "field_expression" => {
-            if !is_assignment_lhs(node) {
-                if let Some(ref from) = from {
-                    if let Some(field) = node
-                        .child_by_field_name("field")
-                        .and_then(|n| n.utf8_text(source).ok())
-                    {
-                        push_relation(
-                            relations,
-                            from,
-                            field,
-                            RelationType::References,
-                            loc(node, file),
-                            serde_json::json!({ "language": "rust" }),
-                        );
-                    }
-                }
+            if !is_assignment_lhs(node)
+                && let Some(ref from) = from
+                && let Some(field) = node
+                    .child_by_field_name("field")
+                    .and_then(|n| n.utf8_text(source).ok())
+            {
+                push_relation(
+                    relations,
+                    from,
+                    field,
+                    RelationType::References,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         _ => {}

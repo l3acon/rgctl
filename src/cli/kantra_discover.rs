@@ -157,6 +157,7 @@ fn build_node_metrics(
 }
 
 /// Run Kantra evaluation and write `.rgctl/kantra_findings.json`.
+#[allow(clippy::too_many_arguments)]
 pub fn run_kantra_stage(
     repo_root: &Path,
     store: &Path,
@@ -226,13 +227,11 @@ pub fn preload_discovered_sources(
     let paths: HashSet<String> = files
         .iter()
         .filter(|p| is_text_file(p))
-        .filter_map(|p| {
-            let rel = p
-                .strip_prefix(repo_root)
+        .map(|p| {
+            p.strip_prefix(repo_root)
                 .unwrap_or(p)
                 .to_string_lossy()
-                .replace('\\', "/");
-            Some(rel)
+                .replace('\\', "/")
         })
         .collect();
     rgctl_pipeline::with_pool(thread_count, || {

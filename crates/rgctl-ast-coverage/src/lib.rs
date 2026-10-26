@@ -590,6 +590,9 @@ pub fn rerun_if_changed_paths(crates_dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Format issues as `cargo:warning=` lines (and optional hard failure).
+///
+/// # Errors
+/// Returns `Err` when `strict` is true and `issues` is non-empty.
 pub fn emit_cargo_warnings(issues: &[CoverageIssue], strict: bool) -> Result<(), String> {
     if issues.is_empty() {
         return Ok(());

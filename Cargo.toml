@@ -232,6 +232,10 @@ missing_safety_doc = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
 
+# rustc 1.99 expanded `collapsible_if` to prefer let-chains across the tree;
+# migrate gradually rather than blocking CI on hundreds of MachineApplicable nits.
+collapsible_if = "allow"
+
 [package]
 name = "rgctl"
 version.workspace = true
@@ -249,6 +253,9 @@ categories = ["development-tools", "command-line-utilities"]
 rgctl-agent-pack-codegen = { path = "crates/rgctl-agent-pack-codegen" }
 walkdir = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints.clippy]
+collapsible_if = "allow"
 
 [dependencies]
 # Workspace crates

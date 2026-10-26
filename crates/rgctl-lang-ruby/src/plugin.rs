@@ -342,6 +342,7 @@ impl RubyPlugin {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn traverse_symbols(
         &self,
         node: Node,
@@ -644,6 +645,7 @@ impl RubyPlugin {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
     fn walk_relation_calls(
         &self,
         node: Node,

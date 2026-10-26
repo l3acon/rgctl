@@ -201,10 +201,10 @@ fn build_node_index_parallel(
         .map(|shard| {
             let mut map = HashMap::with_capacity(shard_cap);
             for idx in (shard..count).step_by(NODE_INDEX_SHARDS) {
-                if let Ok(key) = stable_key_from_row(col, idx) {
-                    if let Ok(row_ref) = node_row_ref(col, idx) {
-                        map.insert(key, row_ref);
-                    }
+                if let Ok(key) = stable_key_from_row(col, idx)
+                    && let Ok(row_ref) = node_row_ref(col, idx)
+                {
+                    map.insert(key, row_ref);
                 }
             }
             map

@@ -162,6 +162,7 @@ pub struct ColumnarGraphMmap {
     offset_strings_len: u64,
     index_tail_off: usize,
     offset_extensions: u64,
+    #[allow(clippy::type_complexity)]
     parsed_indexes: Mutex<Option<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>>>,
 }
 
@@ -224,6 +225,7 @@ impl ColumnarGraphMmap {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn parsed_indexes(
         &self,
     ) -> Result<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>> {
@@ -282,6 +284,7 @@ impl ColumnarGraphMmap {
     ///
     /// Prefer this for structured query hot paths. [`Self::name_index`] / [`Self::type_index`]
     /// clone the maps and are intended for hydration / one-shot tooling only.
+    #[allow(clippy::type_complexity)]
     pub fn indexes_shared(
         &self,
     ) -> Result<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>> {
@@ -803,9 +806,8 @@ impl PreparedGraphSnapshot {
                 .unwrap_or_else(|| "graph.snapshot.bin".into())
         ));
         std::fs::write(&tmp, &file)?;
-        std::fs::rename(&tmp, path).map_err(|e| {
+        std::fs::rename(&tmp, path).inspect_err(|_e| {
             let _ = std::fs::remove_file(&tmp);
-            e
         })?;
         Ok(())
     }
@@ -832,10 +834,10 @@ impl StringPool {
 
     pub(crate) fn intern(&mut self, s: &str) -> StrRef {
         let hash = hash_string_key(s);
-        if let Some(&existing) = self.offsets.get(&hash) {
-            if self.str_at(existing) == s {
-                return existing;
-            }
+        if let Some(&existing) = self.offsets.get(&hash)
+            && self.str_at(existing) == s
+        {
+            return existing;
         }
         let off = self.bytes.len() as u32;
         let bytes = s.as_bytes();
@@ -1211,6 +1213,7 @@ pub(crate) fn edge_digest_bytes(edge: &Edge) -> Result<Vec<u8>> {
     bincode::serialize(&edge.for_columnar_digest()).map_err(bincode_err)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_node_columnar(
     node: &Node,
     hasher: &mut blake3::Hasher,

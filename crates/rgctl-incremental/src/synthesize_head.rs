@@ -48,7 +48,7 @@ pub fn out_root_clobbers_live_session(repo_root: &Path, out_root: &Path) -> bool
     } else {
         out_root.join("graph.snapshot.bin")
     };
-    let out_snap_canon = out_snap.canonicalize().unwrap_or_else(|_| out_snap);
+    let out_snap_canon = out_snap.canonicalize().unwrap_or(out_snap);
     out_snap_canon == live_canon
 }
 

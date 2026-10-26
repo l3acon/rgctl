@@ -66,7 +66,7 @@ impl TokenSpaceAccumulator {
         }
         let n_tokens = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
         let dimensions = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-        if dimensions == 0 || dimensions % 8 != 0 {
+        if dimensions == 0 || !dimensions.is_multiple_of(8) {
             return Err(Error::ConfigError(format!(
                 "vocab matrix: invalid dimensions {dimensions}"
             )));
@@ -474,7 +474,7 @@ pub struct VocabAccumulateEmbedder {
 impl VocabAccumulateEmbedder {
     /// Create an embedder that outputs `dimensions` floats (prefer 256).
     pub fn new(dimensions: usize) -> Result<Self> {
-        if dimensions == 0 || dimensions % 8 != 0 {
+        if dimensions == 0 || !dimensions.is_multiple_of(8) {
             return Err(Error::ConfigError(
                 "vocab embedder dimensions must be a positive multiple of 8".into(),
             ));

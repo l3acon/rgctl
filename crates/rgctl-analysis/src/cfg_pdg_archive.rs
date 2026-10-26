@@ -643,20 +643,20 @@ fn write_v3_archive(
             len: length,
             flags: TOC_FLAG_PRIMARY,
         });
-        if let Some(alias) = stable_alias_uuid_from_payload(bytes) {
-            if alias != *id {
-                toc_entries.push(TocEntry {
-                    uuid: *alias.as_bytes(),
-                    offset: abs_offset,
-                    len: length,
-                    flags: TOC_FLAG_STABLE_ALIAS,
-                });
-            }
+        if let Some(alias) = stable_alias_uuid_from_payload(bytes)
+            && alias != *id
+        {
+            toc_entries.push(TocEntry {
+                uuid: *alias.as_bytes(),
+                offset: abs_offset,
+                len: length,
+                flags: TOC_FLAG_STABLE_ALIAS,
+            });
         }
         payload.extend_from_slice(bytes);
         abs_offset += u64::from(length);
     }
-    toc_entries.sort_by(|a, b| a.uuid.cmp(&b.uuid));
+    toc_entries.sort_by_key(|a| a.uuid);
 
     let payload_end = header_len + payload.len();
     let toc_offset = (payload_end + 7) & !7; // 8-byte align
@@ -711,7 +711,7 @@ fn parse_v3_footer(mmap: &[u8]) -> Result<(usize, usize, Option<String>)> {
     let toc_bytes = toc_count
         .checked_mul(TOC_ENTRY_SIZE)
         .ok_or_else(|| Error::SerdeError("cfg_pdg TOC overflow".into()))?;
-    if toc_offset % 8 != 0 {
+    if !toc_offset.is_multiple_of(8) {
         return Err(Error::SerdeError(
             "cfg_pdg TOC footer not 8-byte aligned".into(),
         ));

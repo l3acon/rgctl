@@ -400,10 +400,7 @@ fn find_parameter_list(node: Node) -> Option<Node> {
         if current.kind() == "function_declarator" {
             return current.child_by_field_name("parameters");
         }
-        match current.child_by_field_name("declarator") {
-            Some(inner) => current = inner,
-            None => return None,
-        }
+        current = current.child_by_field_name("declarator")?;
     }
     None
 }

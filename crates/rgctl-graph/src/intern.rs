@@ -21,10 +21,10 @@ impl StringInterner {
 
     /// Intern a string, returning a shared handle.
     pub fn intern(&self, value: &str) -> Result<Arc<str>> {
-        if let Ok(read) = self.pool.read() {
-            if let Some(existing) = read.get(value) {
-                return Ok(Arc::clone(existing));
-            }
+        if let Ok(read) = self.pool.read()
+            && let Some(existing) = read.get(value)
+        {
+            return Ok(Arc::clone(existing));
         }
 
         let arc: Arc<str> = Arc::from(value);

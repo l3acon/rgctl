@@ -246,6 +246,7 @@ fn suggest_symbol_names(ctx: &CliContext, needle: &str, limit: usize) -> Vec<Str
 }
 
 /// `rgctl find`
+#[allow(clippy::too_many_arguments)]
 pub fn run_find(
     ctx: &CliContext,
     pattern: Option<String>,
@@ -269,10 +270,10 @@ pub fn run_find(
                 pattern = Some(format!("{prefix}*"));
             }
         }
-        if shared.scope.is_none() {
-            if let Some(prefix) = resolved.import_prefixes.first() {
-                shared.scope = Some(prefix.clone());
-            }
+        if shared.scope.is_none()
+            && let Some(prefix) = resolved.import_prefixes.first()
+        {
+            shared.scope = Some(prefix.clone());
         }
         package_resolution = Some(resolved);
     }
@@ -307,21 +308,21 @@ pub fn run_find(
         .map_err(|e| map_sq_err(ctx, e))?;
     if ctx.format == OutputFormat::Json {
         let mut v = serde_json::to_value(&result)?;
-        if let Some(obj) = v.as_object_mut() {
-            if let Some(res) = package_resolution {
-                obj.insert("package".into(), serde_json::to_value(&res)?);
-                if result.total == 0 {
-                    // Attempt bundled presence via deps manifests/jars is CLI-orchestrated;
-                    // here we only flag that imports are empty so agents check deps.
-                    obj.insert(
-                        "bundled_presence".into(),
-                        serde_json::json!({
-                            "present": serde_json::Value::Null,
-                            "honesty": "Zero import hits for package — run `deps check --include-jars` \
-                                        before treating the library as absent"
-                        }),
-                    );
-                }
+        if let Some(obj) = v.as_object_mut()
+            && let Some(res) = package_resolution
+        {
+            obj.insert("package".into(), serde_json::to_value(&res)?);
+            if result.total == 0 {
+                // Attempt bundled presence via deps manifests/jars is CLI-orchestrated;
+                // here we only flag that imports are empty so agents check deps.
+                obj.insert(
+                    "bundled_presence".into(),
+                    serde_json::json!({
+                        "present": serde_json::Value::Null,
+                        "honesty": "Zero import hits for package — run `deps check --include-jars` \
+                                    before treating the library as absent"
+                    }),
+                );
             }
         }
         return ctx.emit_json_value(&v);
@@ -351,10 +352,10 @@ pub fn run_call_neighbors(
     if let Some(ref coords) = package_coords {
         let resolved =
             rgctl_security::resolve_package(coords).map_err(|e| anyhow::anyhow!("{e}"))?;
-        if shared.scope.is_none() {
-            if let Some(prefix) = resolved.import_prefixes.first() {
-                shared.scope = Some(prefix.clone());
-            }
+        if shared.scope.is_none()
+            && let Some(prefix) = resolved.import_prefixes.first()
+        {
+            shared.scope = Some(prefix.clone());
         }
         package_resolution = Some(resolved);
     }
@@ -405,6 +406,7 @@ pub fn run_call_neighbors(
 }
 
 /// `rgctl relations`
+#[allow(clippy::too_many_arguments)]
 pub fn run_relations(
     ctx: &CliContext,
     symbol: Option<String>,

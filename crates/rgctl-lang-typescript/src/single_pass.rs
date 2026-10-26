@@ -347,33 +347,32 @@ pub fn extract_all_single_pass(
                                 .qualified_name
                                 .clone()
                                 .unwrap_or_else(|| from_fn.name.clone());
-                            if let Some(ctor) = node.child_by_field_name("constructor") {
-                                if let Some(target) = type_name_from_node(ctor, source) {
-                                    relations.push(Relation {
-                                        from,
-                                        to: simple_type_name(&target),
-                                        relation_type: RelationType::Instantiates,
-                                        location: source_location(node, &file_path_str),
-                                        metadata: serde_json::json!({ "language": "typescript" }),
-                                        to_qualified_hint: Some(target),
-                                        to_type_hint: None,
-                                    });
-                                }
+                            if let Some(ctor) = node.child_by_field_name("constructor")
+                                && let Some(target) = type_name_from_node(ctor, source)
+                            {
+                                relations.push(Relation {
+                                    from,
+                                    to: simple_type_name(&target),
+                                    relation_type: RelationType::Instantiates,
+                                    location: source_location(node, &file_path_str),
+                                    metadata: serde_json::json!({ "language": "typescript" }),
+                                    to_qualified_hint: Some(target),
+                                    to_type_hint: None,
+                                });
                             }
                         }
                     }
                     _ => {}
                 }
 
-                if TS_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if TS_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 if ctx.scopes.current_function().is_some() {

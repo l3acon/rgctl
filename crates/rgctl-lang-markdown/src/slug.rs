@@ -9,11 +9,12 @@ pub fn slugify(text: &str) -> String {
         if lower.is_ascii_alphanumeric() {
             out.push(lower);
             prev_hyphen = false;
-        } else if lower.is_ascii_whitespace() || lower == '-' || lower == '_' {
-            if !out.is_empty() && !prev_hyphen {
-                out.push('-');
-                prev_hyphen = true;
-            }
+        } else if (lower.is_ascii_whitespace() || lower == '-' || lower == '_')
+            && !out.is_empty()
+            && !prev_hyphen
+        {
+            out.push('-');
+            prev_hyphen = true;
         }
     }
     while out.ends_with('-') {

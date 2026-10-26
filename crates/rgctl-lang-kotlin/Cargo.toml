@@ -17,3 +17,6 @@ serde_json = "1"
 [dev-dependencies]
 rgctl-ast-coverage = { workspace = true }
 rgctl-languages = { workspace = true }
+
+[lints.clippy]
+collapsible_if = "allow"

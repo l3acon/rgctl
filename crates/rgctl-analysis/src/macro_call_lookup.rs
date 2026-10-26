@@ -244,15 +244,15 @@ pub fn resolve_symbol_uuid(candidates: &[MacroIndexEntry], parsed: &ParsedSymbol
     let filtered: Vec<&MacroIndexEntry> = candidates
         .iter()
         .filter(|entry| {
-            if let Some(ref class_name) = parsed.class_filter {
-                if !class_matches(entry.class_name.as_deref(), class_name) {
-                    return false;
-                }
+            if let Some(ref class_name) = parsed.class_filter
+                && !class_matches(entry.class_name.as_deref(), class_name)
+            {
+                return false;
             }
-            if let Some(ref file_path) = parsed.file_filter {
-                if !file_matches(&entry.file_path, file_path) {
-                    return false;
-                }
+            if let Some(ref file_path) = parsed.file_filter
+                && !file_matches(&entry.file_path, file_path)
+            {
+                return false;
             }
             true
         })
@@ -386,10 +386,10 @@ fn encode_blob<T: serde::Serialize>(value: &T) -> Result<Vec<u8>> {
 }
 
 fn decode_string_list(blob: Option<Vec<u8>>, json: &str) -> Result<Vec<String>> {
-    if let Some(bytes) = blob {
-        if !bytes.is_empty() {
-            return bincode::deserialize(&bytes).map_err(bincode_err);
-        }
+    if let Some(bytes) = blob
+        && !bytes.is_empty()
+    {
+        return bincode::deserialize(&bytes).map_err(bincode_err);
     }
     if json.is_empty() || json == "[]" {
         return Ok(Vec::new());
@@ -398,10 +398,10 @@ fn decode_string_list(blob: Option<Vec<u8>>, json: &str) -> Result<Vec<String>> 
 }
 
 fn decode_uuid_list_blob(blob: Option<Vec<u8>>, json: &str) -> Result<Vec<Uuid>> {
-    if let Some(bytes) = blob {
-        if !bytes.is_empty() {
-            return bincode::deserialize(&bytes).map_err(bincode_err);
-        }
+    if let Some(bytes) = blob
+        && !bytes.is_empty()
+    {
+        return bincode::deserialize(&bytes).map_err(bincode_err);
     }
     MacroCallLookupDb::parse_uuid_list(json)
 }
@@ -585,17 +585,17 @@ impl MacroCallLookupDb {
         let snapshot_path = repo_root
             .join(rgctl_graph::code_graph::GRAPH_DIR)
             .join(rgctl_graph::snapshot::SNAPSHOT_FILE);
-        if snapshot_path.exists() {
-            if let Ok(mmap) = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path) {
-                if let Some(stored) = Self::read_meta(&conn, "graph_digest")? {
-                    return Ok(stored == mmap.content_digest()?);
-                }
-                let node_count: Option<String> = Self::read_meta(&conn, "node_count")?;
-                let edge_count: Option<String> = Self::read_meta(&conn, "edge_count")?;
-                if let (Some(nodes), Some(edges)) = (node_count, edge_count) {
-                    return Ok(nodes == mmap.node_count().to_string()
-                        && edges == mmap.edge_count().to_string());
-                }
+        if snapshot_path.exists()
+            && let Ok(mmap) = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)
+        {
+            if let Some(stored) = Self::read_meta(&conn, "graph_digest")? {
+                return Ok(stored == mmap.content_digest()?);
+            }
+            let node_count: Option<String> = Self::read_meta(&conn, "node_count")?;
+            let edge_count: Option<String> = Self::read_meta(&conn, "edge_count")?;
+            if let (Some(nodes), Some(edges)) = (node_count, edge_count) {
+                return Ok(nodes == mmap.node_count().to_string()
+                    && edges == mmap.edge_count().to_string());
             }
         }
 

@@ -78,10 +78,10 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
     if call.kind() != "call" {
         return false;
     }
-    if let Some(recv) = call.child_by_field_name("receiver") {
-        if !matches!(recv.kind(), "constant" | "scope_resolution" | "self") {
-            return true;
-        }
+    if let Some(recv) = call.child_by_field_name("receiver")
+        && !matches!(recv.kind(), "constant" | "scope_resolution" | "self")
+    {
+        return true;
     }
     if let Some(method) = call.child_by_field_name("method") {
         if !matches!(
@@ -90,14 +90,13 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
         ) {
             return true;
         }
-        if method.kind() == "identifier" {
-            if method
+        if method.kind() == "identifier"
+            && method
                 .utf8_text(source)
                 .ok()
                 .is_some_and(|t| t.starts_with('@'))
-            {
-                return true;
-            }
+        {
+            return true;
         }
     }
     false
@@ -368,20 +367,20 @@ pub fn push_call_relation_from(
         meta["go_field"] = serde_json::Value::String(field);
         meta["go_callee"] = serde_json::Value::String(callee.clone());
     }
-    if language == "rust" {
-        if let Some(unresolved) = rust_call_unresolved(node, source) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "rust"
+        && let Some(unresolved) = rust_call_unresolved(node, source)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
-    if language == "c" {
-        if let Some(unresolved) = c_call_unresolved(node, source, from_fn) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "c"
+        && let Some(unresolved) = c_call_unresolved(node, source, from_fn)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
-    if language == "python" {
-        if let Some(unresolved) = python_call_unresolved(node, source) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "python"
+        && let Some(unresolved) = python_call_unresolved(node, source)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
     if language == "ruby" && ruby_call_unresolved(node, source) {
         meta["unresolved"] = serde_json::Value::Bool(true);
@@ -714,25 +713,23 @@ fn rust_call_type_hint(
             }
         }
         // `self.field` in inherent methods — match param named self with &Type
-        if value.kind() == "self" || value.utf8_text(source).ok() == Some("self") {
-            if let Some(self_ty) = from_fn
+        if (value.kind() == "self" || value.utf8_text(source).ok() == Some("self"))
+            && let Some(self_ty) = from_fn
                 .parameters
                 .iter()
                 .find(|p| p.name == "self" || p.name == "&self" || p.name == "&mut self")
                 .and_then(|p| p.param_type.as_deref())
-            {
-                let owner_ty = rust_simple_type_name(self_ty);
-                let owner = symbols.iter().find(|s| {
-                    matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum)
-                        && s.name == owner_ty
-                })?;
-                return owner
-                    .fields
-                    .iter()
-                    .find(|f| f.name == field_name)
-                    .and_then(|f| f.field_type.as_deref())
-                    .map(rust_simple_type_name);
-            }
+        {
+            let owner_ty = rust_simple_type_name(self_ty);
+            let owner = symbols.iter().find(|s| {
+                matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum) && s.name == owner_ty
+            })?;
+            return owner
+                .fields
+                .iter()
+                .find(|f| f.name == field_name)
+                .and_then(|f| f.field_type.as_deref())
+                .map(rust_simple_type_name);
         }
     }
     None
@@ -820,10 +817,10 @@ fn c_call_unresolved(call: Node, source: &[u8], from_fn: &Symbol) -> Option<bool
             }
         }
         "pointer_expression" | "parenthesized_expression" => {
-            if let Some(name) = callee_name(func, source) {
-                if from_fn.parameters.iter().any(|p| p.name == name) {
-                    return Some(true);
-                }
+            if let Some(name) = callee_name(func, source)
+                && from_fn.parameters.iter().any(|p| p.name == name)
+            {
+                return Some(true);
             }
             return Some(true);
         }

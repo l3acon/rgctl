@@ -165,12 +165,11 @@ impl MroIndex {
         for node in backend.find_nodes_by_type(NodeType::Function)? {
             if let Some((owner, method)) =
                 split_owner_method(node.qualified_name.as_deref(), &node.name)
+                && let Some(&tid) = self.graph.name_of.get(owner)
             {
-                if let Some(&tid) = self.graph.name_of.get(owner) {
-                    self.methods[tid as usize]
-                        .entry(method.to_string())
-                        .or_insert(node.id);
-                }
+                self.methods[tid as usize]
+                    .entry(method.to_string())
+                    .or_insert(node.id);
             }
         }
         Ok(())
@@ -405,23 +404,26 @@ fn linearize_rust(
 /// Split `Owner.method` / `Owner::method` / Ruby `Owner#method` / bare `method`.
 fn split_owner_method<'a>(qn: Option<&'a str>, name: &'a str) -> Option<(&'a str, &'a str)> {
     let qn = qn.unwrap_or(name);
-    if let Some((owner, method)) = qn.rsplit_once("::") {
-        if !owner.is_empty() && !method.is_empty() {
-            // Strip turbofish / generics on owner: `Foo::<init>` → treat as constructor.
-            let method = method.split('<').next().unwrap_or(method);
-            let owner = owner.split('<').next().unwrap_or(owner);
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once("::")
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        // Strip turbofish / generics on owner: `Foo::<init>` → treat as constructor.
+        let method = method.split('<').next().unwrap_or(method);
+        let owner = owner.split('<').next().unwrap_or(owner);
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('#') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('#')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('.') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('.')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
     None
 }
@@ -512,10 +514,10 @@ fn retarget_calls_via_mro(backend: &mut MemoryBackend, index: &MroIndex) -> Resu
 
 /// Persist type / callee hints on Calls edges so the MRO pass can retarget them.
 pub fn annotate_call_edge(mut edge: Edge, to_type_hint: Option<&str>, callee: &str) -> Edge {
-    if let Some(hint) = to_type_hint {
-        if !hint.is_empty() {
-            edge = edge.with_property("to_type_hint".into(), hint.to_string());
-        }
+    if let Some(hint) = to_type_hint
+        && !hint.is_empty()
+    {
+        edge = edge.with_property("to_type_hint".into(), hint.to_string());
     }
     if !callee.is_empty() {
         edge = edge.with_property("callee".into(), callee.to_string());

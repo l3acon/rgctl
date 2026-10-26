@@ -94,15 +94,15 @@ pub fn build_file_local_types_from_tree(
     let mut out: FxHashMap<(usize, String), HashMap<String, String>> = FxHashMap::default();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if kinds.contains(&node.kind()) {
-            if let Some(name) = function_name_for_locals(language, node, source) {
-                let start_line = node.start_position().row + 1;
-                let mut env = HashMap::new();
-                // Start at the function node so `visit_*` sets `in_target` for this name.
-                visit(node, source, &name, &mut env, false);
-                if !env.is_empty() {
-                    out.insert((start_line, name), env);
-                }
+        if kinds.contains(&node.kind())
+            && let Some(name) = function_name_for_locals(language, node, source)
+        {
+            let start_line = node.start_position().row + 1;
+            let mut env = HashMap::new();
+            // Start at the function node so `visit_*` sets `in_target` for this name.
+            visit(node, source, &name, &mut env, false);
+            if !env.is_empty() {
+                out.insert((start_line, name), env);
             }
         }
         let mut cursor = node.walk();
@@ -343,15 +343,16 @@ fn visit_java(
     if now_in && kind == "local_variable_declaration" {
         collect_java_style_local(node, source, env);
     }
-    if now_in && kind == "formal_parameter" {
-        if let (Some(name), Some(ty)) = (
+    if now_in
+        && kind == "formal_parameter"
+        && let (Some(name), Some(ty)) = (
             node.child_by_field_name("name")
                 .and_then(|n| text_of(n, source)),
             node.child_by_field_name("type")
                 .and_then(|n| text_of(n, source)),
-        ) {
-            insert_ty(env, &name, &ty);
-        }
+        )
+    {
+        insert_ty(env, &name, &ty);
     }
     walk_children(
         node,
@@ -381,15 +382,15 @@ fn collect_java_style_local(node: Node, source: &[u8], env: &mut HashMap<String,
         ) {
             ty = text_of(child, source);
         }
-        if child.kind() == "variable_declarator" {
-            if let (Some(name), Some(t)) = (
+        if child.kind() == "variable_declarator"
+            && let (Some(name), Some(t)) = (
                 child
                     .child_by_field_name("name")
                     .and_then(|n| text_of(n, source)),
                 ty.as_ref(),
-            ) {
-                insert_ty(env, &name, t);
-            }
+            )
+        {
+            insert_ty(env, &name, t);
         }
     }
 }
@@ -432,15 +433,16 @@ fn visit_csharp(
             }
         }
     }
-    if now_in && kind == "parameter" {
-        if let (Some(name), Some(ty)) = (
+    if now_in
+        && kind == "parameter"
+        && let (Some(name), Some(ty)) = (
             node.child_by_field_name("name")
                 .and_then(|n| text_of(n, source)),
             node.child_by_field_name("type")
                 .and_then(|n| text_of(n, source)),
-        ) {
-            insert_ty(env, &name, &ty);
-        }
+        )
+    {
+        insert_ty(env, &name, &ty);
     }
     walk_children(
         node,
@@ -463,15 +465,15 @@ fn collect_csharp_var_decl(node: Node, source: &[u8], env: &mut HashMap<String, 
         .and_then(|n| text_of(n, source));
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "variable_declarator" {
-            if let (Some(name), Some(t)) = (
+        if child.kind() == "variable_declarator"
+            && let (Some(name), Some(t)) = (
                 child
                     .child_by_field_name("name")
                     .and_then(|n| text_of(n, source)),
                 ty.as_ref(),
-            ) {
-                insert_ty(env, &name, t);
-            }
+            )
+        {
+            insert_ty(env, &name, t);
         }
     }
 }
@@ -498,10 +500,10 @@ fn visit_go(
             .and_then(|n| text_of(n, source));
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" {
-                if let (Ok(name), Some(t)) = (child.utf8_text(source), ty.as_ref()) {
-                    insert_ty(env, name, t);
-                }
+            if child.kind() == "identifier"
+                && let (Ok(name), Some(t)) = (child.utf8_text(source), ty.as_ref())
+            {
+                insert_ty(env, name, t);
             }
         }
     }
@@ -511,10 +513,10 @@ fn visit_go(
             .and_then(|n| text_of(n, source));
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" {
-                if let (Ok(name), Some(t)) = (child.utf8_text(source), ty.as_ref()) {
-                    insert_ty(env, name, t);
-                }
+            if child.kind() == "identifier"
+                && let (Ok(name), Some(t)) = (child.utf8_text(source), ty.as_ref())
+            {
+                insert_ty(env, name, t);
             }
         }
     }
@@ -550,26 +552,26 @@ fn visit_rust(
         let ty = node
             .child_by_field_name("type")
             .and_then(|n| text_of(n, source));
-        if let (Some(pat), Some(t)) = (pat, ty) {
-            if let Ok(name) = pat.utf8_text(source) {
-                // Strip ref patterns like `&mut order`
-                let name = name
-                    .trim()
-                    .trim_start_matches("&mut ")
-                    .trim_start_matches('&')
-                    .trim();
-                insert_ty(env, name, &t);
-            }
+        if let (Some(pat), Some(t)) = (pat, ty)
+            && let Ok(name) = pat.utf8_text(source)
+        {
+            // Strip ref patterns like `&mut order`
+            let name = name
+                .trim()
+                .trim_start_matches("&mut ")
+                .trim_start_matches('&')
+                .trim();
+            insert_ty(env, name, &t);
         }
     }
     if now_in && kind == "let_declaration" {
         let ty = node
             .child_by_field_name("type")
             .and_then(|n| text_of(n, source));
-        if let (Some(pat), Some(t)) = (node.child_by_field_name("pattern"), ty) {
-            if let Ok(name) = pat.utf8_text(source) {
-                insert_ty(env, name.trim(), &t);
-            }
+        if let (Some(pat), Some(t)) = (node.child_by_field_name("pattern"), ty)
+            && let Ok(name) = pat.utf8_text(source)
+        {
+            insert_ty(env, name.trim(), &t);
         }
     }
     walk_children(
@@ -673,19 +675,18 @@ fn visit_php(
             insert_ty(env, &name, &ty);
         }
     }
-    if now_in && kind == "assignment_expression" {
-        if let (Some(left), Some(right)) = (
+    if now_in
+        && kind == "assignment_expression"
+        && let (Some(left), Some(right)) = (
             node.child_by_field_name("left"),
             node.child_by_field_name("right"),
-        ) {
-            if left.kind() == "variable_name" {
-                if let (Some(dst), Some(src)) = (text_of(left, source), text_of(right, source)) {
-                    let dst = dst.trim_start_matches('$');
-                    if let Some(ty) = env.get(&src.trim_start_matches('$').to_string()).cloned() {
-                        insert_ty(env, dst, &ty);
-                    }
-                }
-            }
+        )
+        && left.kind() == "variable_name"
+        && let (Some(dst), Some(src)) = (text_of(left, source), text_of(right, source))
+    {
+        let dst = dst.trim_start_matches('$');
+        if let Some(ty) = env.get(&src.trim_start_matches('$').to_string()).cloned() {
+            insert_ty(env, dst, &ty);
         }
     }
     walk_children(
@@ -715,14 +716,13 @@ fn visit_ruby(
             .unwrap_or_default();
         now_in = name == function_name;
     }
-    if now_in && kind == "identifier" {
-        if let Some(parent) = node.parent() {
-            if parent.kind() == "method_parameters" || parent.kind() == "block_parameters" {
-                if let Some(n) = text_of(node, source) {
-                    insert_ty(env, &n, "Object");
-                }
-            }
-        }
+    if now_in
+        && kind == "identifier"
+        && let Some(parent) = node.parent()
+        && (parent.kind() == "method_parameters" || parent.kind() == "block_parameters")
+        && let Some(n) = text_of(node, source)
+    {
+        insert_ty(env, &n, "Object");
     }
     if now_in && kind == "self" {
         let mut cur = node.parent();
@@ -917,15 +917,16 @@ fn visit_groovy(
     if now_in && kind == "local_variable_declaration" {
         collect_java_style_local(node, source, env);
     }
-    if now_in && kind == "formal_parameter" {
-        if let (Some(name), Some(ty)) = (
+    if now_in
+        && kind == "formal_parameter"
+        && let (Some(name), Some(ty)) = (
             node.child_by_field_name("name")
                 .and_then(|n| text_of(n, source)),
             node.child_by_field_name("type")
                 .and_then(|n| text_of(n, source)),
-        ) {
-            insert_ty(env, &name, &ty);
-        }
+        )
+    {
+        insert_ty(env, &name, &ty);
     }
     walk_children(
         node,
@@ -997,10 +998,10 @@ fn visit_puppet(
                                     .map(|s| s.trim_start_matches('$').to_string());
                             }
                             "type" | "builtin_type" | "array_type" | "composite_type"
-                            | "attribute_type" => {
-                                if pty.is_none() {
-                                    pty = text_of(part, source);
-                                }
+                            | "attribute_type"
+                                if pty.is_none() =>
+                            {
+                                pty = text_of(part, source);
                             }
                             _ => {}
                         }
@@ -1118,14 +1119,12 @@ fn visit_js_ts_like(
             };
             // Copy inference: `const other = order` when order known
             if ty.is_none() {
-                if let Some(value) = child.child_by_field_name("value") {
-                    if value.kind() == "identifier" {
-                        if let (Some(name), Ok(rhs)) = (name.as_ref(), value.utf8_text(source)) {
-                            if let Some(t) = env.get(rhs).cloned() {
-                                insert_ty(env, name, &t);
-                            }
-                        }
-                    }
+                if let Some(value) = child.child_by_field_name("value")
+                    && value.kind() == "identifier"
+                    && let (Some(name), Ok(rhs)) = (name.as_ref(), value.utf8_text(source))
+                    && let Some(t) = env.get(rhs).cloned()
+                {
+                    insert_ty(env, name, &t);
                 }
             } else if let (Some(name), Some(t)) = (name, ty) {
                 insert_ty(env, &name, &t);
@@ -1182,10 +1181,10 @@ fn visit_c_family(
             .and_then(|n| text_of(n, source));
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "init_declarator" || child.kind().contains("declarator") {
-                if let (Some(name), Some(t)) = (declarator_ident(child, source), ty.as_ref()) {
-                    insert_ty(env, &name, t);
-                }
+            if (child.kind() == "init_declarator" || child.kind().contains("declarator"))
+                && let (Some(name), Some(t)) = (declarator_ident(child, source), ty.as_ref())
+            {
+                insert_ty(env, &name, t);
             }
         }
     }

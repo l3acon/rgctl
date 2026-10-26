@@ -331,19 +331,19 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "enum_variant" => {
-                        if let Some(frame) = ctx.scopes.current_type() {
-                            if frame.kind == ScopeKind::Enum {
-                                let enum_name = frame.name.clone().unwrap_or_default();
-                                let enum_qn = frame.qualified_prefix.clone();
-                                if let Some(v) = extract_enum_variant_symbol(
-                                    node,
-                                    source,
-                                    &file_path_str,
-                                    &enum_name,
-                                    &enum_qn,
-                                ) {
-                                    ctx.symbols.push(v);
-                                }
+                        if let Some(frame) = ctx.scopes.current_type()
+                            && frame.kind == ScopeKind::Enum
+                        {
+                            let enum_name = frame.name.clone().unwrap_or_default();
+                            let enum_qn = frame.qualified_prefix.clone();
+                            if let Some(v) = extract_enum_variant_symbol(
+                                node,
+                                source,
+                                &file_path_str,
+                                &enum_name,
+                                &enum_qn,
+                            ) {
+                                ctx.symbols.push(v);
                             }
                         }
                     }
@@ -351,15 +351,14 @@ pub fn extract_all_single_pass(
                 }
 
                 // --- Calls (deferred) ---
-                if RUST_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if RUST_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 // --- Depth relations (scope-based from_fn) ---

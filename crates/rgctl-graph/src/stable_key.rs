@@ -120,10 +120,10 @@ pub fn stable_key_from_facets(
 /// Stable key facets from a materialized [`Node`] (same contract as [`stable_key_from_row`]).
 pub fn stable_key_from_node(node: &crate::schema::Node) -> StableNodeKey {
     stable_key_from_facets(
-        node.file_path.as_deref().map(|s| s.as_ref()),
+        node.file_path.as_deref(),
         node.name.as_ref(),
         node.node_type,
-        node.qualified_name.as_deref().map(|s| s.as_ref()),
+        node.qualified_name.as_deref(),
     )
 }
 
