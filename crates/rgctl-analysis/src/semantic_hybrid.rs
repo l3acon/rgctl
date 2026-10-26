@@ -139,17 +139,16 @@ pub fn expand_semantic_hits(
     if matches!(
         config.mode,
         SemanticExpandMode::Blast | SemanticExpandMode::All
-    ) {
-        if let Some(provider) = blast {
-            let mut summaries = Vec::new();
-            for hit in &anchors {
-                if let Some(summary) = provider.summarize(hit.entry.node_id)? {
-                    summaries.push(summary);
-                }
+    ) && let Some(provider) = blast
+    {
+        let mut summaries = Vec::new();
+        for hit in &anchors {
+            if let Some(summary) = provider.summarize(hit.entry.node_id)? {
+                summaries.push(summary);
             }
-            if !summaries.is_empty() {
-                expansion.blast = Some(summaries);
-            }
+        }
+        if !summaries.is_empty() {
+            expansion.blast = Some(summaries);
         }
     }
 

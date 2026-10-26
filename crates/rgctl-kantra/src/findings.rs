@@ -89,9 +89,8 @@ impl KantraFindings {
 
     /// Sort violations deterministically.
     pub fn sort_violations(&mut self) {
-        self.violations.sort_by(|a, b| {
-            (&a.file, a.line, &a.rule_id).cmp(&(&b.file, b.line, &b.rule_id))
-        });
+        self.violations
+            .sort_by(|a, b| (&a.file, a.line, &a.rule_id).cmp(&(&b.file, b.line, &b.rule_id)));
     }
 
     /// Attach message/category from rule metadata.

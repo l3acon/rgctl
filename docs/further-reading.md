@@ -2,7 +2,7 @@
 
 Research that informs rgctl — what we **implement today**, what we **read for inspiration**, and where **you** can push the project forward.
 
-If a paper sparks an idea (new relation type, better slice precision, agent retrieval pattern), open a [GitHub issue](https://github.com/sshaaf/rgctl/issues) or PR and point at the row below. We treat this doc as a living map, not marketing copy.
+If a paper sparks an idea (new relation type, better slice precision, agent retrieval pattern), open a [GitHub issue](https://github.com/rgctl/rgctl/issues) or PR and point at the row below. We treat this doc as a living map, not marketing copy.
 
 **See also:** [Introduction](Introduction.md) (features) · [Graph storage architecture](graph-storage-architecture.md) (caches)
 

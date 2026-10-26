@@ -1,12 +1,13 @@
 //! `rgctl vuln` and `rgctl deps` — OSV triage, deps match, and reachability analyze.
 
-use super::context::CliContext;
 use super::OutputFormat;
+use super::context::CliContext;
 use anyhow::{Context, Result};
 use rgctl_graph::paths::artifact_path;
 use rgctl_security::{
-    affected_methods_from_osv_json, build_sink_first_result, deps_check, missing_cfg_error_message,
-    resolve_package, triage_osv_path, vuln_analyze, DepsCheckOpts, DepsVerdict, VulnAnalyzeOpts,
+    DepsCheckOpts, DepsVerdict, VulnAnalyzeOpts, affected_methods_from_osv_json,
+    build_sink_first_result, deps_check, missing_cfg_error_message, resolve_package,
+    triage_osv_path, vuln_analyze,
 };
 use std::path::{Path, PathBuf};
 
@@ -145,7 +146,10 @@ fn emit_analyze(ctx: &CliContext, result: &rgctl_security::VulnAnalyzeResult) ->
 
 fn cfg_archive_present(repo: &Path) -> bool {
     let p = artifact_path(repo, "analysis/cfg_pdg.bin");
-    p.is_file() || artifact_path(repo, "analysis").join("cfg_pdg.bin").is_file()
+    p.is_file()
+        || artifact_path(repo, "analysis")
+            .join("cfg_pdg.bin")
+            .is_file()
 }
 
 fn graph_package_signals(
@@ -158,19 +162,18 @@ fn graph_package_signals(
     };
     let q = rgctl_graph::StructuredQuery::new(store.as_ref());
     let mut import_hits = 0usize;
-    if let Some(m) = deps.matched.first() {
-        if let Ok(res) = resolve_package(&m.name) {
-            if let Some(prefix) = res.import_prefixes.first() {
-                let mut filters = rgctl_graph::QueryFilters {
-                    node_type: Some(rgctl_graph::schema::NodeType::Import),
-                    limit: Some(50),
-                    ..Default::default()
-                };
-                filters.scope = Some(prefix.clone());
-                if let Ok(found) = q.find(Some(&format!("{prefix}*")), &filters) {
-                    import_hits = found.total;
-                }
-            }
+    if let Some(m) = deps.matched.first()
+        && let Ok(res) = resolve_package(&m.name)
+        && let Some(prefix) = res.import_prefixes.first()
+    {
+        let mut filters = rgctl_graph::QueryFilters {
+            node_type: Some(rgctl_graph::schema::NodeType::Import),
+            limit: Some(50),
+            ..Default::default()
+        };
+        filters.scope = Some(prefix.clone());
+        if let Ok(found) = q.find(Some(&format!("{prefix}*")), &filters) {
+            import_hits = found.total;
         }
     }
     let mut callers = Vec::new();
@@ -212,22 +215,16 @@ fn symbol_in_graph(ctx: &CliContext, sink: &str) -> bool {
                 limit: Some(5),
                 ..Default::default()
             },
-        ) {
-            if found.total > 0 {
-                return true;
-            }
+        ) && found.total > 0
+        {
+            return true;
         }
     }
     false
 }
 
 /// `rgctl taint --sink … --source external`
-pub fn run_sink_taint(
-    ctx: &CliContext,
-    sink: String,
-    source: String,
-    depth: usize,
-) -> Result<()> {
+pub fn run_sink_taint(ctx: &CliContext, sink: String, source: String, depth: usize) -> Result<()> {
     if source != "external" {
         anyhow::bail!("only --source external is supported in v1 (got {source})");
     }
@@ -260,9 +257,10 @@ pub fn run_sink_taint(
         }
     }
     // Ensure overlays compile (declarative engine).
-    let _ = rgctl_security::rules_with_osv_overlays(None, &[sink.clone()])
+    let _ = rgctl_security::rules_with_osv_overlays(None, std::slice::from_ref(&sink))
         .map_err(|e| anyhow::anyhow!("{e}"))?;
-    let result = build_sink_first_result(&sink, depth, cfg_available, sink_in_graph, callers, vec![]);
+    let result =
+        build_sink_first_result(&sink, depth, cfg_available, sink_in_graph, callers, vec![]);
     if ctx.format == OutputFormat::Json {
         ctx.emit_json_value(&serde_json::to_value(&result)?)?;
     } else {

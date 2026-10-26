@@ -1,6 +1,6 @@
 //! Gradle build scripts — best-effort static dependency extraction.
 
-use super::{loc, DependencyDeclaration};
+use super::{DependencyDeclaration, loc};
 use regex::Regex;
 use std::path::Path;
 use std::sync::LazyLock;

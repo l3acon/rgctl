@@ -1,13 +1,13 @@
 //! Release-mode synthetic 25k-node / 80k-edge columnar scale gate (< 15s total).
 
 use rgctl_analysis::{
-    build_exact_report, evaluate_temporal, BlastRadiusEngine, ExactCloneOptions, PolicyRegistry,
+    BlastRadiusEngine, ExactCloneOptions, PolicyRegistry, build_exact_report, evaluate_temporal,
 };
 use rgctl_graph::backend::{GraphBackend, MemoryBackend};
 use rgctl_graph::schema::{Edge, EdgeType, Node, NodeType};
 use rgctl_graph::{
-    cold_ext_deserialization_count, diff_snapshots, reset_cold_ext_deserialization_count,
-    write_columnar_from_backend, DeltaSegment, GraphCompactor, NoopDiffSink, SnapshotNodeStore,
+    DeltaSegment, GraphCompactor, NoopDiffSink, SnapshotNodeStore, cold_ext_deserialization_count,
+    diff_snapshots, reset_cold_ext_deserialization_count, write_columnar_from_backend,
 };
 use std::collections::HashMap;
 use std::time::Instant;
@@ -55,7 +55,10 @@ fn scale_25k_80k_within_budget() {
     let base_path = tmp.path().join("base.bin");
     let t0 = Instant::now();
     write_columnar_from_backend(&backend, &base_path).unwrap();
-    eprintln!("write_columnar_from_backend: {:.3}s", t0.elapsed().as_secs_f64());
+    eprintln!(
+        "write_columnar_from_backend: {:.3}s",
+        t0.elapsed().as_secs_f64()
+    );
 
     // Slightly different head: drop one edge by rewriting with one fewer call.
     let mut head_backend = MemoryBackend::new();

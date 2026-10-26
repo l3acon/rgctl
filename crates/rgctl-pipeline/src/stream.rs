@@ -57,7 +57,10 @@ pub fn start_parallel_extraction(
             files.par_iter().for_each(|path| {
                 let read_start = Instant::now();
                 let read_result = std::fs::read(path);
-                read_ns.fetch_add(duration_as_nanos_u64(read_start.elapsed()), Ordering::Relaxed);
+                read_ns.fetch_add(
+                    duration_as_nanos_u64(read_start.elapsed()),
+                    Ordering::Relaxed,
+                );
                 match read_result {
                     Ok(source) => {
                         let parse_start = Instant::now();

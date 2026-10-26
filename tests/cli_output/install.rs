@@ -40,7 +40,10 @@ fn test_install_json_schema_sanity() {
     assert!(!writes.is_empty());
     let write = &writes[0];
     assert_eq!(write.get("agent").and_then(|v| v.as_str()), Some("cursor"));
-    assert!(write.get("workflow").is_none() || write.get("workflow").map(|v| v.is_null()).unwrap_or(false));
+    assert!(
+        write.get("workflow").is_none()
+            || write.get("workflow").map(|v| v.is_null()).unwrap_or(false)
+    );
     assert_eq!(write.get("kind").and_then(|v| v.as_str()), Some("meta"));
 }
 

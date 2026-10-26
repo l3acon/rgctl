@@ -2,16 +2,16 @@
 
 use rgctl_analysis::cfg_builder::build_cfg_for_function;
 use rgctl_analysis::fragment_clones::{
-    query_fragment_clones, stage1_filter_functions, FragmentSeedQuery,
+    FragmentSeedQuery, query_fragment_clones, stage1_filter_functions,
 };
 use rgctl_analysis::sese::extract_sese_regions;
 use rgctl_analysis::wl_hash::WeisfeilerLehmanHasher;
 use rgctl_analysis::{FragmentCloneFilters, MODE_FRAGMENT};
+use rgctl_graph::SnapshotNodeStore;
 use rgctl_graph::backend::{GraphBackend, MemoryBackend};
 use rgctl_graph::schema::{Node, NodeType};
 use rgctl_graph::structural_sketch::build_token_bloom;
 use rgctl_graph::write_columnar_from_nodes_edges;
-use rgctl_graph::SnapshotNodeStore;
 use std::fs;
 use tempfile::tempdir;
 
@@ -114,7 +114,11 @@ fn test_stage1_bitwise_bloom_pruning() {
     let filters = FragmentCloneFilters::default();
     let candidates = stage1_filter_functions(&store, &seed_bloom, &filters).unwrap();
 
-    assert_eq!(candidates.len(), 1, "Stage 1 must prune unrelated renderTemplate function");
+    assert_eq!(
+        candidates.len(),
+        1,
+        "Stage 1 must prune unrelated renderTemplate function"
+    );
     assert_eq!(candidates[0].name, "processPayment");
 }
 
@@ -192,7 +196,10 @@ fn service_b(items: &[i32], flag: bool) -> i32 {
     assert_eq!(report.schema_version, 2);
     assert!(report.seed.is_some());
     assert_eq!(report.group_count, 1, "expected 1 clone group found");
-    assert_eq!(report.groups[0].size, 2, "expected both service_a and service_b as members");
+    assert_eq!(
+        report.groups[0].size, 2,
+        "expected both service_a and service_b as members"
+    );
 }
 
 #[test]
@@ -232,7 +239,13 @@ fn func_beta(items: &[i32], verbose: bool) -> i32 {
         .with_file_path("src/a.rs")
         .with_location(2, 11);
     let mut node_a = node_a;
-    node_a.token_bloom = Some(build_token_bloom("func_alpha", None, None, Some(src1), None));
+    node_a.token_bloom = Some(build_token_bloom(
+        "func_alpha",
+        None,
+        None,
+        Some(src1),
+        None,
+    ));
 
     let node_b = Node::new(NodeType::Function, "func_beta")
         .with_file_path("src/b.rs")
@@ -268,24 +281,23 @@ fn func_beta(items: &[i32], verbose: bool) -> i32 {
     assert_eq!(report.mode, MODE_FRAGMENT);
     assert_eq!(report.schema_version, 2);
     assert!(report.seed.is_none());
-    assert!(!report.groups.is_empty(), "expected at least one clone group");
+    assert!(
+        !report.groups.is_empty(),
+        "expected at least one clone group"
+    );
 
     // 2. Save sidecar and verify reload
     rgctl_analysis::clones::save_fragment_sidecar(&repo_dir, &report).unwrap();
-    let cached = rgctl_analysis::clones::load_fragment_sidecar_if_fresh(
-        &repo_dir,
-        &report.graph_digest,
-    )
-    .unwrap();
+    let cached =
+        rgctl_analysis::clones::load_fragment_sidecar_if_fresh(&repo_dir, &report.graph_digest)
+            .unwrap();
     assert!(cached.is_some(), "cached fragment report must load");
     let cached = cached.unwrap();
     assert_eq!(cached.groups.len(), report.groups.len());
 
     // 3. Stale digest returns None
-    let stale = rgctl_analysis::clones::load_fragment_sidecar_if_fresh(
-        &repo_dir,
-        "stale_digest_12345",
-    )
-    .unwrap();
+    let stale =
+        rgctl_analysis::clones::load_fragment_sidecar_if_fresh(&repo_dir, "stale_digest_12345")
+            .unwrap();
     assert!(stale.is_none(), "stale digest must be rejected");
 }

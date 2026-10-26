@@ -93,7 +93,7 @@ cd dashboard && npm ci && npm run build && cd ..
 
 ## Assets users download
 
-From [GitHub Releases](https://github.com/sshaaf/rgctl/releases):
+From [GitHub Releases](https://github.com/rgctl/rgctl/releases):
 
 | Platform | Asset pattern |
 |----------|----------------|

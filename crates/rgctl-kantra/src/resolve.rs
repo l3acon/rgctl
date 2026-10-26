@@ -88,13 +88,15 @@ impl ViolationResolver {
     /// Attach `enrichment.node_id` for all violations.
     pub fn attach_node_ids(&self, violations: &mut [KantraViolation]) {
         for v in violations.iter_mut() {
-            if v.enrichment.as_ref().and_then(|e| e.node_id.as_ref()).is_some() {
+            if v.enrichment
+                .as_ref()
+                .and_then(|e| e.node_id.as_ref())
+                .is_some()
+            {
                 continue;
             }
             let node_id = self.resolve(v).map(|id| id.to_string());
-            v.enrichment
-                .get_or_insert_with(Default::default)
-                .node_id = node_id;
+            v.enrichment.get_or_insert_with(Default::default).node_id = node_id;
         }
     }
 }
@@ -146,13 +148,8 @@ mod tests {
     #[test]
     fn resolves_file_node_for_filecontent() {
         let file_id = Uuid::new_v4();
-        let resolver = ViolationResolver::from_eval_nodes(&[node(
-            file_id,
-            "File",
-            "pom.xml",
-            1,
-            "pom.xml",
-        )]);
+        let resolver =
+            ViolationResolver::from_eval_nodes(&[node(file_id, "File", "pom.xml", 1, "pom.xml")]);
         let violation = KantraViolation {
             rule_id: "r1".into(),
             category: None,

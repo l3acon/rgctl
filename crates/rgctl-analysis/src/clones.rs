@@ -3,10 +3,10 @@
 //! Query-time / sidecar only — does **not** write topology edges into
 //! `graph.snapshot.bin`. See `docs/design/clone-detection-design.md`.
 
+use rgctl_graph::SnapshotNodeStore;
 use rgctl_graph::paths::artifact_path;
 use rgctl_graph::schema::{Node, NodeType};
 use rgctl_graph::structural_sketch::{TokenBloom, bloom_jaccard, bloom_popcount};
-use rgctl_graph::SnapshotNodeStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -385,10 +385,7 @@ pub fn load_fragment_sidecar_if_fresh(
 }
 
 /// Write fragment clone report sidecar.
-pub fn save_fragment_sidecar(
-    repo_root: &Path,
-    report: &FragmentCloneReport,
-) -> Result<PathBuf> {
+pub fn save_fragment_sidecar(repo_root: &Path, report: &FragmentCloneReport) -> Result<PathBuf> {
     let path = fragment_clones_sidecar_path(repo_root);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -434,10 +431,10 @@ pub fn iter_bloom_functions(store: &SnapshotNodeStore) -> Result<Vec<Node>> {
         let Some(node) = store.get_node(id)? else {
             continue;
         };
-        if let Some(bloom) = node.token_bloom.as_ref() {
-            if bloom_popcount(bloom) > 0 {
-                out.push(node);
-            }
+        if let Some(bloom) = node.token_bloom.as_ref()
+            && bloom_popcount(bloom) > 0
+        {
+            out.push(node);
         }
     }
     Ok(out)
@@ -451,30 +448,30 @@ fn member_passes(node: &Node, filters: &CloneFilters) -> bool {
     if loc < filters.effective_min_loc() {
         return false;
     }
-    if let Some(ref path) = node.file_path {
-        if path_excluded(path.as_ref(), &filters.exclude) {
-            return false;
-        }
+    if let Some(ref path) = node.file_path
+        && path_excluded(path.as_ref(), &filters.exclude)
+    {
+        return false;
     }
-    if let Some(ref want) = filters.language {
-        if !language_matches(node, want) {
-            return false;
-        }
+    if let Some(ref want) = filters.language
+        && !language_matches(node, want)
+    {
+        return false;
     }
     true
 }
 
 fn language_matches(node: &Node, want: &str) -> bool {
     let want = want.to_ascii_lowercase();
-    if let Some(lang) = node.get_property("language") {
-        if lang.eq_ignore_ascii_case(&want) {
-            return true;
-        }
+    if let Some(lang) = node.get_property("language")
+        && lang.eq_ignore_ascii_case(&want)
+    {
+        return true;
     }
     let Some(path) = node.file_path.as_deref() else {
         return false;
     };
-    let path: &str = path.as_ref();
+    let path: &str = path;
     let ext = Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
@@ -553,10 +550,10 @@ pub fn group_exact_from_nodes(nodes: &[Node], opts: &ExactCloneOptions) -> Vec<C
         if members.len() < 2 {
             continue;
         }
-        if let Some(seed) = opts.seed_id {
-            if !members.iter().any(|n| n.id == seed) {
-                continue;
-            }
+        if let Some(seed) = opts.seed_id
+            && !members.iter().any(|n| n.id == seed)
+        {
+            continue;
         }
         let mut clone_members: Vec<CloneMember> =
             members.iter().map(|n| CloneMember::from_node(n)).collect();
@@ -576,16 +573,15 @@ pub fn group_exact_from_nodes(nodes: &[Node], opts: &ExactCloneOptions) -> Vec<C
             score: None,
         });
     }
-    groups.sort_by(|a, b| {
-        b.size
-            .cmp(&a.size)
-            .then(a.hash.cmp(&b.hash))
-    });
+    groups.sort_by(|a, b| b.size.cmp(&a.size).then(a.hash.cmp(&b.hash)));
     groups
 }
 
 /// Scan the snapshot and build an exact clone report (no sidecar write).
-pub fn build_exact_report(store: &SnapshotNodeStore, opts: ExactCloneOptions) -> Result<CloneReport> {
+pub fn build_exact_report(
+    store: &SnapshotNodeStore,
+    opts: ExactCloneOptions,
+) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
     let nodes = iter_hashed_functions(store)?;
     let groups = group_exact_from_nodes(&nodes, &opts);
@@ -616,12 +612,12 @@ pub fn exact_clones_with_cache(
     write_sidecar: bool,
 ) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
-    if opts.seed_id.is_none() {
-        if let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_EXACT)? {
-            if cached.mode == MODE_EXACT && cached.filters == opts.filters {
-                return Ok(cached);
-            }
-        }
+    if opts.seed_id.is_none()
+        && let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_EXACT)?
+        && cached.mode == MODE_EXACT
+        && cached.filters == opts.filters
+    {
+        return Ok(cached);
     }
     let report = build_exact_report(store, opts)?;
     if write_sidecar && report.seed.is_none() {
@@ -705,10 +701,7 @@ pub fn group_bloom_from_nodes(nodes: &[Node], opts: &BloomCloneOptions) -> Vec<C
         let bloom = bloom_of(node).expect("filtered");
         for (band, word) in bloom.iter().enumerate() {
             if *word != 0 {
-                bands
-                    .entry((band as u8, *word))
-                    .or_default()
-                    .push(idx);
+                bands.entry((band as u8, *word)).or_default().push(idx);
             }
         }
     }
@@ -834,7 +827,10 @@ pub fn group_bloom_from_nodes(nodes: &[Node], opts: &BloomCloneOptions) -> Vec<C
 }
 
 /// Scan the snapshot and build a bloom candidate report (no sidecar write).
-pub fn build_bloom_report(store: &SnapshotNodeStore, opts: BloomCloneOptions) -> Result<CloneReport> {
+pub fn build_bloom_report(
+    store: &SnapshotNodeStore,
+    opts: BloomCloneOptions,
+) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
     let nodes = iter_bloom_functions(store)?;
     let groups = group_bloom_from_nodes(&nodes, &opts);
@@ -865,15 +861,13 @@ pub fn bloom_clones_with_cache(
     write_sidecar: bool,
 ) -> Result<CloneReport> {
     let digest = store.content_digest()?.to_string();
-    if opts.seed_id.is_none() {
-        if let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_BLOOM)? {
-            if cached.mode == MODE_BLOOM
-                && cached.filters == opts.filters
-                && cached.threshold == Some(opts.threshold)
-            {
-                return Ok(cached);
-            }
-        }
+    if opts.seed_id.is_none()
+        && let Some(cached) = load_sidecar_if_fresh(repo_root, &digest, MODE_BLOOM)?
+        && cached.mode == MODE_BLOOM
+        && cached.filters == opts.filters
+        && cached.threshold == Some(opts.threshold)
+    {
+        return Ok(cached);
     }
     let report = build_bloom_report(store, opts)?;
     if write_sidecar && report.seed.is_none() {
@@ -924,10 +918,7 @@ mod tests {
         let mut no_hash = Node::new(NodeType::Function, "bare").with_file_path("x.java");
         no_hash.start_line = Some(1);
         no_hash.end_line = Some(20);
-        let nodes = vec![
-            no_hash,
-            fn_node("only", "y.java", "solo", 1, 20),
-        ];
+        let nodes = vec![no_hash, fn_node("only", "y.java", "solo", 1, 20)];
         let groups = group_exact_from_nodes(&nodes, &ExactCloneOptions::default());
         assert!(groups.is_empty());
     }
@@ -987,12 +978,16 @@ mod tests {
             seed: None,
         };
         save_sidecar(dir.path(), &report).unwrap();
-        assert!(load_sidecar_if_fresh(dir.path(), "new", MODE_EXACT)
-            .unwrap()
-            .is_none());
-        assert!(load_sidecar_if_fresh(dir.path(), "old", MODE_EXACT)
-            .unwrap()
-            .is_some());
+        assert!(
+            load_sidecar_if_fresh(dir.path(), "new", MODE_EXACT)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            load_sidecar_if_fresh(dir.path(), "old", MODE_EXACT)
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -1037,8 +1032,14 @@ mod tests {
 
     #[test]
     fn simple_glob_exclude() {
-        assert!(path_excluded("foo/generated/Bar.java", &["**/generated/**".into()]));
-        assert!(!path_excluded("foo/src/Bar.java", &["**/generated/**".into()]));
+        assert!(path_excluded(
+            "foo/generated/Bar.java",
+            &["**/generated/**".into()]
+        ));
+        assert!(!path_excluded(
+            "foo/src/Bar.java",
+            &["**/generated/**".into()]
+        ));
         // Must not treat `rgctl-tests` as the component `test`
         assert!(!path_excluded(
             "/Users/x/rgctl-tests/clone-exact/src/CloneA.java",

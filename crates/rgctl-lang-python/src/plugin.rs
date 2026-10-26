@@ -5,9 +5,9 @@
 
 use crate::single_pass::{extract_all_single_pass, python_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, complexity_from_metadata, containing_function, infer_python_method_target,
-    parse_with_pool, AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field,
-    LanguagePlugin, Parameter, Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
+    AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin, Parameter,
+    Relation, RelationType, Result, SourceLocation, Symbol, SymbolType, callee_name,
+    complexity_from_metadata, containing_function, infer_python_method_target, parse_with_pool,
 };
 use rgctl_plugin_helpers::{
     containing_class_name, extract_decorator_relations, extract_python_class_extends_relations,
@@ -369,12 +369,7 @@ impl PythonPlugin {
                     let mut dc = child.walk();
                     for inner in child.children(&mut dc) {
                         if inner.kind() == "function_definition" {
-                            self.harvest_method_fields(
-                                inner,
-                                source,
-                                &mut fields,
-                                &mut seen,
-                            )?;
+                            self.harvest_method_fields(inner, source, &mut fields, &mut seen)?;
                         }
                     }
                 }
@@ -602,10 +597,7 @@ impl PythonPlugin {
                 }
                 "import_statement" | "import_from_statement" => {
                     symbols.extend(extract_python_import_symbols(
-                        node,
-                        source,
-                        file_path,
-                        "python",
+                        node, source, file_path, "python",
                     ));
                 }
                 "type_alias_statement" => {
@@ -717,9 +709,7 @@ impl PythonPlugin {
                         .qualified_name
                         .clone()
                         .unwrap_or_else(|| from_fn.name.clone());
-                    if let Some(target) =
-                        instantiation_target(node, source, &class_names)
-                    {
+                    if let Some(target) = instantiation_target(node, source, &class_names) {
                         relations.push(Relation {
                             from,
                             to: target.clone(),
@@ -816,9 +806,7 @@ impl PythonPlugin {
                                 .qualified_name
                                 .clone()
                                 .unwrap_or_else(|| callee.clone()),
-                            _ => to_qualified_hint
-                                .clone()
-                                .unwrap_or_else(|| callee.clone()),
+                            _ => to_qualified_hint.clone().unwrap_or_else(|| callee.clone()),
                         };
                         relations.push(Relation {
                             from,
@@ -897,10 +885,12 @@ fn python_call_unresolved_local(call: Node, source: &[u8]) -> bool {
     let attr = func.child_by_field_name("attribute");
     match attr.map(|a| a.kind()) {
         Some("identifier") => false,
-        Some(kind) => kind != "identifier"
-            || attr
-                .and_then(|a| a.utf8_text(source).ok())
-                .is_some_and(|t| t.starts_with('[')),
+        Some(kind) => {
+            kind != "identifier"
+                || attr
+                    .and_then(|a| a.utf8_text(source).ok())
+                    .is_some_and(|t| t.starts_with('['))
+        }
         None => true,
     }
 }
@@ -1181,10 +1171,21 @@ def list_orders():
         let symbols = plugin.extract_symbols(path, source).unwrap();
         assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Import));
         let checkout = symbols.iter().find(|s| s.name == "checkout").unwrap();
-        assert_eq!(checkout.qualified_name.as_deref(), Some("OrderService.checkout"));
+        assert_eq!(
+            checkout.qualified_name.as_deref(),
+            Some("OrderService.checkout")
+        );
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
-        assert!(relations.iter().any(|r| r.relation_type == RelationType::Extends));
-        assert!(relations.iter().any(|r| r.relation_type == RelationType::AnnotatedWith));
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Extends)
+        );
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::AnnotatedWith)
+        );
     }
 
     #[test]
@@ -1202,9 +1203,10 @@ def helper():
         let path = Path::new("test.py");
         let result = plugin.extract_all(path, source).unwrap();
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to.contains("helper")
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to.contains("helper") }),
             "forward Calls -> helper: {:?}",
             result.relations
         );
@@ -1213,11 +1215,13 @@ def helper():
             .iter()
             .find(|s| s.name == "caller")
             .expect("caller");
-        let from_meta =
-            complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
+        let from_meta = complexity_from_metadata(caller).expect("rgctl_complexity on extract_all");
         assert_eq!(from_meta.cyclomatic, 2);
         assert_eq!(from_meta.returns, 1);
-        let via_api = plugin.calculate_complexity(caller, source).unwrap().unwrap();
+        let via_api = plugin
+            .calculate_complexity(caller, source)
+            .unwrap()
+            .unwrap();
         assert_eq!(via_api, from_meta);
     }
 
@@ -1269,9 +1273,7 @@ def get_user(id: str, db = Depends(get_db)):
     return db
 "#;
         let plugin = PythonPlugin::new().unwrap();
-        let result = plugin
-            .extract_all(Path::new("users.py"), source)
-            .unwrap();
+        let result = plugin.extract_all(Path::new("users.py"), source).unwrap();
         let route = result
             .relations
             .iter()
@@ -1279,9 +1281,10 @@ def get_user(id: str, db = Depends(get_db)):
             .expect("ExposesRoute");
         assert_eq!(route.to, "GET /users/{id}");
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Injects && r.to == "get_db"
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Injects && r.to == "get_db" }),
             "Injects get_db: {:?}",
             result.relations
         );

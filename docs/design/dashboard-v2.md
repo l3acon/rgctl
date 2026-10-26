@@ -190,7 +190,7 @@ settled in the real implementation, where they can be tested against a real grap
 What the prototype does **not** show, and why it was retired rather than extended: it has no WASM
 engine, so nothing is driven by a real graph; the `Code` lens reports a *count* of source lines rather
 than source; and `Spine` renders an empty state because the caller/callee index is not in its dataset.
-The maintainer's parking comment on [issue #61](https://github.com/sshaaf/rgctl/issues/61) named the code
+The maintainer's parking comment on [issue #61](https://github.com/rgctl/rgctl/issues/61) named the code
 browser as *the* missing piece — so the next step is the real app, not another prototype. See
 [open question 4](#open-questions).
 
@@ -401,7 +401,7 @@ The trace must move into the `BlastRadiusResponse` envelope. This is a correctne
 
 ### Relationship to upstream #61 (`rg universe`)
 
-[#61](https://github.com/sshaaf/rgctl/issues/61) — the maintainer's own issue — asks for a full rewrite of the
+[#61](https://github.com/rgctl/rgctl/issues/61) — the maintainer's own issue — asks for a full rewrite of the
 dashboard as a **single full-screen 3D cosmos** browsed by communities: LOD drill-down
 (communities → packages → functions → symbol), a unified search bar with **animated camera fly-to**, clickable
 CLI actions, a new `--with-universe` flag, and `--with-dashboard` deprecated. It predates the
@@ -436,7 +436,7 @@ Three decisions taken after the design was written, each from measurement or fro
 > "let remove the --with-dashboard completely. and introduce --with-universe as the new v2 of dashboard. If a
 > user starts --with-dashboard, it should report that the command is deprecated and routes to --with-universe
 > instead. informing the user that the --with-dashboard will be removed in the next release."
-> — [comment](https://github.com/sshaaf/rgctl/issues/61#issuecomment-6241198464)
+> — [comment](https://github.com/rgctl/rgctl/issues/61#issuecomment-6241198464)
 
 So `--with-universe` is the real flag and writes `manifest.mode: "universe"`; **`--with-dashboard` keeps
 working, warns, and routes to the same bundle**, and is removed next release. One regression has to be named,
@@ -509,7 +509,7 @@ _Update on every phase PR._
 | Audit defect fixes — tab bar (D6) | prereq | **not started** | IA change; belongs with the v2 shell |
 | Audit defect fixes — favicon (D8) | prereq | **not started** | Missing icon → 404 per load |
 | `dashboard/dist` regen | prereq | **done** | Rebuilt with `wasm-pack` and landed in `8f09655` (sshaaf/rgctl#110). Until then the source fixes were invisible in a built binary, because `dashboard/dist` is compile-time embedded — see [Build hazards](#two-build-hazards-to-fix-while-adding-the-size-gate). |
-| `rgctl review export` | 0 | **done** | `.rgctl/workflows/review.json`; composed, tested (`tests/review_paths_integration.rs`). **Merged upstream as [#117](https://github.com/sshaaf/rgctl/pull/117), without the refusal.** Upstream's merged producer still defaults to a synthesized delta head (`full_snapshots: false`); refusing it is our change, still on this branch only, because that path overwrote `.rgctl/` in place and described a head that did not contain the change — a one-line deletion reported as 22 additions. It is what [#124](https://github.com/sshaaf/rgctl/issues/124) asks for. See `openspec/changes/add-review-workflow-dashboard/tasks.md` §8. |
+| `rgctl review export` | 0 | **done** | `.rgctl/workflows/review.json`; composed, tested (`tests/review_paths_integration.rs`). **Merged upstream as [#117](https://github.com/rgctl/rgctl/pull/117), without the refusal.** Upstream's merged producer still defaults to a synthesized delta head (`full_snapshots: false`); refusing it is our change, still on this branch only, because that path overwrote `.rgctl/` in place and described a head that did not contain the change — a one-line deletion reported as 22 additions. It is what [#124](https://github.com/rgctl/rgctl/issues/124) asks for. See `openspec/changes/add-review-workflow-dashboard/tasks.md` §8. |
 | v2 app + shell | 1 | **in progress** | React app in `dashboard/src/v2`, own Vite config, own `dist-v2`; Instrument, Orientation, Rooms, Lens control, and the Focus in the URL. Selected with `RGCTL_DASHBOARD_V2=1` — one flag, see below. |
 | v2 Spine lens (code browser) | 1 | **in progress** | Source for the focused symbol beside its CFG, bound both ways; dominance-depth layout; lightweight highlighting. Not syntax-complete and no IDE affordances, deliberately. |
 | v2 CFG·PDG lens | 1 | **done** | The same graph as a surface of its own: full-width, `70vh`, a stat row (blocks · edges · dominance frontiers · exits), a dominance-frontier toggle, the selected block read out above the graph, and a typed absence for a subject the bundle has no CFG for. `?lens=cfgpdg`; shares the drawing, the dominator walk and the loader with the Spine rather than re-deriving them. |
@@ -564,7 +564,7 @@ fetches anything.
 2. **`rgctl review` command surface.** Change 0 defines `review export`. Does `review` also gain a `--since` range, or does it always diff against the working tree?
 3. **Where does "coverage" come from?** The Instrument bar promises `coverage ●●●○○`. That must be derived from real per-language support tiers ([tier-1-language-support.md](../tier-1-language-support.md)), not asserted.
 4. **Nothing in the change sequence is the code browser.** The maintainer's parking comment on
-   [issue #61](https://github.com/sshaaf/rgctl/issues/61) names it as *the* missing piece — "CFG, slice,
+   [issue #61](https://github.com/rgctl/rgctl/issues/61) names it as *the* missing piece — "CFG, slice,
    blast, and dataflow only make sense next to the actual source" — and the sequence has no entry for
    it. Change 1 is the shell, changes 2–6 are rooms, and none of them is source rendering. Worse, the
    prototype does not stand in for it: the `Code` lens shows a **count of source lines**, not source,

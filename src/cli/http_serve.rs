@@ -165,14 +165,10 @@ pub fn serve(ctx: &CliContext, args: HttpServeArgs) -> Result<()> {
 
     // Hold for the lifetime of serve so Drop releases `.rgctl/watch.lock` on exit.
     let _watch_lock = if args.watch {
-        let lock = super::pipeline_status::try_acquire_watch_lock(&session_root).with_context(
-            || {
-                format!(
-                    "cannot start serve --watch for {}",
-                    session_root.display()
-                )
-            },
-        )?;
+        let lock =
+            super::pipeline_status::try_acquire_watch_lock(&session_root).with_context(|| {
+                format!("cannot start serve --watch for {}", session_root.display())
+            })?;
         super::file_watch::spawn_repo_watcher(session_root.clone())
             .context("start source file watcher")?;
         eprintln!("[>] Source watch enabled (incremental update on save; exclusive lock held)");
@@ -423,11 +419,10 @@ async fn dashboard_fallback(
 
         // Redirect before serving: a trailing slash would otherwise serve the shell at a depth where its own
         // relative asset URLs do not resolve.
-        if is_client_route(&method, &path) {
-            if let Some(target) = without_trailing_slash(&path, query.as_deref()) {
-                return (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, target)])
-                    .into_response();
-            }
+        if is_client_route(&method, &path)
+            && let Some(target) = without_trailing_slash(&path, query.as_deref())
+        {
+            return (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, target)]).into_response();
         }
 
         let svc = ServeDir::new(&state.dashboard_dir).append_index_html_on_directories(true);

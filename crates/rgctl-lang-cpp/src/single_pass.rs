@@ -2,9 +2,9 @@
 
 use crate::depth;
 use crate::plugin::{
-    collect_base_relations, enrich_cpp_namespace_hint, scoped_type_name, source_location,
-    template_enclosed_type, type_definition_typedef_name, type_name, type_name_from_type_node,
-    using_import_names, CppPlugin,
+    CppPlugin, collect_base_relations, enrich_cpp_namespace_hint, scoped_type_name,
+    source_location, template_enclosed_type, type_definition_typedef_name, type_name,
+    type_name_from_type_node, using_import_names,
 };
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -69,16 +69,11 @@ fn cpp_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn cpp_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&cpp_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&cpp_grammar(), HANDLED_KINDS))
 }
 
 fn cpp_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&cpp_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&cpp_grammar(), MANIFEST_JSON))
 }
 
 struct PendingCall<'a> {
@@ -165,19 +160,19 @@ pub fn extract_all_single_pass(
                         let is_prototype =
                             kind == "declaration" && node.child_by_field_name("body").is_none();
                         if !is_prototype {
-                            if let Some(mut sym) =
-                                plugin.extract_function(node, source, &file_path_str, scope_for_fn)?
-                            {
+                            if let Some(mut sym) = plugin.extract_function(
+                                node,
+                                source,
+                                &file_path_str,
+                                scope_for_fn,
+                            )? {
                                 sym.modifiers = crate::plugin::method_modifiers(node, source);
                                 let params = sym.parameters.len() as u32;
                                 let loc = ((node.end_position().row - node.start_position().row)
                                     + 1)
                                 .max(1) as u32;
                                 let name = sym.name.clone();
-                                let qn = sym
-                                    .qualified_name
-                                    .clone()
-                                    .unwrap_or_else(|| name.clone());
+                                let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                                 ctx.symbols.push(sym);
                                 // Enter function scope when a body is present.
                                 if kind == "function_definition"
@@ -211,10 +206,7 @@ pub fn extract_all_single_pass(
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Function,
@@ -427,10 +419,7 @@ pub fn extract_all_single_pass(
                             &ctx.scopes,
                         ) {
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Struct,
@@ -577,9 +566,7 @@ pub fn extract_all_single_pass(
                     let Some(child) = node.child(i) else {
                         continue;
                     };
-                    if dead_preproc
-                        && !matches!(child.kind(), "preproc_else" | "preproc_elif")
-                    {
+                    if dead_preproc && !matches!(child.kind(), "preproc_else" | "preproc_elif") {
                         continue;
                     }
                     stack.push(Visit::Pre(child, depth + 1, child_scope.clone()));

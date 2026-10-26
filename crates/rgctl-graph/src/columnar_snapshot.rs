@@ -162,6 +162,7 @@ pub struct ColumnarGraphMmap {
     offset_strings_len: u64,
     index_tail_off: usize,
     offset_extensions: u64,
+    #[allow(clippy::type_complexity)]
     parsed_indexes: Mutex<Option<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>>>,
 }
 
@@ -224,6 +225,7 @@ impl ColumnarGraphMmap {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn parsed_indexes(
         &self,
     ) -> Result<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>> {
@@ -282,6 +284,7 @@ impl ColumnarGraphMmap {
     ///
     /// Prefer this for structured query hot paths. [`Self::name_index`] / [`Self::type_index`]
     /// clone the maps and are intended for hydration / one-shot tooling only.
+    #[allow(clippy::type_complexity)]
     pub fn indexes_shared(
         &self,
     ) -> Result<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>> {
@@ -313,9 +316,7 @@ impl ColumnarGraphMmap {
 
     /// Iterate `(column_index, node_id)` pairs without materializing nodes.
     pub fn node_ids_by_index(&self) -> impl Iterator<Item = (usize, Uuid)> + '_ {
-        (0..self.node_count).filter_map(|idx| {
-            self.node_id_at(idx).ok().map(|id| (idx, id))
-        })
+        (0..self.node_count).filter_map(|idx| self.node_id_at(idx).ok().map(|id| (idx, id)))
     }
 
     /// Read typed edge topology directly from mmap columns.
@@ -481,7 +482,10 @@ impl ColumnarGraphMmap {
 
     /// String pool base offset and byte length for [`string_at`].
     pub(crate) fn string_pool_bounds(&self) -> (usize, usize) {
-        (self.offset_strings as usize, self.offset_strings_len as usize)
+        (
+            self.offset_strings as usize,
+            self.offset_strings_len as usize,
+        )
     }
 
     /// Raw mmap bytes for zero-copy string pool reads.
@@ -521,11 +525,8 @@ impl ColumnarGraphMmap {
         match bytes.first().copied() {
             Some(0) => Ok(None),
             Some(1) if bytes.len() >= 9 => {
-                let slen = u64::from_le_bytes(
-                    bytes[1..9]
-                        .try_into()
-                        .expect("slice length checked"),
-                ) as usize;
+                let slen = u64::from_le_bytes(bytes[1..9].try_into().expect("slice length checked"))
+                    as usize;
                 let sbytes = bytes.get(9..9 + slen).ok_or_else(|| {
                     Error::SerdeError("node extension qualified_name out of range".into())
                 })?;
@@ -796,21 +797,20 @@ impl PreparedGraphSnapshot {
             file.extend_from_slice(&encode_edge_row(row));
         }
         file.extend_from_slice(&strings.bytes);
-    file.extend_from_slice(&extensions_blob);
+        file.extend_from_slice(&extensions_blob);
 
-    let tmp = path.with_file_name(format!(
-        "{}.tmp",
-        path.file_name()
-            .map(|n| n.to_string_lossy())
-            .unwrap_or_else(|| "graph.snapshot.bin".into())
-    ));
-    std::fs::write(&tmp, &file)?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e
-    })?;
-    Ok(())
-}
+        let tmp = path.with_file_name(format!(
+            "{}.tmp",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| "graph.snapshot.bin".into())
+        ));
+        std::fs::write(&tmp, &file)?;
+        std::fs::rename(&tmp, path).inspect_err(|_e| {
+            let _ = std::fs::remove_file(&tmp);
+        })?;
+        Ok(())
+    }
 }
 
 pub(crate) struct StringPool {
@@ -834,10 +834,10 @@ impl StringPool {
 
     pub(crate) fn intern(&mut self, s: &str) -> StrRef {
         let hash = hash_string_key(s);
-        if let Some(&existing) = self.offsets.get(&hash) {
-            if self.str_at(existing) == s {
-                return existing;
-            }
+        if let Some(&existing) = self.offsets.get(&hash)
+            && self.str_at(existing) == s
+        {
+            return existing;
         }
         let off = self.bytes.len() as u32;
         let bytes = s.as_bytes();
@@ -951,8 +951,7 @@ fn optional_string(
     off: u32,
     len: u32,
 ) -> Result<Option<String>> {
-    optional_string_at(mmap, base, len_limit, off, len)
-        .map(|opt| opt.map(str::to_string))
+    optional_string_at(mmap, base, len_limit, off, len).map(|opt| opt.map(str::to_string))
 }
 
 fn node_matches_invalidated_path(
@@ -1214,6 +1213,7 @@ pub(crate) fn edge_digest_bytes(edge: &Edge) -> Result<Vec<u8>> {
     bincode::serialize(&edge.for_columnar_digest()).map_err(bincode_err)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_node_columnar(
     node: &Node,
     hasher: &mut blake3::Hasher,
@@ -1879,8 +1879,14 @@ mod tests {
         );
 
         let decoded = decode_node_extension(&legacy_bytes).expect("decode legacy extension");
-        assert_eq!(decoded.properties.get("cyclomatic").map(String::as_str), Some("1"));
-        assert_eq!(decoded.properties.get("cognitive").map(String::as_str), Some("2"));
+        assert_eq!(
+            decoded.properties.get("cyclomatic").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            decoded.properties.get("cognitive").map(String::as_str),
+            Some("2")
+        );
         assert_eq!(decoded.properties.get("loc").map(String::as_str), Some("3"));
         assert_eq!(
             decoded.properties.get("nesting_depth").map(String::as_str),

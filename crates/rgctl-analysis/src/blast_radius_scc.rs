@@ -53,10 +53,7 @@ pub struct BlastRadiusEngine {
 
 impl BlastRadiusEngine {
     /// Build on the upstream `Calls` closure of `seed_ids` (PR-scoped subgraph).
-    pub fn build_scoped(
-        store: &rgctl_graph::SnapshotNodeStore,
-        seed_ids: &[Uuid],
-    ) -> Result<Self> {
+    pub fn build_scoped(store: &rgctl_graph::SnapshotNodeStore, seed_ids: &[Uuid]) -> Result<Self> {
         use crate::scoped_policy::{collect_upstream_call_closure, hydrate_subset_hot};
         use std::collections::HashSet;
 

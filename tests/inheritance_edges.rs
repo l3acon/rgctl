@@ -30,7 +30,9 @@ fn discover(repo: &Path) {
 fn outgoing_edge_targets(repo: &Path, class_name: &str, edge: &str) -> Vec<String> {
     let find = cli_json(
         repo,
-        &["find", class_name, "--exact", "--type", "class", "--limit", "5"],
+        &[
+            "find", class_name, "--exact", "--type", "class", "--limit", "5",
+        ],
     );
     let entities = find
         .get("entities")

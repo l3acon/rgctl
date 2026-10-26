@@ -78,7 +78,12 @@ impl KotlinPlugin {
                 }
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -118,11 +123,14 @@ impl KotlinPlugin {
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if matches!(child.kind(), "type_identifier" | "simple_identifier" | "identifier")
-                && let Ok(t) = child.utf8_text(source)
+            if matches!(
+                child.kind(),
+                "type_identifier" | "simple_identifier" | "identifier"
+            ) && let Ok(t) = child.utf8_text(source)
             {
                 let t = t.trim();
-                if !t.is_empty() && t != "class" && t != "object" && t != "interface" && t != "enum" {
+                if !t.is_empty() && t != "class" && t != "object" && t != "interface" && t != "enum"
+                {
                     return Some(t.to_string());
                 }
             }
@@ -134,9 +142,7 @@ impl KotlinPlugin {
         let mut path = Vec::new();
         let mut current = node.parent();
         while let Some(n) = current {
-            if TYPE_KINDS.contains(&n.kind())
-                || n.kind() == "class_declaration"
-            {
+            if TYPE_KINDS.contains(&n.kind()) || n.kind() == "class_declaration" {
                 // class_declaration also covers interface/enum in kotlin-ng via modifiers
                 if let Some(name) = Self::type_name(n, source) {
                     path.push(name);
@@ -178,18 +184,15 @@ impl KotlinPlugin {
     }
 
     fn extract_parameters(&self, node: Node, source: &[u8]) -> Vec<Parameter> {
-        let Some(params) = node
-            .child_by_field_name("parameters")
-            .or_else(|| {
-                let mut cursor = node.walk();
-                node.children(&mut cursor).find(|c| {
-                    matches!(
-                        c.kind(),
-                        "function_value_parameters" | "class_parameters" | "lambda_parameters"
-                    )
-                })
+        let Some(params) = node.child_by_field_name("parameters").or_else(|| {
+            let mut cursor = node.walk();
+            node.children(&mut cursor).find(|c| {
+                matches!(
+                    c.kind(),
+                    "function_value_parameters" | "class_parameters" | "lambda_parameters"
+                )
             })
-        else {
+        }) else {
             return Vec::new();
         };
 
@@ -263,7 +266,10 @@ impl KotlinPlugin {
                     .or_else(|| {
                         let mut c = node.walk();
                         node.children(&mut c).find_map(|n| {
-                            if matches!(n.kind(), "simple_identifier" | "identifier" | "variable_declaration") {
+                            if matches!(
+                                n.kind(),
+                                "simple_identifier" | "identifier" | "variable_declaration"
+                            ) {
                                 if n.kind() == "variable_declaration" {
                                     let mut c2 = n.walk();
                                     return n.children(&mut c2).find_map(|x| {
@@ -298,7 +304,12 @@ impl KotlinPlugin {
                 continue;
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -313,7 +324,11 @@ impl KotlinPlugin {
         source: &[u8],
         is_primary: bool,
     ) {
-        let type_simple = ctx.type_path.last().cloned().unwrap_or_else(|| "Unknown".into());
+        let type_simple = ctx
+            .type_path
+            .last()
+            .cloned()
+            .unwrap_or_else(|| "Unknown".into());
         let type_qn = Self::qualify(ctx.package, &ctx.type_path.join("."));
         let parameters = self.extract_parameters(ctor_node, source);
         // Primary ctor params also become fields when class_parameter
@@ -533,18 +548,10 @@ impl KotlinPlugin {
         while let Some(node) = stack.pop() {
             match node.kind() {
                 "class_declaration" | "object_declaration" | "companion_object" => {
-                    self.emit_type_and_ctors(
-                        node,
-                        source,
-                        &file,
-                        package.as_deref(),
-                        &mut symbols,
-                    );
+                    self.emit_type_and_ctors(node, source, &file, package.as_deref(), &mut symbols);
                 }
                 "function_declaration" => {
-                    if let Some(sym) =
-                        self.emit_function(node, source, &file, package.as_deref())
-                    {
+                    if let Some(sym) = self.emit_function(node, source, &file, package.as_deref()) {
                         symbols.push(sym);
                     }
                 }
@@ -555,7 +562,12 @@ impl KotlinPlugin {
             }
 
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -598,7 +610,12 @@ impl KotlinPlugin {
                 }
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -682,7 +699,12 @@ impl KotlinPlugin {
                 complexity += 1;
             }
             let mut cursor = n.walk();
-            for child in n.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in n
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -764,7 +786,12 @@ impl LanguagePlugin for KotlinPlugin {
                 break;
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -838,7 +865,9 @@ class OrderService {
             .extract_all(Path::new("OrderService.kt"), src)
             .unwrap();
         assert!(
-            all.relations.iter().any(|r| r.relation_type == RelationType::Calls),
+            all.relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Calls),
             "expected Calls: {:?}",
             all.relations
         );
@@ -851,12 +880,10 @@ package com.example
 data class User(val email: String)
 "#;
         let plugin = KotlinPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("User.kt"), src)
-            .unwrap();
-        let ctor = symbols.iter().find(|s| {
-            s.qualified_name.as_deref() == Some("com.example.User.<init>")
-        });
+        let symbols = plugin.extract_symbols(Path::new("User.kt"), src).unwrap();
+        let ctor = symbols
+            .iter()
+            .find(|s| s.qualified_name.as_deref() == Some("com.example.User.<init>"));
         assert!(ctor.is_some(), "missing ctor: {:?}", symbols);
         assert_eq!(
             ctor.unwrap().metadata.get("is_constructor"),

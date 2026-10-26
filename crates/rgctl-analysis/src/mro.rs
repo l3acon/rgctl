@@ -163,13 +163,13 @@ impl MroIndex {
     /// Index Function nodes onto owning types via qualified-name prefix.
     pub fn index_methods_from_backend(&mut self, backend: &MemoryBackend) -> Result<()> {
         for node in backend.find_nodes_by_type(NodeType::Function)? {
-            if let Some((owner, method)) = split_owner_method(node.qualified_name.as_deref(), &node.name)
+            if let Some((owner, method)) =
+                split_owner_method(node.qualified_name.as_deref(), &node.name)
+                && let Some(&tid) = self.graph.name_of.get(owner)
             {
-                if let Some(&tid) = self.graph.name_of.get(owner) {
-                    self.methods[tid as usize]
-                        .entry(method.to_string())
-                        .or_insert(node.id);
-                }
+                self.methods[tid as usize]
+                    .entry(method.to_string())
+                    .or_insert(node.id);
             }
         }
         Ok(())
@@ -232,7 +232,9 @@ pub fn c3_merge(lists: &[SmallVec<[u32; 8]>]) -> Option<SmallVec<[u32; 8]>> {
         let mut candidate: Option<u32> = None;
         for list in &lists {
             let head = list[0];
-            let appears_in_tail = lists.iter().any(|other| other.iter().skip(1).any(|&x| x == head));
+            let appears_in_tail = lists
+                .iter()
+                .any(|other| other.iter().skip(1).any(|&x| x == head));
             if !appears_in_tail {
                 candidate = Some(head);
                 break;
@@ -299,9 +301,14 @@ fn compute_mro(
     Ok(())
 }
 
-fn linearize_c3(t: u32, graph: &InheritanceGraph, mro: &[SmallVec<[u32; 8]>]) -> SmallVec<[u32; 8]> {
+fn linearize_c3(
+    t: u32,
+    graph: &InheritanceGraph,
+    mro: &[SmallVec<[u32; 8]>],
+) -> SmallVec<[u32; 8]> {
     let bases: Vec<u32> = graph.bases[t as usize].iter().map(|(b, _)| *b).collect();
-    let base_mros: Vec<SmallVec<[u32; 8]>> = bases.iter().map(|&b| mro[b as usize].clone()).collect();
+    let base_mros: Vec<SmallVec<[u32; 8]>> =
+        bases.iter().map(|&b| mro[b as usize].clone()).collect();
     c3_linearize(t, &base_mros, &bases).unwrap_or_else(|| {
         let mut out = SmallVec::new();
         out.push(t);
@@ -355,7 +362,11 @@ fn linearize_class_over_interface(
     out
 }
 
-fn linearize_ruby(t: u32, graph: &InheritanceGraph, mro: &[SmallVec<[u32; 8]>]) -> SmallVec<[u32; 8]> {
+fn linearize_ruby(
+    t: u32,
+    graph: &InheritanceGraph,
+    mro: &[SmallVec<[u32; 8]>],
+) -> SmallVec<[u32; 8]> {
     // Ruby: self → reverse(included modules) → superclass chain.
     // `from_backend` pushes Extends before IncludesClass; partition so modules
     // (is_interface) are searched before the superclass, last-include first.
@@ -381,7 +392,11 @@ fn linearize_ruby(t: u32, graph: &InheritanceGraph, mro: &[SmallVec<[u32; 8]>]) 
     out
 }
 
-fn linearize_rust(t: u32, graph: &InheritanceGraph, mro: &[SmallVec<[u32; 8]>]) -> SmallVec<[u32; 8]> {
+fn linearize_rust(
+    t: u32,
+    graph: &InheritanceGraph,
+    mro: &[SmallVec<[u32; 8]>],
+) -> SmallVec<[u32; 8]> {
     // Inherent type first; trait (interface) bases after.
     linearize_class_over_interface(t, graph, mro)
 }
@@ -389,23 +404,26 @@ fn linearize_rust(t: u32, graph: &InheritanceGraph, mro: &[SmallVec<[u32; 8]>]) 
 /// Split `Owner.method` / `Owner::method` / Ruby `Owner#method` / bare `method`.
 fn split_owner_method<'a>(qn: Option<&'a str>, name: &'a str) -> Option<(&'a str, &'a str)> {
     let qn = qn.unwrap_or(name);
-    if let Some((owner, method)) = qn.rsplit_once("::") {
-        if !owner.is_empty() && !method.is_empty() {
-            // Strip turbofish / generics on owner: `Foo::<init>` → treat as constructor.
-            let method = method.split('<').next().unwrap_or(method);
-            let owner = owner.split('<').next().unwrap_or(owner);
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once("::")
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        // Strip turbofish / generics on owner: `Foo::<init>` → treat as constructor.
+        let method = method.split('<').next().unwrap_or(method);
+        let owner = owner.split('<').next().unwrap_or(owner);
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('#') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('#')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
-    if let Some((owner, method)) = qn.rsplit_once('.') {
-        if !owner.is_empty() && !method.is_empty() {
-            return Some((owner, method));
-        }
+    if let Some((owner, method)) = qn.rsplit_once('.')
+        && !owner.is_empty()
+        && !method.is_empty()
+    {
+        return Some((owner, method));
     }
     None
 }
@@ -496,10 +514,10 @@ fn retarget_calls_via_mro(backend: &mut MemoryBackend, index: &MroIndex) -> Resu
 
 /// Persist type / callee hints on Calls edges so the MRO pass can retarget them.
 pub fn annotate_call_edge(mut edge: Edge, to_type_hint: Option<&str>, callee: &str) -> Edge {
-    if let Some(hint) = to_type_hint {
-        if !hint.is_empty() {
-            edge = edge.with_property("to_type_hint".into(), hint.to_string());
-        }
+    if let Some(hint) = to_type_hint
+        && !hint.is_empty()
+    {
+        edge = edge.with_property("to_type_hint".into(), hint.to_string());
     }
     if !callee.is_empty() {
         edge = edge.with_property("callee".into(), callee.to_string());
@@ -580,9 +598,11 @@ mod tests {
         backend.insert_node(c_process).unwrap();
         backend.insert_node(fn_node("A", "process")).unwrap();
 
-        let mut index =
-            MroIndex::build(InheritanceGraph::from_backend(&backend).unwrap(), MroStrategy::PythonC3)
-                .unwrap();
+        let mut index = MroIndex::build(
+            InheritanceGraph::from_backend(&backend).unwrap(),
+            MroStrategy::PythonC3,
+        )
+        .unwrap();
         index.index_methods_from_backend(&backend).unwrap();
         let d_dense = *index.graph.id_of.get(&d).unwrap();
         let resolved = index.resolve_method(d_dense, "process").unwrap();
@@ -671,9 +691,11 @@ mod tests {
         let inherent_id = inherent.id;
         backend.insert_node(inherent).unwrap();
         backend.insert_node(trait_fn).unwrap();
-        let mut index =
-            MroIndex::build(InheritanceGraph::from_backend(&backend).unwrap(), MroStrategy::RustInherentOverTrait)
-                .unwrap();
+        let mut index = MroIndex::build(
+            InheritanceGraph::from_backend(&backend).unwrap(),
+            MroStrategy::RustInherentOverTrait,
+        )
+        .unwrap();
         index.index_methods_from_backend(&backend).unwrap();
         let tid = *index.graph.id_of.get(&ty_id).unwrap();
         assert_eq!(index.resolve_method(tid, "draw"), Some(inherent_id));
@@ -700,9 +722,11 @@ mod tests {
         let a_run = fn_node("A", "run");
         let a_fn = a_run.id;
         backend.insert_node(a_run).unwrap();
-        let mut index =
-            MroIndex::build(InheritanceGraph::from_backend(&backend).unwrap(), MroStrategy::ClassOverInterface)
-                .unwrap();
+        let mut index = MroIndex::build(
+            InheritanceGraph::from_backend(&backend).unwrap(),
+            MroStrategy::ClassOverInterface,
+        )
+        .unwrap();
         index.index_methods_from_backend(&backend).unwrap();
         let c_dense = *index.graph.id_of.get(&c_id).unwrap();
         assert_eq!(index.resolve_method(c_dense, "run"), Some(a_fn));
@@ -744,9 +768,9 @@ mod tests {
         assert_eq!(stats.calls_retargeted, 1);
         let calls = backend.find_edges_by_type(EdgeType::Calls).unwrap();
         assert!(
-            calls
-                .iter()
-                .any(|e| e.from == caller_fn && e.to == base_fn && e.properties.get("resolved_via").map(|s| s.as_str()) == Some("mro")),
+            calls.iter().any(|e| e.from == caller_fn
+                && e.to == base_fn
+                && e.properties.get("resolved_via").map(|s| s.as_str()) == Some("mro")),
             "expected MRO-retargeted Calls to Base.run, got {calls:?}"
         );
     }

@@ -195,8 +195,8 @@ fn emit_command(
 fn command_filename(cmd: &CommandEntry, style: &str, ext: &str) -> String {
     let base = match style {
         "colon" => format!("rgctl:{}", cmd.id),
-        "dollar" => format!("rgctl-{}", cmd.id),
-        "slash" | "hyphen" | _ => format!("rgctl-{}", cmd.id),
+        // dollar / slash / hyphen / unknown → hyphenated filename
+        _ => format!("rgctl-{}", cmd.id),
     };
     if ext.is_empty() {
         base
@@ -265,8 +265,8 @@ struct AgentRegistryFile {
 
 fn load_agents(agents_dir: &Path) -> Result<Vec<AgentDef>, String> {
     let registry = agents_dir.join("registry.toml");
-    let s = fs::read_to_string(&registry)
-        .map_err(|e| format!("read {}: {}", registry.display(), e))?;
+    let s =
+        fs::read_to_string(&registry).map_err(|e| format!("read {}: {}", registry.display(), e))?;
     let file: AgentRegistryFile = toml::from_str(&s).map_err(|e| e.to_string())?;
     let mut out = file.agent;
     out.sort_by(|a, b| a.id.cmp(&b.id));
@@ -316,17 +316,16 @@ fn ensure_rgctl_managed_frontmatter(
     if existing.contains("rgctl-managed: true") {
         return Ok(());
     }
-    if existing.starts_with("---\n") {
-        let rest = &existing[4..];
-        if let Some(end) = rest.find("\n---\n") {
-            let front = &rest[..end];
-            let body = &rest[end + 5..];
-            let updated = format!(
-                "---\n{front}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n{body}"
-            );
-            fs::write(skill_path, updated).map_err(|e| e.to_string())?;
-            return Ok(());
-        }
+    if let Some(rest) = existing.strip_prefix("---\n")
+        && let Some(end) = rest.find("\n---\n")
+    {
+        let front = &rest[..end];
+        let body = &rest[end + 5..];
+        let updated = format!(
+            "---\n{front}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n{body}"
+        );
+        fs::write(skill_path, updated).map_err(|e| e.to_string())?;
+        return Ok(());
     }
     let updated = format!(
         "---\nname: {skill_id}\nrgctl-managed: true\nmetadata:\n  generatedBy: \"rgctl {version}\"\n---\n\n{existing}"
@@ -356,14 +355,13 @@ mod codegen_tests {
         let out = repo.join("target/agent-pack-test-workflows-ref");
         generate(&pack, &out, "test").expect("gen");
         let src = fs::read(repo.join("skills/rgctl/references/workflows.md")).expect("src");
-        let dest = fs::read(
-            out.join("agents/host-cursor/skills/rgctl/references/workflows.md"),
-        )
-        .expect("dest");
+        let dest = fs::read(out.join("agents/host-cursor/skills/rgctl/references/workflows.md"))
+            .expect("dest");
         assert_eq!(src, dest);
-        assert!(!out
-            .join("agents/host-cursor/skills/rgctl/workflows")
-            .exists());
+        assert!(
+            !out.join("agents/host-cursor/skills/rgctl/workflows")
+                .exists()
+        );
     }
 
     #[test]
@@ -444,7 +442,10 @@ mod codegen_tests {
             let src = repo.join("skills").join(name);
             let dst = repo.join(".agents/skills").join(name);
             assert!(src.is_dir(), "missing skills/{name}");
-            assert!(dst.is_dir(), "missing .agents/skills/{name} — sync from skills/");
+            assert!(
+                dst.is_dir(),
+                "missing .agents/skills/{name} — sync from skills/"
+            );
             for entry in walkdir::WalkDir::new(&src)
                 .into_iter()
                 .filter_map(|e| e.ok())
@@ -481,7 +482,14 @@ mod codegen_tests {
         {
             let text = fs::read_to_string(entry.path()).unwrap();
             if text.contains("../../docs/") {
-                offenders.push(entry.path().strip_prefix(&repo).unwrap().display().to_string());
+                offenders.push(
+                    entry
+                        .path()
+                        .strip_prefix(&repo)
+                        .unwrap()
+                        .display()
+                        .to_string(),
+                );
             }
         }
         assert!(

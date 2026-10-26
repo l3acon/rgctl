@@ -161,12 +161,10 @@ impl ScopeStack {
                     | ScopeKind::Impl
                     | ScopeKind::Trait
                     | ScopeKind::Interface
-            ) {
-                if let Some(name) = frame.name.as_deref() {
-                    if !name.is_empty() {
-                        parts.push(name);
-                    }
-                }
+            ) && let Some(name) = frame.name.as_deref()
+                && !name.is_empty()
+            {
+                parts.push(name);
             }
         }
         if parts.is_empty() {

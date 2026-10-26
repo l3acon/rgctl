@@ -95,8 +95,8 @@ mod tests {
     fn test_registry_creation() {
         let registry = LanguageRegistry::new();
         let stats = registry.stats();
-        assert_eq!(stats.language_plugins, 10);
-        assert_eq!(stats.config_plugins, 4);
+        assert_eq!(stats.language_plugins, 66);
+        assert_eq!(stats.config_plugins, 5);
     }
 
     #[test]

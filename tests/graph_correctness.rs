@@ -7,7 +7,7 @@
 //! cargo test --test graph_correctness java   # filter by project id in test name
 //! ```
 //!
-//! See `rgctl-tests/correctness/SCHEMA.md` and https://github.com/sshaaf/rgctl/issues/26
+//! See `rgctl-tests/correctness/SCHEMA.md` and https://github.com/rgctl/rgctl/issues/26
 
 #![allow(clippy::too_many_arguments)]
 

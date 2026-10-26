@@ -152,79 +152,79 @@ fn collect_export_graph(
         });
     }
 
-    if scope.include_l_proc {
-        if let Ok(Some(archive)) = CfgPdgArchive::open_if_exists(repo_root) {
-            for record in archive.records.values() {
-                if !keep.contains(&record.function_id) {
+    if scope.include_l_proc
+        && let Ok(Some(archive)) = CfgPdgArchive::open_if_exists(repo_root)
+    {
+        for record in archive.records.values() {
+            if !keep.contains(&record.function_id) {
+                continue;
+            }
+            // CFG NEXT as self-loop annotation nodes would explode; emit PDG FLOW
+            // as edges between synthetic statement ids scoped under the function.
+            for dep in &record.pdg.data_deps {
+                if dep.dep_type != crate::pdg::DataDepType::Flow {
                     continue;
                 }
-                // CFG NEXT as self-loop annotation nodes would explode; emit PDG FLOW
-                // as edges between synthetic statement ids scoped under the function.
-                for dep in &record.pdg.data_deps {
-                    if dep.dep_type != crate::pdg::DataDepType::Flow {
-                        continue;
-                    }
-                    let from_line = record
-                        .pdg
-                        .nodes
-                        .get(&dep.from)
-                        .map(|n| n.statement.line)
-                        .unwrap_or(0);
-                    let to_line = record
-                        .pdg
-                        .nodes
-                        .get(&dep.to)
-                        .map(|n| n.statement.line)
-                        .unwrap_or(0);
-                    let from_id = format!("{}:L{}", record.function_id, from_line);
-                    let to_id = format!("{}:L{}", record.function_id, to_line);
-                    ensure_stmt_node(&mut nodes, &from_id, from_line, &record.function_id);
-                    ensure_stmt_node(&mut nodes, &to_id, to_line, &record.function_id);
-                    edge_i += 1;
-                    let mut props = serde_json::Map::new();
-                    props.insert("variable".into(), dep.variable.clone().into());
-                    props.insert("loop_carried".into(), dep.loop_carried.into());
-                    edges.push(GraphSonEdge {
-                        id: format!("e{edge_i}"),
-                        label: "DATA_FLOW".into(),
-                        from: from_id,
-                        to: to_id,
-                        properties: props,
-                    });
-                }
+                let from_line = record
+                    .pdg
+                    .nodes
+                    .get(&dep.from)
+                    .map(|n| n.statement.line)
+                    .unwrap_or(0);
+                let to_line = record
+                    .pdg
+                    .nodes
+                    .get(&dep.to)
+                    .map(|n| n.statement.line)
+                    .unwrap_or(0);
+                let from_id = format!("{}:L{}", record.function_id, from_line);
+                let to_id = format!("{}:L{}", record.function_id, to_line);
+                ensure_stmt_node(&mut nodes, &from_id, from_line, &record.function_id);
+                ensure_stmt_node(&mut nodes, &to_id, to_line, &record.function_id);
+                edge_i += 1;
+                let mut props = serde_json::Map::new();
+                props.insert("variable".into(), dep.variable.clone().into());
+                props.insert("loop_carried".into(), dep.loop_carried.into());
+                edges.push(GraphSonEdge {
+                    id: format!("e{edge_i}"),
+                    label: "DATA_FLOW".into(),
+                    from: from_id,
+                    to: to_id,
+                    properties: props,
+                });
             }
         }
     }
 
-    if scope.include_field_writes {
-        if let Ok(Some(index)) = FieldWriteIndex::open_if_exists(repo_root) {
-            for (i, w) in index.writes.iter().enumerate() {
-                if !path_ok(scope, Some(&w.file)) {
-                    continue;
-                }
-                let id = format!("fw{i}");
-                let mut props = serde_json::Map::new();
-                props.insert("file".into(), w.file.clone().into());
-                props.insert("line".into(), w.line.into());
-                props.insert("member".into(), w.member.clone().into());
-                props.insert("code".into(), w.code_snippet.clone().into());
-                if let Some(t) = &w.receiver_type {
-                    props.insert("receiver_type".into(), t.clone().into());
-                }
-                nodes.push(GraphSonNode {
-                    id: id.clone(),
-                    labels: vec!["FieldWrite".into()],
-                    properties: props,
-                });
-                edge_i += 1;
-                edges.push(GraphSonEdge {
-                    id: format!("e{edge_i}"),
-                    label: "WRITES_FIELD".into(),
-                    from: w.function_id.to_string(),
-                    to: id,
-                    properties: serde_json::Map::new(),
-                });
+    if scope.include_field_writes
+        && let Ok(Some(index)) = FieldWriteIndex::open_if_exists(repo_root)
+    {
+        for (i, w) in index.writes.iter().enumerate() {
+            if !path_ok(scope, Some(&w.file)) {
+                continue;
             }
+            let id = format!("fw{i}");
+            let mut props = serde_json::Map::new();
+            props.insert("file".into(), w.file.clone().into());
+            props.insert("line".into(), w.line.into());
+            props.insert("member".into(), w.member.clone().into());
+            props.insert("code".into(), w.code_snippet.clone().into());
+            if let Some(t) = &w.receiver_type {
+                props.insert("receiver_type".into(), t.clone().into());
+            }
+            nodes.push(GraphSonNode {
+                id: id.clone(),
+                labels: vec!["FieldWrite".into()],
+                properties: props,
+            });
+            edge_i += 1;
+            edges.push(GraphSonEdge {
+                id: format!("e{edge_i}"),
+                label: "WRITES_FIELD".into(),
+                from: w.function_id.to_string(),
+                to: id,
+                properties: serde_json::Map::new(),
+            });
         }
     }
 

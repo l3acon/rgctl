@@ -428,12 +428,12 @@ fn select_hubs(
                 .filter(|&i| degrees[i] as f64 > threshold)
                 .collect();
 
-            if selected.is_empty() && node_count >= 10 {
-                if let Some((idx, _)) = degrees.iter().enumerate().max_by_key(|(_, d)| *d) {
-                    if degrees[idx] as f64 > mu {
-                        selected.push(idx);
-                    }
-                }
+            if selected.is_empty()
+                && node_count >= 10
+                && let Some((idx, _)) = degrees.iter().enumerate().max_by_key(|(_, d)| *d)
+                && degrees[idx] as f64 > mu
+            {
+                selected.push(idx);
             }
             selected
         }
@@ -472,10 +472,10 @@ fn resolve_importance_flat(
         return flat;
     }
 
-    if let Some(deg) = degrees {
-        if deg.len() == node_count {
-            return deg.iter().map(|&d| d as f64).collect();
-        }
+    if let Some(deg) = degrees
+        && deg.len() == node_count
+    {
+        return deg.iter().map(|&d| d as f64).collect();
     }
 
     // Fallback when degrees unavailable: flat PageRank (no Uuid HashMap).
@@ -1136,13 +1136,13 @@ pub fn build_community_neighbor_lists(
     // markdown `kind=heading` — never `get_node` every UUID on linux-scale graphs.
     let function_count = store.count_nodes_by_type(NodeType::Function)?;
     store.for_each_node_of_type(NodeType::Module, |node| {
-        if node.get_property("kind") == Some("heading") {
-            if let Some(view_idx) = view.uuid_to_index.get(&node.id) {
-                let pos = view_idx.index();
-                if !is_heading[pos] {
-                    is_heading[pos] = true;
-                    heading_count += 1;
-                }
+        if node.get_property("kind") == Some("heading")
+            && let Some(view_idx) = view.uuid_to_index.get(&node.id)
+        {
+            let pos = view_idx.index();
+            if !is_heading[pos] {
+                is_heading[pos] = true;
+                heading_count += 1;
             }
         }
     })?;
@@ -1259,11 +1259,11 @@ fn build_dashboard_community(
         backend.with_node(member_id, |node| {
             *type_counts.entry(node.node_type).or_insert(0) += 1;
 
-            if let Some(complexity_str) = node.get_property("cyclomatic") {
-                if let Ok(complexity) = complexity_str.parse::<i64>() {
-                    complexity_sum += complexity as f64;
-                    complexity_count += 1;
-                }
+            if let Some(complexity_str) = node.get_property("cyclomatic")
+                && let Ok(complexity) = complexity_str.parse::<i64>()
+            {
+                complexity_sum += complexity as f64;
+                complexity_count += 1;
             }
 
             if let Some(path) = &node.file_path {

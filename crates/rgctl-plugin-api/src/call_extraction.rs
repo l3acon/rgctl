@@ -78,10 +78,10 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
     if call.kind() != "call" {
         return false;
     }
-    if let Some(recv) = call.child_by_field_name("receiver") {
-        if !matches!(recv.kind(), "constant" | "scope_resolution" | "self") {
-            return true;
-        }
+    if let Some(recv) = call.child_by_field_name("receiver")
+        && !matches!(recv.kind(), "constant" | "scope_resolution" | "self")
+    {
+        return true;
     }
     if let Some(method) = call.child_by_field_name("method") {
         if !matches!(
@@ -90,10 +90,13 @@ pub fn ruby_call_unresolved(call: Node, source: &[u8]) -> bool {
         ) {
             return true;
         }
-        if method.kind() == "identifier" {
-            if method.utf8_text(source).ok().is_some_and(|t| t.starts_with('@')) {
-                return true;
-            }
+        if method.kind() == "identifier"
+            && method
+                .utf8_text(source)
+                .ok()
+                .is_some_and(|t| t.starts_with('@'))
+        {
+            return true;
         }
     }
     false
@@ -125,10 +128,7 @@ pub fn containing_function_from_scope<'a>(
     let idx = frame.symbol_idx?;
     let sym = symbols.get(idx)?;
     // Methods may be `SymbolType::Method` (Rust impl) or still `Function` elsewhere.
-    if matches!(
-        sym.symbol_type,
-        SymbolType::Function | SymbolType::Method
-    ) {
+    if matches!(sym.symbol_type, SymbolType::Function | SymbolType::Method) {
         Some(sym)
     } else {
         None
@@ -148,13 +148,21 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
         match node.kind() {
             // Go method/field selectors use `field_identifier` (not `identifier`).
             // PHP method names use the `name` node kind.
-            "identifier" | "type_identifier" | "field_identifier" | "property_identifier"
-            | "name" | "variable_name" => {
-                return node.utf8_text(source).ok().map(|s| {
-                    s.trim_start_matches('$').to_string()
-                });
+            "identifier"
+            | "type_identifier"
+            | "field_identifier"
+            | "property_identifier"
+            | "name"
+            | "variable_name" => {
+                return node
+                    .utf8_text(source)
+                    .ok()
+                    .map(|s| s.trim_start_matches('$').to_string());
             }
-            "field_expression" | "selector_expression" | "attribute" | "member_expression"
+            "field_expression"
+            | "selector_expression"
+            | "attribute"
+            | "member_expression"
             | "member_access_expression" => {
                 if let Some(n) = node
                     .child_by_field_name("field")
@@ -169,8 +177,10 @@ pub fn callee_name(root: Node, source: &[u8]) -> Option<String> {
             "dependent_name" => {
                 let mut c = node.walk();
                 for ch in node.children(&mut c) {
-                    if matches!(ch.kind(), "template_method" | "template_function" | "field_identifier" | "identifier")
-                    {
+                    if matches!(
+                        ch.kind(),
+                        "template_method" | "template_function" | "field_identifier" | "identifier"
+                    ) {
                         stack.push((ch, depth + 1));
                         break;
                     }
@@ -251,7 +261,9 @@ pub fn push_call_relation(
     let Some(from_fn) = containing_function(node, function_symbols) else {
         return;
     };
-    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+    push_call_relation_from(
+        node, source, file_path, symbols, from_fn, language, relations,
+    );
 }
 
 /// Push a `Calls` relation using [`ScopeStack`] for `O(1)` enclosing-function lookup.
@@ -277,7 +289,9 @@ pub fn push_call_relation_scoped(
     let Some(from_fn) = containing_function_from_scope(scopes, symbols) else {
         return;
     };
-    push_call_relation_from(node, source, file_path, symbols, from_fn, language, relations);
+    push_call_relation_from(
+        node, source, file_path, symbols, from_fn, language, relations,
+    );
 }
 
 /// Emit a `Calls` relation with a known enclosing function symbol.
@@ -353,20 +367,20 @@ pub fn push_call_relation_from(
         meta["go_field"] = serde_json::Value::String(field);
         meta["go_callee"] = serde_json::Value::String(callee.clone());
     }
-    if language == "rust" {
-        if let Some(unresolved) = rust_call_unresolved(node, source) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "rust"
+        && let Some(unresolved) = rust_call_unresolved(node, source)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
-    if language == "c" {
-        if let Some(unresolved) = c_call_unresolved(node, source, from_fn) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "c"
+        && let Some(unresolved) = c_call_unresolved(node, source, from_fn)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
-    if language == "python" {
-        if let Some(unresolved) = python_call_unresolved(node, source) {
-            meta["unresolved"] = serde_json::Value::Bool(unresolved);
-        }
+    if language == "python"
+        && let Some(unresolved) = python_call_unresolved(node, source)
+    {
+        meta["unresolved"] = serde_json::Value::Bool(unresolved);
     }
     if language == "ruby" && ruby_call_unresolved(node, source) {
         meta["unresolved"] = serde_json::Value::Bool(true);
@@ -472,8 +486,8 @@ fn qualified_identifier_text(node: Node, source: &[u8]) -> Option<String> {
     let scope = node
         .child_by_field_name("scope")
         .and_then(|s| cpp_expression_hint_text(s, source));
-    let name = last_named_child_by_field(node, "name")
-        .and_then(|n| cpp_name_component_text(n, source))?;
+    let name =
+        last_named_child_by_field(node, "name").and_then(|n| cpp_name_component_text(n, source))?;
     scope.map(|s| format!("{s}::{name}")).or(Some(name))
 }
 
@@ -490,21 +504,35 @@ fn cpp_expression_hint_text(node: Node, source: &[u8]) -> Option<String> {
             let field_name = field.utf8_text(source).ok()?.trim().to_string();
             Some(format!("{val}.{field_name}"))
         }
-        _ => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
+        _ => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
     }
 }
 
 fn cpp_name_component_text(node: Node, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "identifier" | "field_identifier" | "namespace_identifier" | "type_identifier"
-        | "destructor_name" | "operator_name" => {
-            node.utf8_text(source).ok().map(str::trim).map(str::to_string)
-        }
+        "identifier"
+        | "field_identifier"
+        | "namespace_identifier"
+        | "type_identifier"
+        | "destructor_name"
+        | "operator_name" => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
         "template_function" | "template_method" => node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok().map(str::trim).map(str::to_string)),
         "qualified_identifier" => qualified_identifier_text(node, source),
-        _ => node.utf8_text(source).ok().map(str::trim).map(str::to_string),
+        _ => node
+            .utf8_text(source)
+            .ok()
+            .map(str::trim)
+            .map(str::to_string),
     }
 }
 
@@ -685,25 +713,23 @@ fn rust_call_type_hint(
             }
         }
         // `self.field` in inherent methods — match param named self with &Type
-        if value.kind() == "self" || value.utf8_text(source).ok() == Some("self") {
-            if let Some(self_ty) = from_fn
+        if (value.kind() == "self" || value.utf8_text(source).ok() == Some("self"))
+            && let Some(self_ty) = from_fn
                 .parameters
                 .iter()
                 .find(|p| p.name == "self" || p.name == "&self" || p.name == "&mut self")
                 .and_then(|p| p.param_type.as_deref())
-            {
-                let owner_ty = rust_simple_type_name(self_ty);
-                let owner = symbols.iter().find(|s| {
-                    matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum)
-                        && s.name == owner_ty
-                })?;
-                return owner
-                    .fields
-                    .iter()
-                    .find(|f| f.name == field_name)
-                    .and_then(|f| f.field_type.as_deref())
-                    .map(rust_simple_type_name);
-            }
+        {
+            let owner_ty = rust_simple_type_name(self_ty);
+            let owner = symbols.iter().find(|s| {
+                matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum) && s.name == owner_ty
+            })?;
+            return owner
+                .fields
+                .iter()
+                .find(|f| f.name == field_name)
+                .and_then(|f| f.field_type.as_deref())
+                .map(rust_simple_type_name);
         }
     }
     None
@@ -730,7 +756,9 @@ fn rust_call_unresolved(call: Node, source: &[u8]) -> Option<bool> {
     }
     if func.kind() == "field_expression" {
         let value = func.child_by_field_name("value")?;
-        if value.kind() != "identifier" && value.kind() != "self" && value.kind() != "field_expression"
+        if value.kind() != "identifier"
+            && value.kind() != "self"
+            && value.kind() != "field_expression"
         {
             return Some(true);
         }
@@ -789,10 +817,10 @@ fn c_call_unresolved(call: Node, source: &[u8], from_fn: &Symbol) -> Option<bool
             }
         }
         "pointer_expression" | "parenthesized_expression" => {
-            if let Some(name) = callee_name(func, source) {
-                if from_fn.parameters.iter().any(|p| p.name == name) {
-                    return Some(true);
-                }
+            if let Some(name) = callee_name(func, source)
+                && from_fn.parameters.iter().any(|p| p.name == name)
+            {
+                return Some(true);
             }
             return Some(true);
         }
@@ -830,18 +858,20 @@ pub fn infer_python_method_target(
     symbols: &[Symbol],
     from_fn: &Symbol,
 ) -> (Option<String>, Option<String>) {
-    python_call_type_hint(call, source, symbols, from_fn).map(|ty| {
-        let method = call
-            .child_by_field_name("function")
-            .and_then(|f| callee_name(f, source))
-            .unwrap_or_default();
-        let qualified = if method.is_empty() {
-            ty.clone()
-        } else {
-            format!("{ty}.{method}")
-        };
-        (Some(qualified), Some(ty))
-    }).unwrap_or((None, None))
+    python_call_type_hint(call, source, symbols, from_fn)
+        .map(|ty| {
+            let method = call
+                .child_by_field_name("function")
+                .and_then(|f| callee_name(f, source))
+                .unwrap_or_default();
+            let qualified = if method.is_empty() {
+                ty.clone()
+            } else {
+                format!("{ty}.{method}")
+            };
+            (Some(qualified), Some(ty))
+        })
+        .unwrap_or((None, None))
 }
 
 fn python_call_type_hint(
@@ -887,9 +917,9 @@ fn python_call_type_hint(
         _ => return None,
     };
     let _ = method_name;
-    let class_sym = symbols.iter().find(|s| {
-        s.symbol_type == SymbolType::Class && s.name == owner_class
-    })?;
+    let class_sym = symbols
+        .iter()
+        .find(|s| s.symbol_type == SymbolType::Class && s.name == owner_class)?;
     class_sym
         .fields
         .iter()

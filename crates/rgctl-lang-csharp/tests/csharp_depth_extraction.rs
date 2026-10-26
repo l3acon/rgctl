@@ -39,8 +39,7 @@ public record Order(string Id);
 
     assert!(
         out.symbols.iter().any(|s| {
-            s.name == "Order"
-                && s.metadata.get("is_record").and_then(|v| v.as_bool()) == Some(true)
+            s.name == "Order" && s.metadata.get("is_record").and_then(|v| v.as_bool()) == Some(true)
         }),
         "record Order missing"
     );
@@ -53,12 +52,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../csharp-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_c_sharp::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "csharp",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("csharp", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

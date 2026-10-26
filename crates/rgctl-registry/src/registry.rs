@@ -125,11 +125,61 @@ impl LanguageRegistry {
     /// like `build.gradle.kts` stay exclusive to Dependency extractors even when
     /// a Kotlin/Groovy plugin registers `.kts` / `.gradle`. Ordinary sources that
     /// fall through to [`IngestRoute::Ignore`] (e.g. `.kt`) still use language plugins.
+    ///
+    /// For `.m` files, peeks on-disk content (when readable) to choose between
+    /// `objc` and `matlab`; see [`Self::get_plugin_for_file_with_source`].
     pub fn get_plugin_for_file(&self, file_path: &Path) -> Result<Arc<dyn LanguagePlugin>> {
+        if file_path.extension().and_then(|e| e.to_str()) == Some("m")
+            && let Ok(mut file) = std::fs::File::open(file_path)
+        {
+            use std::io::Read;
+            let mut buf = [0u8; 4096];
+            if let Ok(n) = file.read(&mut buf) {
+                return self.get_plugin_for_file_with_source(file_path, &buf[..n]);
+            }
+        }
+        self.get_plugin_for_file_path_only(file_path)
+    }
+
+    /// Like [`Self::get_plugin_for_file`], but uses `source` to disambiguate `.m`
+    /// (Objective-C vs MATLAB) without a second disk read.
+    pub fn get_plugin_for_file_with_source(
+        &self,
+        file_path: &Path,
+        source: &[u8],
+    ) -> Result<Arc<dyn LanguagePlugin>> {
         if classify_ingest_path(file_path) == IngestRoute::Manifest {
             return Err(Error::UnsupportedLanguage(
                 file_path.to_string_lossy().to_string(),
             ));
+        }
+
+        if file_path.extension().and_then(|e| e.to_str()) == Some("m") {
+            let id = crate::sniff_objc_vs_matlab(source);
+            if let Some(plugin) = self.get_language_plugin(id) {
+                return Ok(plugin);
+            }
+        }
+
+        self.get_plugin_for_file_path_only(file_path)
+    }
+
+    fn get_plugin_for_file_path_only(&self, file_path: &Path) -> Result<Arc<dyn LanguagePlugin>> {
+        if classify_ingest_path(file_path) == IngestRoute::Manifest {
+            return Err(Error::UnsupportedLanguage(
+                file_path.to_string_lossy().to_string(),
+            ));
+        }
+
+        // `.m` is shared by Objective-C and MATLAB. Without source bytes, default to
+        // objc — `get_plugin_for_file_with_source` / on-disk peek disambiguates.
+        // Do not use `language_plugin_for_path` here: both plugins `matches_path` `.m`
+        // and HashMap iteration order is unstable.
+        if file_path.extension().and_then(|e| e.to_str()) == Some("m") {
+            return self
+                .get_language_plugin("objc")
+                .or_else(|| self.extension_map.get("m").cloned())
+                .ok_or_else(|| Error::UnsupportedLanguage("m".into()));
         }
 
         let path_str = file_path.to_string_lossy().replace('\\', "/");
@@ -213,7 +263,7 @@ impl LanguageRegistry {
         if classify_ingest_path(file_path) == IngestRoute::Manifest {
             return true;
         }
-        if self.get_plugin_for_file(file_path).is_ok() {
+        if self.get_plugin_for_file_path_only(file_path).is_ok() {
             return true;
         }
         match classify_ingest_path(file_path) {
@@ -324,22 +374,42 @@ mod tests {
         let registry = LanguageRegistry::with_config_formats();
         assert!(registry.can_process_file(Path::new("pom.xml")));
         assert!(registry.is_manifest_file(Path::new("pom.xml")));
-        assert!(registry.get_config_plugin_for_file(Path::new("pom.xml")).is_err());
+        assert!(
+            registry
+                .get_config_plugin_for_file(Path::new("pom.xml"))
+                .is_err()
+        );
 
         assert!(registry.can_process_file(Path::new("Cargo.toml")));
         assert!(registry.is_manifest_file(Path::new("Cargo.toml")));
-        assert!(registry.get_config_plugin_for_file(Path::new("Cargo.toml")).is_err());
+        assert!(
+            registry
+                .get_config_plugin_for_file(Path::new("Cargo.toml"))
+                .is_err()
+        );
 
         assert!(registry.can_process_file(Path::new("package.json")));
         assert!(registry.is_manifest_file(Path::new("package.json")));
-        assert!(registry.get_config_plugin_for_file(Path::new("package.json")).is_err());
+        assert!(
+            registry
+                .get_config_plugin_for_file(Path::new("package.json"))
+                .is_err()
+        );
 
         // Gradle Kotlin DSL build script stays Manifest even if a future
         // language plugin registers `.kts` (language lookup is blocked).
         assert!(registry.is_manifest_file(Path::new("app/build.gradle.kts")));
-        assert!(registry.get_plugin_for_file(Path::new("app/build.gradle.kts")).is_err());
+        assert!(
+            registry
+                .get_plugin_for_file(Path::new("app/build.gradle.kts"))
+                .is_err()
+        );
         assert!(registry.is_manifest_file(Path::new("build.gradle")));
-        assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
+        assert!(
+            registry
+                .get_plugin_for_file(Path::new("build.gradle"))
+                .is_err()
+        );
     }
 
     #[test]

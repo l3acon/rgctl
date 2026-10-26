@@ -41,11 +41,7 @@ pub fn eval_builtin_xml(
             continue;
         };
         if xpath_matches(&doc, xpath) {
-            out.push(violation(
-                rule_id,
-                "builtin.xml",
-                &MatchSite::new(rel, 1),
-            ));
+            out.push(violation(rule_id, "builtin.xml", &MatchSite::new(rel, 1)));
         }
     }
     out
@@ -87,11 +83,7 @@ pub fn eval_builtin_json(
             continue;
         };
         if json_path_exists(&v, jsonpath) {
-            out.push(violation(
-                rule_id,
-                "builtin.json",
-                &MatchSite::new(rel, 1),
-            ));
+            out.push(violation(rule_id, "builtin.json", &MatchSite::new(rel, 1)));
         }
     }
     out
@@ -112,7 +104,9 @@ fn xpath_matches(doc: &roxmltree::Document<'_>, xpath: &str) -> bool {
         if tag.is_empty() {
             return false;
         }
-        return doc.descendants().any(|n| n.is_element() && n.tag_name().name() == tag);
+        return doc
+            .descendants()
+            .any(|n| n.is_element() && n.tag_name().name() == tag);
     }
     false
 }

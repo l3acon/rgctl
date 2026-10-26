@@ -34,6 +34,7 @@ mod single_pass;
 pub use plugin::ErbPlugin;
 
 /// Register the ERB language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(ErbPlugin::new().expect("init ErbPlugin")));
 }

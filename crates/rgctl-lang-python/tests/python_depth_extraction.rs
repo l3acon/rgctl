@@ -47,7 +47,10 @@ class Client:
         .find(|s| s.name == "Client" && s.symbol_type == SymbolType::Class)
         .expect("Client");
     assert!(
-        client.fields.iter().any(|f| f.name == "host" && f.field_type.as_deref() == Some("str")),
+        client
+            .fields
+            .iter()
+            .any(|f| f.name == "host" && f.field_type.as_deref() == Some("str")),
         "annotated host: {fields:?}",
         fields = client.fields
     );
@@ -88,9 +91,9 @@ def parse(data):
         .expect("extract_all");
 
     assert!(
-        out.symbols.iter().any(|s| {
-            s.symbol_type == SymbolType::TypeAlias && s.name == "Point"
-        }),
+        out.symbols
+            .iter()
+            .any(|s| { s.symbol_type == SymbolType::TypeAlias && s.name == "Point" }),
         "type Point alias missing: {:?}",
         out.symbols
             .iter()
@@ -148,15 +151,13 @@ def read_map(d: dict):
         .collect();
     assert!(
         calls.iter().any(|r| {
-            r.to == "__getitem__"
-                && r.to_qualified_hint.as_deref() == Some("dict.__getitem__")
+            r.to == "__getitem__" && r.to_qualified_hint.as_deref() == Some("dict.__getitem__")
         }),
         "getitem missing: {calls:?}"
     );
     assert!(
         calls.iter().any(|r| {
-            r.to == "__setitem__"
-                && r.to_qualified_hint.as_deref() == Some("dict.__setitem__")
+            r.to == "__setitem__" && r.to_qualified_hint.as_deref() == Some("dict.__setitem__")
         }),
         "setitem missing: {calls:?}"
     );
@@ -169,12 +170,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../python-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_python::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "python",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("python", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

@@ -30,3 +30,6 @@ harness = false
 [[bench]]
 name = "snapshot_diff"
 harness = false
+
+[lints.clippy]
+collapsible_if = "allow"

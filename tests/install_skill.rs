@@ -34,10 +34,16 @@ fn stdout_json(output: &Output) -> Value {
 #[test]
 fn install_without_skill_or_policy_exits_one() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let output = run_in(dir.path(), &["-r", &dir.path().display().to_string(), "install"]);
+    let output = run_in(
+        dir.path(),
+        &["-r", &dir.path().display().to_string(), "install"],
+    );
     assert_eq!(output.status.code(), Some(1));
     let err = String::from_utf8_lossy(&output.stderr);
-    assert!(err.contains("--skill") || err.contains("--with-policy"), "{err}");
+    assert!(
+        err.contains("--skill") || err.contains("--with-policy"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -72,7 +78,10 @@ fn install_skill_cursor_writes_only_rgctl() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(repo.join(".cursor/skills/rgctl/SKILL.md").is_file());
-    assert!(repo.join(".cursor/skills/rgctl/references/workflows.md").is_file());
+    assert!(
+        repo.join(".cursor/skills/rgctl/references/workflows.md")
+            .is_file()
+    );
     assert!(repo.join(".cursor/skills/rgctl-review/SKILL.md").is_file());
     assert!(!repo.join(".cursor/skills/rgctl-migrate").exists());
     assert!(!repo.join(".cursor/skills/rgctl-kantra").exists());
@@ -198,31 +207,34 @@ fn install_force_after_edit() {
     let dir = tempfile::tempdir().expect("tempdir");
     let repo = fs::canonicalize(dir.path()).expect("canonicalize");
     let repo_s = repo.display().to_string();
-    assert!(run_in(dir.path(), &["-r", &repo_s, "install", "--skill", "--tools", "cursor"])
+    assert!(
+        run_in(
+            dir.path(),
+            &["-r", &repo_s, "install", "--skill", "--tools", "cursor"]
+        )
         .status
-        .success());
+        .success()
+    );
     let skill = repo.join(".cursor/skills/rgctl/SKILL.md");
     fs::write(&skill, b"edited\n").unwrap();
-    assert!(!run_in(
-        dir.path(),
-        &["-r", &repo_s, "install", "--skill", "--tools", "cursor"]
-    )
-    .status
-    .success());
-    assert!(run_in(
-        dir.path(),
-        &[
-            "-r",
-            &repo_s,
-            "install",
-            "--skill",
-            "--tools",
-            "cursor",
-            "--force",
-        ],
-    )
-    .status
-    .success());
+    assert!(
+        !run_in(
+            dir.path(),
+            &["-r", &repo_s, "install", "--skill", "--tools", "cursor"]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        run_in(
+            dir.path(),
+            &[
+                "-r", &repo_s, "install", "--skill", "--tools", "cursor", "--force",
+            ],
+        )
+        .status
+        .success()
+    );
     let body = fs::read_to_string(&skill).unwrap();
     assert!(body.contains("rgctl") || body.contains("structural"));
     assert!(!body.starts_with("edited"));

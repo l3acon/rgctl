@@ -38,9 +38,10 @@ pub fn eval_filecontent(
                 return Vec::new();
             }
             if let Some(ref g) = glob
-                && !g.matches(&rel) {
-                    return Vec::new();
-                }
+                && !g.matches(&rel)
+            {
+                return Vec::new();
+            }
             let content = match sources.get(&rel).or_else(|| sources.get(file.to_str()?)) {
                 Some(c) => c.as_str(),
                 None => return Vec::new(),
@@ -73,7 +74,16 @@ mod tests {
             Arc::new("import \"golang.org/x/crypto/hkdf\"\n".into()),
         );
         let files = vec![PathBuf::from("main.go")];
-        let hits = eval_filecontent("r1", "hkdf", None, Path::new("."), &files, &sources, &HashSet::new()).unwrap();
+        let hits = eval_filecontent(
+            "r1",
+            "hkdf",
+            None,
+            Path::new("."),
+            &files,
+            &sources,
+            &HashSet::new(),
+        )
+        .unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].line, 1);
     }

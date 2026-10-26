@@ -35,12 +35,14 @@ fn no_daemon_gql_and_metrics_after_discover() {
     let (_tmp, repo) = materialize_fixture();
     discover_fixture(&repo);
 
-    let query = cli_json(
-        &repo,
-        &["gql", "MATCH (n:Function) RETURN n LIMIT 3"],
-    );
+    let query = cli_json(&repo, &["gql", "MATCH (n:Function) RETURN n LIMIT 3"]);
     assert_eq!(query["schema_version"], 1);
-    assert!(query["rows"].as_array().map(|r| !r.is_empty()).unwrap_or(false));
+    assert!(
+        query["rows"]
+            .as_array()
+            .map(|r| !r.is_empty())
+            .unwrap_or(false)
+    );
 
     let metrics = cli_json(&repo, &["metrics", "--pagerank"]);
     assert_eq!(metrics["schema_version"], 1);
@@ -64,12 +66,7 @@ fn discover_dot_uses_dash_r_when_cwd_differs() {
     let outer = tempfile::tempdir().unwrap();
     let out = Command::new(rgctl())
         .current_dir(outer.path())
-        .args([
-            "-r",
-            repo.to_str().unwrap(),
-            "discover",
-            ".",
-        ])
+        .args(["-r", repo.to_str().unwrap(), "discover", "."])
         .output()
         .unwrap();
     assert_ok(&out, "discover from outer cwd with -r");
@@ -83,10 +80,7 @@ fn discover_absolute_path_works_from_any_cwd() {
     let outer = tempfile::tempdir().unwrap();
     let out = Command::new(rgctl())
         .current_dir(outer.path())
-        .args([
-            "discover",
-            repo.to_str().unwrap(),
-        ])
+        .args(["discover", repo.to_str().unwrap()])
         .output()
         .unwrap();
     assert_ok(&out, "discover absolute path");
@@ -126,12 +120,7 @@ fn discover_relative_subdir_joins_under_dash_r() {
     let outer = tempfile::tempdir().unwrap();
     let out = Command::new(rgctl())
         .current_dir(outer.path())
-        .args([
-            "-r",
-            repo.to_str().unwrap(),
-            "discover",
-            "nested",
-        ])
+        .args(["-r", repo.to_str().unwrap(), "discover", "nested"])
         .output()
         .unwrap();
     assert_ok(&out, "discover relative subdir under -r");
@@ -157,10 +146,7 @@ fn linux_no_daemon_discover_and_gql_smoke() {
     assert_ok(&out, "linux discover");
     assert_rgctl_snapshot(&repo);
 
-    let query = cli_json(
-        &repo,
-        &["gql", "--macro-name", "all_functions", "unused"],
-    );
+    let query = cli_json(&repo, &["gql", "--macro-name", "all_functions", "unused"]);
     assert_eq!(query["schema_version"], 1);
     let functions = query["count"].as_u64().unwrap_or(0);
     assert!(
@@ -168,8 +154,5 @@ fn linux_no_daemon_discover_and_gql_smoke() {
         "linux smoke: function count {functions} below floor {LINUX_SMOKE_MIN_FUNCTIONS}"
     );
 
-    let _ = cli_json(
-        &repo,
-        &["gql", "MATCH (n:Function) RETURN n LIMIT 1"],
-    );
+    let _ = cli_json(&repo, &["gql", "MATCH (n:Function) RETURN n LIMIT 1"]);
 }

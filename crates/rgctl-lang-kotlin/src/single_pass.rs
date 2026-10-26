@@ -56,18 +56,12 @@ fn kotlin_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn kotlin_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&kotlin_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&kotlin_grammar(), HANDLED_KINDS))
 }
 
 fn kotlin_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&kotlin_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&kotlin_grammar(), MANIFEST_JSON))
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -86,11 +80,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("kotlin", kotlin_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("kotlin", kotlin_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let package = KotlinPlugin::package_name(root, source);
@@ -160,20 +155,14 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "function_declaration" => {
-                        if let Some(sym) = plugin.emit_function(
-                            node,
-                            source,
-                            &file_path_str,
-                            package.as_deref(),
-                        ) {
+                        if let Some(sym) =
+                            plugin.emit_function(node, source, &file_path_str, package.as_deref())
+                        {
                             let params = sym.parameters.len() as u32;
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Function,
@@ -282,25 +271,20 @@ pub fn extract_all_single_pass(
                     _ => {}
                 }
 
-                if KOTLIN_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if KOTLIN_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_expression"
-                        | "when_expression"
-                        | "while_statement"
-                        | "for_statement"
-                        | "do_while_statement"
-                        | "catch_block" => {
+                        "if_expression" | "when_expression" | "while_statement"
+                        | "for_statement" | "do_while_statement" | "catch_block" => {
                             let delta = 1 + ctx
                                 .scopes
                                 .current_function()
@@ -327,15 +311,14 @@ pub fn extract_all_single_pass(
                                 .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
-                        "return_expression" | "jump_expression" => {
-                            if kind == "return_expression"
+                        "return_expression" | "jump_expression"
+                            if (kind == "return_expression"
                                 || node
                                     .utf8_text(source)
                                     .ok()
-                                    .is_some_and(|t| t.trim_start().starts_with("return"))
-                            {
-                                ctx.scopes.note_return();
-                            }
+                                    .is_some_and(|t| t.trim_start().starts_with("return"))) =>
+                        {
+                            ctx.scopes.note_return();
                         }
                         _ => {}
                     }

@@ -24,4 +24,4 @@ rgctl install --skill --tools cursor,claude --force
 ## Related
 
 - [Agent pack walkthrough](https://rgctl.io/docs/guides/agent-skill/)
-- GitHub [#84](https://github.com/sshaaf/rgctl/issues/84) · OpenSpec change `agent-pack-install`.
+- GitHub [#84](https://github.com/rgctl/rgctl/issues/84) · OpenSpec change `agent-pack-install`.

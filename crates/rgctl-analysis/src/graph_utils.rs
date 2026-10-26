@@ -201,10 +201,10 @@ pub fn caller_ids_within_depth(
             continue;
         };
         for pred in view.incoming_filtered(caller_idx, CALL_EDGES) {
-            if let Some(uuid) = view.get_uuid(pred) {
-                if uuid != target_id {
-                    queue.push_back((uuid, depth + 1));
-                }
+            if let Some(uuid) = view.get_uuid(pred)
+                && uuid != target_id
+            {
+                queue.push_back((uuid, depth + 1));
             }
         }
     }

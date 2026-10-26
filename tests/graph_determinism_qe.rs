@@ -3,10 +3,10 @@
 use rgctl_extraction::{DiscoveryConfig, Extractor, FileDiscoverer, GraphBuilder};
 use rgctl_graph::schema::EdgeType;
 use rgctl_graph::{
-    assert_graph_invariants, edge_type_to_u8, write_columnar_from_nodes_edges, SnapshotNodeStore,
-    SNAPSHOT_FILE,
+    SNAPSHOT_FILE, SnapshotNodeStore, assert_graph_invariants, edge_type_to_u8,
+    write_columnar_from_nodes_edges,
 };
-use rgctl_pipeline::stream::{stream_into_graph, DEFAULT_STREAM_CHANNEL_CAPACITY};
+use rgctl_pipeline::stream::{DEFAULT_STREAM_CHANNEL_CAPACITY, stream_into_graph};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -49,9 +49,7 @@ fn shuffle_with_seed(files: &mut [PathBuf], seed: u64) {
     // Deterministic LCG Fisher–Yates (no rand crate dependency).
     let mut state = seed;
     for i in (1..files.len()).rev() {
-        state = state
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1);
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
         let j = (state as usize) % (i + 1);
         files.swap(i, j);
     }
@@ -163,7 +161,11 @@ macro_rules! ecommerce_perm_test {
         fn $fn_name() {
             let fixture = ecommerce_fixture($dir);
             if !fixture.is_dir() {
-                eprintln!("skip {}: missing {}", stringify!($fn_name), fixture.display());
+                eprintln!(
+                    "skip {}: missing {}",
+                    stringify!($fn_name),
+                    fixture.display()
+                );
                 return;
             }
             run_permutation_suite(&fixture, true);
@@ -171,13 +173,34 @@ macro_rules! ecommerce_perm_test {
     };
 }
 
-ecommerce_perm_test!(ecommerce_java_file_order_and_thread_determinism, "ecommerce-java");
-ecommerce_perm_test!(ecommerce_python_file_order_and_thread_determinism, "ecommerce-python");
-ecommerce_perm_test!(ecommerce_go_file_order_and_thread_determinism, "ecommerce-go");
-ecommerce_perm_test!(ecommerce_cpp_file_order_and_thread_determinism, "ecommerce-cpp");
-ecommerce_perm_test!(ecommerce_ruby_file_order_and_thread_determinism, "ecommerce-ruby");
-ecommerce_perm_test!(ecommerce_rust_file_order_and_thread_determinism, "ecommerce-rust");
-ecommerce_perm_test!(ecommerce_typescript_file_order_and_thread_determinism, "ecommerce-typescript");
+ecommerce_perm_test!(
+    ecommerce_java_file_order_and_thread_determinism,
+    "ecommerce-java"
+);
+ecommerce_perm_test!(
+    ecommerce_python_file_order_and_thread_determinism,
+    "ecommerce-python"
+);
+ecommerce_perm_test!(
+    ecommerce_go_file_order_and_thread_determinism,
+    "ecommerce-go"
+);
+ecommerce_perm_test!(
+    ecommerce_cpp_file_order_and_thread_determinism,
+    "ecommerce-cpp"
+);
+ecommerce_perm_test!(
+    ecommerce_ruby_file_order_and_thread_determinism,
+    "ecommerce-ruby"
+);
+ecommerce_perm_test!(
+    ecommerce_rust_file_order_and_thread_determinism,
+    "ecommerce-rust"
+);
+ecommerce_perm_test!(
+    ecommerce_typescript_file_order_and_thread_determinism,
+    "ecommerce-typescript"
+);
 
 #[test]
 fn collision_repo_file_order_and_thread_determinism() {
@@ -192,21 +215,9 @@ fn duplicate_fqn_never_fabricates_random_winner() {
     let root = tmp.path().join("repo");
     fs::create_dir_all(root.join("mod_a")).unwrap();
     fs::create_dir_all(root.join("mod_b")).unwrap();
-    fs::write(
-        root.join("mod_a/dup.rs"),
-        "pub fn shared() {}\n",
-    )
-    .unwrap();
-    fs::write(
-        root.join("mod_b/dup.rs"),
-        "pub fn shared() {}\n",
-    )
-    .unwrap();
-    fs::write(
-        root.join("caller.rs"),
-        "pub fn entry() { shared(); }\n",
-    )
-    .unwrap();
+    fs::write(root.join("mod_a/dup.rs"), "pub fn shared() {}\n").unwrap();
+    fs::write(root.join("mod_b/dup.rs"), "pub fn shared() {}\n").unwrap();
+    fs::write(root.join("caller.rs"), "pub fn entry() { shared(); }\n").unwrap();
 
     let mut files = discover_files(&root);
     files.sort();

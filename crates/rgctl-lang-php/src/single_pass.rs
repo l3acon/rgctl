@@ -1,8 +1,8 @@
 //! Single-pass AST extraction for PHP (`ScopeStack` + `KindDispatchTable`).
 
 use crate::plugin::{
-    import_map_from_symbols, normalize_namespace, php_grammar, push_php_call_relation, PhpPlugin,
-    PHP_COMPLEXITY_BRANCH_KINDS, PHP_FUNCTION_KINDS,
+    PHP_COMPLEXITY_BRANCH_KINDS, PHP_FUNCTION_KINDS, PhpPlugin, import_map_from_symbols,
+    normalize_namespace, php_grammar, push_php_call_relation,
 };
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -68,18 +68,12 @@ static DISPATCH: OnceLock<KindDispatchTable> = OnceLock::new();
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn php_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&php_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&php_grammar(), HANDLED_KINDS))
 }
 
 fn php_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&php_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&php_grammar(), MANIFEST_JSON))
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -157,17 +151,17 @@ pub fn extract_all_single_pass(
 
                 match kind {
                     "function_definition" => {
-                        if let Some(sym) =
-                            plugin.extract_function(node, source, &file_path_str, namespace.as_deref())?
-                        {
+                        if let Some(sym) = plugin.extract_function(
+                            node,
+                            source,
+                            &file_path_str,
+                            namespace.as_deref(),
+                        )? {
                             let params = sym.parameters.len() as u32;
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Function,
@@ -214,14 +208,11 @@ pub fn extract_all_single_pass(
                                 owner.as_deref(),
                             )? {
                                 let params = sym.parameters.len() as u32;
-                                let loc =
-                                    ((node.end_position().row - node.start_position().row) + 1)
-                                        .max(1) as u32;
+                                let loc = ((node.end_position().row - node.start_position().row)
+                                    + 1)
+                                .max(1) as u32;
                                 let name = sym.name.clone();
-                                let qn = sym
-                                    .qualified_name
-                                    .clone()
-                                    .unwrap_or_else(|| name.clone());
+                                let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                                 ctx.symbols.push(sym);
                                 ctx.enter_scope(
                                     ScopeKind::Method,
@@ -258,10 +249,7 @@ pub fn extract_all_single_pass(
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Lambda,
@@ -280,13 +268,14 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "class_declaration" => {
-                        let sym =
-                            plugin.extract_class(node, source, &file_path_str, namespace.as_deref())?;
+                        let sym = plugin.extract_class(
+                            node,
+                            source,
+                            &file_path_str,
+                            namespace.as_deref(),
+                        )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Class,
@@ -306,10 +295,7 @@ pub fn extract_all_single_pass(
                             namespace.as_deref(),
                         )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Interface,
@@ -322,13 +308,14 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "trait_declaration" => {
-                        let sym =
-                            plugin.extract_trait(node, source, &file_path_str, namespace.as_deref())?;
+                        let sym = plugin.extract_trait(
+                            node,
+                            source,
+                            &file_path_str,
+                            namespace.as_deref(),
+                        )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Trait,
@@ -341,13 +328,14 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "enum_declaration" => {
-                        let sym =
-                            plugin.extract_enum(node, source, &file_path_str, namespace.as_deref())?;
+                        let sym = plugin.extract_enum(
+                            node,
+                            source,
+                            &file_path_str,
+                            namespace.as_deref(),
+                        )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Enum,
@@ -400,12 +388,12 @@ pub fn extract_all_single_pass(
                 if ctx.scopes.current_function().is_some() {
                     if PHP_COMPLEXITY_BRANCH_KINDS.contains(&kind) {
                         let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
                         let d = ctx.scopes.depth();
                         ctx.scopes.push(ScopeFrame::new(
                             ScopeKind::GuardBlock,

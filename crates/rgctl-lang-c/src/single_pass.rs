@@ -2,8 +2,8 @@
 
 use crate::depth;
 use crate::plugin::{
-    extract_struct_fields, include_path_from_node, source_location, struct_name,
-    type_definition_typedef_name, CPlugin,
+    CPlugin, extract_struct_fields, include_path_from_node, source_location, struct_name,
+    type_definition_typedef_name,
 };
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
@@ -53,16 +53,11 @@ fn c_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn c_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&c_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&c_grammar(), HANDLED_KINDS))
 }
 
 fn c_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&c_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&c_grammar(), MANIFEST_JSON))
 }
 
 /// Fast `kind_id -> bool` table for kinds that have an action in [`extract_all_single_pass`].
@@ -101,7 +96,6 @@ fn c_active_kinds() -> &'static [bool] {
         table.into_boxed_slice()
     })
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -189,10 +183,7 @@ pub fn extract_all_single_pass(
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             // Prototypes (`declaration`) have no body — no function scope.
                             if kind == "function_definition" {
@@ -217,10 +208,7 @@ pub fn extract_all_single_pass(
                         if struct_name(node, source).is_some() {
                             let sym = plugin.extract_struct(node, source, &file_path_str, None)?;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Struct,
@@ -237,10 +225,7 @@ pub fn extract_all_single_pass(
                         if node.child_by_field_name("name").is_some() {
                             let sym = plugin.extract_enum(node, source, &file_path_str)?;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Enum,
@@ -297,17 +282,11 @@ pub fn extract_all_single_pass(
                     "union_specifier" => {
                         if node.child_by_field_name("name").is_some() {
                             let fields = extract_struct_fields(node, source).unwrap_or_default();
-                            if let Some(sym) = depth::extract_union_specifier(
-                                node,
-                                source,
-                                &file_path_str,
-                                fields,
-                            ) {
+                            if let Some(sym) =
+                                depth::extract_union_specifier(node, source, &file_path_str, fields)
+                            {
                                 let name = sym.name.clone();
-                                let qn = sym
-                                    .qualified_name
-                                    .clone()
-                                    .unwrap_or_else(|| name.clone());
+                                let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                                 ctx.symbols.push(sym);
                                 ctx.enter_scope(
                                     ScopeKind::Struct,
@@ -403,9 +382,7 @@ pub fn extract_all_single_pass(
                     && is_dead_preproc_condition(node, source);
                 let base = stack.len();
                 for child in node.named_children(&mut cursor) {
-                    if dead_preproc
-                        && !matches!(child.kind(), "preproc_else" | "preproc_elif")
-                    {
+                    if dead_preproc && !matches!(child.kind(), "preproc_else" | "preproc_elif") {
                         continue;
                     }
                     let cid = child.kind_id();

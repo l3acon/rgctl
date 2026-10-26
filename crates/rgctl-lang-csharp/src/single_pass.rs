@@ -61,16 +61,11 @@ fn csharp_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn csharp_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&csharp_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&csharp_grammar(), HANDLED_KINDS))
 }
 
 fn csharp_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&csharp_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&csharp_grammar(), MANIFEST_JSON))
 }
 
 struct PendingCall<'a> {
@@ -91,11 +86,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("csharp", csharp_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("csharp", csharp_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = csharp_dispatch();
@@ -158,13 +154,10 @@ pub fn extract_all_single_pass(
                         let sym =
                             plugin.extract_method(node, source, &file_path_str, &extract_ctx)?;
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Method,
@@ -189,13 +182,10 @@ pub fn extract_all_single_pass(
                             &extract_ctx,
                         )?;
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Function,
@@ -230,10 +220,7 @@ pub fn extract_all_single_pass(
                             serde_json::json!({}),
                         )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Class,
@@ -255,10 +242,7 @@ pub fn extract_all_single_pass(
                             serde_json::json!({ "is_record": true }),
                         )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Class,
@@ -280,10 +264,7 @@ pub fn extract_all_single_pass(
                             serde_json::json!({}),
                         )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Interface,
@@ -305,10 +286,7 @@ pub fn extract_all_single_pass(
                             serde_json::json!({}),
                         )?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Enum,

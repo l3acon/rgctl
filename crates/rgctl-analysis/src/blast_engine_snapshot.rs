@@ -138,8 +138,10 @@ pub(crate) fn decompress_words(compressed: &[u8], word_count: usize) -> Result<V
         )));
     }
     Ok(raw
-        .chunks_exact(8)
-        .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|chunk| u64::from_le_bytes(*chunk))
         .collect())
 }
 
@@ -207,10 +209,10 @@ impl ReachabilityCache {
     fn insert(&mut self, key: usize, value: BitSet) {
         if let Some(pos) = self.order.iter().position(|&k| k == key) {
             self.order.remove(pos);
-        } else if self.map.len() >= self.cap {
-            if let Some(evicted) = self.order.pop_front() {
-                self.map.remove(&evicted);
-            }
+        } else if self.map.len() >= self.cap
+            && let Some(evicted) = self.order.pop_front()
+        {
+            self.map.remove(&evicted);
         }
         self.order.push_back(key);
         self.map.insert(key, value);

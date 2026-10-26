@@ -32,3 +32,6 @@ rgctl-gql = { workspace = true }
 rgctl-pipeline = { workspace = true }
 rgctl-graph = { path = "../rgctl-graph" }
 rgctl-registry = { path = "../rgctl-registry" }
+
+[lints.clippy]
+collapsible_if = "allow"

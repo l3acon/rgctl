@@ -8,6 +8,12 @@
 //! Single-pass extractors call [`rgctl_plugin_api::dispatch_lookup_tracked`], which
 //! forwards to a process-wide hit callback installed via [`install_hit_callback`].
 
+#![allow(
+    clippy::expect_used,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc
+)]
+
 use crate::HandlerMask;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};

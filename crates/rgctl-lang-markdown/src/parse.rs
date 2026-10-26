@@ -1,6 +1,6 @@
 //! Two-grammar markdown parse (block `LANGUAGE` + inline `INLINE_LANGUAGE`).
 
-use rgctl_plugin_api::{with_thread_local_parser, Error, Result};
+use rgctl_plugin_api::{Error, Result, with_thread_local_parser};
 use std::collections::HashMap;
 use std::path::Path;
 use tree_sitter::{Language, Node, Range, Tree};
@@ -84,10 +84,8 @@ pub fn parse_markdown(source: &[u8], file_path: &Path) -> Result<ParsedMarkdown>
         }
         ranges.push(range);
 
-        let inline_tree = with_thread_local_parser(
-            "markdown-inline",
-            inline_language.clone(),
-            |parser| {
+        let inline_tree =
+            with_thread_local_parser("markdown-inline", inline_language.clone(), |parser| {
                 parser
                     .set_included_ranges(&ranges)
                     .map_err(|e| Error::PluginError(format!("markdown inline ranges: {e}")))?;
@@ -96,8 +94,7 @@ pub fn parse_markdown(source: &[u8], file_path: &Path) -> Result<ParsedMarkdown>
                     line: node.start_position().row + 1,
                     message: "Failed to parse markdown (inline grammar)".to_string(),
                 })
-            },
-        )?;
+            })?;
         inline_trees.push(inline_tree);
         inline_indices.insert(node.id(), i);
         i += 1;

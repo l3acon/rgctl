@@ -2,7 +2,7 @@
 
 use crate::single_pass::{extract_all_single_pass, php_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, complexity_from_metadata, containing_function, parse_with_pool, PHP_CALL_KINDS, *,
+    PHP_CALL_KINDS, callee_name, complexity_from_metadata, containing_function, parse_with_pool, *,
 };
 use rgctl_plugin_helpers::ComplexityCalculator;
 use std::collections::HashMap;
@@ -67,13 +67,7 @@ impl PhpPlugin {
         let mut symbols = Vec::new();
         let mut namespace = None;
         let file_path_str = file_path.to_string_lossy();
-        self.traverse_symbols(
-            root,
-            source,
-            &file_path_str,
-            &mut namespace,
-            &mut symbols,
-        )?;
+        self.traverse_symbols(root, source, &file_path_str, &mut namespace, &mut symbols)?;
         Ok(symbols)
     }
 
@@ -101,7 +95,13 @@ impl PhpPlugin {
                 {
                     symbols.push(sym);
                 }
-                self.extract_embedded_symbols(node, source, file_path, namespace.as_deref(), symbols)?;
+                self.extract_embedded_symbols(
+                    node,
+                    source,
+                    file_path,
+                    namespace.as_deref(),
+                    symbols,
+                )?;
             }
             "method_declaration" => {
                 if self.find_enclosing_class_name(node, source).is_none() {
@@ -110,7 +110,13 @@ impl PhpPlugin {
                     {
                         symbols.push(sym);
                     }
-                    self.extract_embedded_symbols(node, source, file_path, namespace.as_deref(), symbols)?;
+                    self.extract_embedded_symbols(
+                        node,
+                        source,
+                        file_path,
+                        namespace.as_deref(),
+                        symbols,
+                    )?;
                 }
             }
             "arrow_function" | "anonymous_function" => {
@@ -122,10 +128,21 @@ impl PhpPlugin {
             }
             "class_declaration" => {
                 symbols.push(self.extract_class(node, source, file_path, namespace.as_deref())?);
-                self.traverse_class_members(node, source, file_path, namespace.as_deref(), symbols)?;
+                self.traverse_class_members(
+                    node,
+                    source,
+                    file_path,
+                    namespace.as_deref(),
+                    symbols,
+                )?;
             }
             "interface_declaration" => {
-                symbols.push(self.extract_interface(node, source, file_path, namespace.as_deref())?);
+                symbols.push(self.extract_interface(
+                    node,
+                    source,
+                    file_path,
+                    namespace.as_deref(),
+                )?);
             }
             "trait_declaration" => {
                 symbols.push(self.extract_trait(node, source, file_path, namespace.as_deref())?);
@@ -166,13 +183,9 @@ impl PhpPlugin {
         let mut cursor = body.walk();
         for child in body.children(&mut cursor) {
             if child.kind() == "method_declaration" {
-                if let Some(sym) = self.extract_method(
-                    child,
-                    source,
-                    file_path,
-                    namespace,
-                    Some(qclass.as_str()),
-                )? {
+                if let Some(sym) =
+                    self.extract_method(child, source, file_path, namespace, Some(qclass.as_str()))?
+                {
                     symbols.push(sym);
                 }
                 self.extract_embedded_symbols(child, source, file_path, namespace, symbols)?;
@@ -466,9 +479,8 @@ impl PhpPlugin {
                     if elem.kind() != "const_element" {
                         continue;
                     }
-                    if let Some(name_node) = elem
-                        .children(&mut elem.walk())
-                        .find(|c| c.kind() == "name")
+                    if let Some(name_node) =
+                        elem.children(&mut elem.walk()).find(|c| c.kind() == "name")
                     {
                         if let Ok(name) = name_node.utf8_text(source) {
                             fields.push(Field {
@@ -544,7 +556,9 @@ impl PhpPlugin {
         let mut cursor = params_node.walk();
         for child in params_node.children(&mut cursor) {
             match child.kind() {
-                "simple_parameter" | "property_promotion_parameter" | "optional_parameter"
+                "simple_parameter"
+                | "property_promotion_parameter"
+                | "optional_parameter"
                 | "variadic_parameter" => {
                     let name = child
                         .child_by_field_name("name")
@@ -701,10 +715,7 @@ impl PhpPlugin {
             if elem.kind() != "const_element" {
                 continue;
             }
-            if let Some(name_node) = elem
-                .children(&mut elem.walk())
-                .find(|c| c.kind() == "name")
-            {
+            if let Some(name_node) = elem.children(&mut elem.walk()).find(|c| c.kind() == "name") {
                 let name = name_node.utf8_text(source)?.to_string();
                 out.push((name, vis.clone()));
             }
@@ -770,8 +781,8 @@ impl PhpPlugin {
         file_path: &str,
         symbols: &mut Vec<Symbol>,
     ) -> Result<()> {
-        let prefix = find_child_kind(node, "namespace_name")
-            .and_then(|n| normalize_namespace(n, source));
+        let prefix =
+            find_child_kind(node, "namespace_name").and_then(|n| normalize_namespace(n, source));
         if let Some(body) = node.child_by_field_name("body") {
             if body.kind() == "namespace_use_group" {
                 let mut cursor = body.walk();
@@ -801,7 +812,15 @@ impl PhpPlugin {
         symbols: &mut Vec<Symbol>,
     ) -> Result<()> {
         let owner = enclosing_owner_name(node, symbols);
-        walk_anonymous_classes(self, node, source, file_path, namespace, owner.as_deref(), symbols);
+        walk_anonymous_classes(
+            self,
+            node,
+            source,
+            file_path,
+            namespace,
+            owner.as_deref(),
+            symbols,
+        );
         Ok(())
     }
 }
@@ -867,7 +886,10 @@ impl LanguagePlugin for PhpPlugin {
 
         if let Some(func_node) = find_node_at_line(tree.root_node(), target_line, &kinds) {
             Ok(Some(ComplexityMetrics {
-                cyclomatic: ComplexityCalculator::cyclomatic(func_node, PHP_COMPLEXITY_BRANCH_KINDS),
+                cyclomatic: ComplexityCalculator::cyclomatic(
+                    func_node,
+                    PHP_COMPLEXITY_BRANCH_KINDS,
+                ),
                 cognitive: ComplexityCalculator::cognitive(func_node, PHP_COMPLEXITY_BRANCH_KINDS),
                 loc: ComplexityCalculator::loc(func_node),
                 parameters: symbol.parameters.len(),
@@ -948,10 +970,7 @@ fn type_refs(node: Node, source: &[u8]) -> Vec<String> {
     let mut refs = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if matches!(
-            child.kind(),
-            "name" | "qualified_name" | "relative_name"
-        ) {
+        if matches!(child.kind(), "name" | "qualified_name" | "relative_name") {
             if let Ok(text) = child.utf8_text(source) {
                 refs.push(text.trim_start_matches('\\').to_string());
             }
@@ -962,8 +981,7 @@ fn type_refs(node: Node, source: &[u8]) -> Vec<String> {
 
 fn find_child_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
     let mut cursor = node.walk();
-    node.children(&mut cursor)
-        .find(|c| c.kind() == kind)
+    node.children(&mut cursor).find(|c| c.kind() == kind)
 }
 
 fn source_location(node: Node, file_path: &str) -> SourceLocation {
@@ -1295,11 +1313,9 @@ pub(crate) fn push_php_call_relation(
         .clone()
         .unwrap_or_else(|| from_fn.name.clone());
 
-    let to_qualified_hint = scope_class.as_ref().and_then(|cls| {
-        import_map
-            .get(cls)
-            .map(|fqn| format!("{fqn}.{callee}"))
-    });
+    let to_qualified_hint = scope_class
+        .as_ref()
+        .and_then(|cls| import_map.get(cls).map(|fqn| format!("{fqn}.{callee}")));
 
     let mut meta = serde_json::json!({ "language": "php" });
     if unresolved {
@@ -1379,13 +1395,7 @@ fn php_call_target(node: Node, source: &[u8]) -> Option<(String, bool, Option<St
 
 fn method_name_from_node(name_node: Node, source: &[u8]) -> (String, bool) {
     match name_node.kind() {
-        "name" => (
-            name_node
-                .utf8_text(source)
-                .unwrap_or("")
-                .to_string(),
-            false,
-        ),
+        "name" => (name_node.utf8_text(source).unwrap_or("").to_string(), false),
         "variable_name" | "dynamic_variable_name" => (
             name_node
                 .utf8_text(source)
@@ -1409,7 +1419,6 @@ fn type_text(node: Node, source: &[u8]) -> Option<String> {
         .and_then(|n| n.utf8_text(source).ok())
         .map(|s| s.trim_start_matches('\\').to_string())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1451,12 +1460,7 @@ class UserService {
 
         let ctor = symbols
             .iter()
-            .find(|s| {
-                s.metadata
-                    .get("is_constructor")
-                    .and_then(|v| v.as_bool())
-                    == Some(true)
-            })
+            .find(|s| s.metadata.get("is_constructor").and_then(|v| v.as_bool()) == Some(true))
             .expect("constructor");
         assert_eq!(ctor.name, "__construct");
         assert_eq!(
@@ -1497,15 +1501,19 @@ class User extends BaseUser implements JsonSerializable {
         let symbols = plugin.extract_symbols(path, source).unwrap();
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
 
-        assert!(relations
-            .iter()
-            .any(|r| r.relation_type == RelationType::Extends && r.to == "BaseUser"));
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Extends && r.to == "BaseUser")
+        );
         assert!(relations.iter().any(|r| {
             r.relation_type == RelationType::Implements && r.to == "JsonSerializable"
         }));
-        assert!(relations
-            .iter()
-            .any(|r| r.relation_type == RelationType::Calls));
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Calls)
+        );
     }
 
     #[test]
@@ -1520,12 +1528,16 @@ class C {
         let path = Path::new("C.php");
         let symbols = plugin.extract_symbols(path, source).unwrap();
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
-        assert!(relations.iter().any(|r| {
-            r.relation_type == RelationType::Uses && r.to == "A"
-        }));
-        assert!(relations.iter().any(|r| {
-            r.relation_type == RelationType::Uses && r.to == "B"
-        }));
+        assert!(
+            relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Uses && r.to == "A" })
+        );
+        assert!(
+            relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Uses && r.to == "B" })
+        );
     }
 
     #[test]
@@ -1546,7 +1558,8 @@ use Foo\{Bar, Baz as Q};
             .collect();
         assert_eq!(imports.len(), 4);
         assert!(imports.iter().any(|s| {
-            s.name == "AuthService" && s.qualified_name.as_deref() == Some("App\\Service\\AuthService")
+            s.name == "AuthService"
+                && s.qualified_name.as_deref() == Some("App\\Service\\AuthService")
         }));
         assert!(imports.iter().any(|s| s.name == "Order"));
         assert!(imports.iter().any(|s| s.name == "Bar"));
@@ -1592,15 +1605,16 @@ class C {
         let plugin = PhpPlugin::new().unwrap();
         let path = Path::new("Anon.php");
         let symbols = plugin.extract_symbols(path, source).unwrap();
-        let class = symbols
-            .iter()
-            .find(|s| s.name == "C")
-            .expect("class");
-        assert!(class
-            .metadata
-            .get("attributes")
-            .and_then(|v| v.as_array())
-            .is_some_and(|a| a.iter().any(|v| v.as_str().is_some_and(|s| s.contains("Route")))));
+        let class = symbols.iter().find(|s| s.name == "C").expect("class");
+        assert!(
+            class
+                .metadata
+                .get("attributes")
+                .and_then(|v| v.as_array())
+                .is_some_and(|a| a
+                    .iter()
+                    .any(|v| v.as_str().is_some_and(|s| s.contains("Route"))))
+        );
         assert!(symbols.iter().any(|s| s.name.starts_with("$Anonymous")));
         assert!(symbols.iter().any(|s| s.name == "m"));
     }
@@ -1620,7 +1634,10 @@ function dyn($obj, $method) {
             .iter()
             .find(|r| r.relation_type == RelationType::Calls)
             .expect("call");
-        assert_eq!(call.metadata.get("unresolved").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            call.metadata.get("unresolved").and_then(|v| v.as_bool()),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1631,9 +1648,7 @@ class C {
 }
 "#;
         let plugin = PhpPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("C.php"), source)
-            .unwrap();
+        let symbols = plugin.extract_symbols(Path::new("C.php"), source).unwrap();
         let class = symbols.iter().find(|s| s.name == "C").expect("class");
         assert!(class.fields.iter().any(|f| f.name == "VERSION"));
     }
@@ -1650,9 +1665,11 @@ function f() {
         let path = Path::new("fcc.php");
         let symbols = plugin.extract_symbols(path, source).unwrap();
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
-        assert!(relations.iter().any(|r| {
-            r.relation_type == RelationType::Calls && r.to == "strlen"
-        }));
+        assert!(
+            relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to == "strlen" })
+        );
     }
 
     #[test]

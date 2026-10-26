@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     let plugin =
         QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_solidity::LANGUAGE.into())
@@ -43,7 +44,12 @@ contract C {
         let result = plugin
             .extract_all(Path::new("C.sol"), source)
             .expect("extract_all");
-        assert!(result.symbols.iter().any(|s| s.name == "C" && s.symbol_type == SymbolType::Class));
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "C" && s.symbol_type == SymbolType::Class)
+        );
         let g_sym = result
             .symbols
             .iter()

@@ -287,25 +287,33 @@ ip_test!(chain_backend_depth_five, {
 });
 
 ip_test!(call_graph_edge_call_type_default, {
-    let mut cg = call_graph_from(&sample_backend());
+    let cg = call_graph_from(&sample_backend());
     assert_eq!(cg.call_edge_count(), 1);
-    assert_eq!(cg.edges()[0].call_site, 0);
+    let main_id = cg.id_by_name("main").unwrap();
+    let helper_id = cg.id_by_name("helper").unwrap();
+    let edges = cg.call_edges_between(main_id, helper_id);
+    assert_eq!(edges[0].call_site, 0);
 });
 
 ip_test!(call_graph_node_metadata, {
-    let mut cg = call_graph_from(&sample_backend());
-    let main = cg.nodes().values().find(|n| n.name == "main").unwrap();
-    assert_eq!(main.file_path, "app.rs");
+    let cg = call_graph_from(&sample_backend());
+    let main_id = cg.id_by_name("main").unwrap();
+    let idx = cg.id_to_index[&main_id] as usize;
+    assert_eq!(cg.file_paths[idx], "app.rs");
 });
 
 ip_test!(topological_order_preserves_edge_direction, {
     let (backend, _) = build_sample_backend_with_chain(4);
-    let mut cg = call_graph_from(&backend);
+    let cg = call_graph_from(&backend);
     let order = cg.topological_order().unwrap();
     let pos: std::collections::HashMap<_, _> =
         order.iter().enumerate().map(|(i, id)| (*id, i)).collect();
-    for edge in cg.edges().iter() {
-        assert!(pos[&edge.from] < pos[&edge.to]);
+    for (from_idx, targets) in cg.success_list.iter().enumerate() {
+        let from_id = cg.index_to_id[from_idx];
+        for &to_idx in targets {
+            let to_id = cg.index_to_id[to_idx as usize];
+            assert!(pos[&from_id] < pos[&to_id]);
+        }
     }
 });
 ip_test!(test_multi_argument_index_isolation, {

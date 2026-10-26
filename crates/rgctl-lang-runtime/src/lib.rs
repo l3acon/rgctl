@@ -13,12 +13,12 @@ pub mod tree_sitter_plugin;
 
 pub use config::{LanguageConfig, RegexPatternConfig};
 pub use queries::{
-    capture_role, compile_tags_query, extract_capture_names, validate_tags_captures, CaptureIndex,
-    CaptureRole,
+    CaptureIndex, CaptureRole, capture_role, compile_tags_query, extract_capture_names,
+    validate_tags_captures,
 };
-pub use rgctl_ast_coverage::ALLOWED_TAG_CAPTURES;
 pub use query_plugin::QueryLanguagePlugin;
 pub use regex_plugin::RegexLanguagePlugin;
+pub use rgctl_ast_coverage::ALLOWED_TAG_CAPTURES;
 pub use tree_sitter_plugin::TreeSitterLanguagePlugin;
 
 /// Create a tree-sitter kind-walk plugin from a static config and grammar loader.

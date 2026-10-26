@@ -43,6 +43,7 @@ pub struct PrCheckScopeSummary {
     pub entities: usize,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_pr_check_response(
     deltas: &[PolicyDelta],
     graph_diff: DiffStats,

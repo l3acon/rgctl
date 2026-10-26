@@ -11,7 +11,7 @@
 mod tracker;
 
 pub use tracker::{
-    clear_hit_callback, install_hit_callback, named_kind_ids_in_source, AstCoverageTracker,
+    AstCoverageTracker, clear_hit_callback, install_hit_callback, named_kind_ids_in_source,
 };
 
 use rgctl_plugin_api::{AstHandlerTable, HandlerMask};
@@ -581,11 +581,18 @@ pub fn rerun_if_changed_paths(crates_dir: &Path) -> Vec<PathBuf> {
         .iter()
         .map(|s| crates_dir.join(s.crate_dir).join(s.manifest_file))
         .collect();
-    paths.extend(discover_tags_scm_paths(crates_dir).into_iter().map(|(_, p)| p));
+    paths.extend(
+        discover_tags_scm_paths(crates_dir)
+            .into_iter()
+            .map(|(_, p)| p),
+    );
     paths
 }
 
 /// Format issues as `cargo:warning=` lines (and optional hard failure).
+///
+/// # Errors
+/// Returns `Err` when `strict` is true and `issues` is non-empty.
 pub fn emit_cargo_warnings(issues: &[CoverageIssue], strict: bool) -> Result<(), String> {
     if issues.is_empty() {
         return Ok(());
@@ -620,10 +627,7 @@ mod tests {
         let json = std::fs::read_to_string(&path).expect("java manifest");
         let lang = tree_sitter_java::LANGUAGE.into();
         let issues = check_manifest("java", &json, "tree-sitter-java@", &lang);
-        assert!(
-            issues.is_empty(),
-            "java coverage drift: {issues:?}"
-        );
+        assert!(issues.is_empty(), "java coverage drift: {issues:?}");
     }
 
     #[test]
@@ -713,7 +717,9 @@ mod tests {
     fn tags_scm_rejects_unknown_captures() {
         let issues = check_tags_scm("zig", "(fn) @definition.widget\n(x) @name");
         assert!(
-            issues.iter().any(|i| i.message.contains("definition.widget")),
+            issues
+                .iter()
+                .any(|i| i.message.contains("definition.widget")),
             "{issues:?}"
         );
     }
@@ -740,7 +746,15 @@ mod tests {
         let names = extract_tag_capture_names(scm);
         assert!(names.contains(&"_bi".to_string()), "{names:?}");
         assert!(names.contains(&"import.path".to_string()), "{names:?}");
-        assert!(!names.iter().any(|n| n == "import" || n == "definition.widget"));
-        assert!(check_tags_scm("demo", scm).is_empty(), "{:?}", check_tags_scm("demo", scm));
+        assert!(
+            !names
+                .iter()
+                .any(|n| n == "import" || n == "definition.widget")
+        );
+        assert!(
+            check_tags_scm("demo", scm).is_empty(),
+            "{:?}",
+            check_tags_scm("demo", scm)
+        );
     }
 }

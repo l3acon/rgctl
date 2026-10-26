@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_make::LANGUAGE.into())
         .expect("compile make tags.scm");
@@ -31,7 +32,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_make::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_make::LANGUAGE.into())
+                .expect("compile");
         let source = br###"CC = gcc
 all:
 	$(CC) -o app main.c

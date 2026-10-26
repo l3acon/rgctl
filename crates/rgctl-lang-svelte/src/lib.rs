@@ -9,9 +9,11 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
-    let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_svelte_ng::LANGUAGE.into())
-        .expect("compile svelte tags.scm");
+    let plugin =
+        QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_svelte_ng::LANGUAGE.into())
+            .expect("compile svelte tags.scm");
     registry.register_language_plugin(Arc::new(plugin));
 }
 
@@ -31,7 +33,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_svelte_ng::LANGUAGE.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_svelte_ng::LANGUAGE.into())
+                .expect("compile");
         let source = br###"<script>export let name = "world";</script>
 <h1>Hello {name}</h1>
 "###;
@@ -42,7 +45,8 @@ mod tests {
             result
                 .symbols
                 .iter()
-                .any(|s| s.name == "script" && s.symbol_type == rgctl_plugin_api::SymbolType::Function),
+                .any(|s| s.name == "script"
+                    && s.symbol_type == rgctl_plugin_api::SymbolType::Function),
             "expected Function symbol 'script', got {:?}",
             result.symbols
         );

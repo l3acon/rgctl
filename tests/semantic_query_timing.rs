@@ -25,9 +25,7 @@ fn timing_queries_path() -> PathBuf {
 fn rgctl_bin() -> PathBuf {
     option_env!("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl")
-        })
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl"))
 }
 
 fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -293,14 +291,14 @@ fn linux_vocab_multi_query_timing() {
 
     let reload = rgctl_analysis::OnnxReloadOptions::default();
     // Warm embedder + first scan.
-    let _ = rgctl_analysis::query_index_with_embedder(&index, "warmup", 5, &reload)
-        .expect("warmup");
+    let _ =
+        rgctl_analysis::query_index_with_embedder(&index, "warmup", 5, &reload).expect("warmup");
 
     let mut timings = Vec::new();
     for (id, text) in queries {
         let started = Instant::now();
-        let hits = rgctl_analysis::query_index_with_embedder(&index, text, 10, &reload)
-            .expect("query");
+        let hits =
+            rgctl_analysis::query_index_with_embedder(&index, text, 10, &reload).expect("query");
         let wall = started.elapsed();
         timings.push(QueryTiming {
             id: id.to_string(),

@@ -28,10 +28,7 @@ pub fn rgctl() -> PathBuf {
             return p;
         }
     }
-    if let Ok(out) = Command::new("sh")
-        .args(["-c", "command -v rgctl"])
-        .output()
-    {
+    if let Ok(out) = Command::new("sh").args(["-c", "command -v rgctl"]).output() {
         let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if out.status.success() && !p.is_empty() && Path::new(&p).is_file() {
             return PathBuf::from(p);

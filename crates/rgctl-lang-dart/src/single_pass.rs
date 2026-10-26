@@ -356,12 +356,8 @@ pub fn extract_all_single_pass(
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "for_statement"
-                        | "while_statement"
-                        | "do_statement"
-                        | "switch_statement"
-                        | "try_statement" => {
+                        "if_statement" | "for_statement" | "while_statement" | "do_statement"
+                        | "switch_statement" | "try_statement" => {
                             let delta = 1 + ctx
                                 .scopes
                                 .current_function()

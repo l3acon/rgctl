@@ -1,8 +1,6 @@
 //! Cross-repo `park-and-resolve` merge (`rgctl merge`).
 
-use crate::parked_relations::{
-    PARKED_RELATIONS_FILE, ParkedRelationRecord, load_parked_relations,
-};
+use crate::parked_relations::{PARKED_RELATIONS_FILE, ParkedRelationRecord, load_parked_relations};
 use rgctl_error::{Error, Result};
 use rgctl_graph::backend::MemoryBackend;
 use rgctl_graph::paths::{ARTIFACT_DIR_NAME, artifact_dir};
@@ -95,7 +93,14 @@ pub fn normalize_module_path_segments(raw: &str) -> Vec<String> {
             break;
         }
     }
-    for suffix in ["/index", "/mod", "/__init__", "\\index", "\\mod", "\\__init__"] {
+    for suffix in [
+        "/index",
+        "/mod",
+        "/__init__",
+        "\\index",
+        "\\mod",
+        "\\__init__",
+    ] {
         if let Some(stripped) = s.strip_suffix(suffix) {
             s = stripped.to_string();
             break;
@@ -199,14 +204,13 @@ fn resolve_repo_rgctl_dir(path: &Path) -> Result<PathBuf> {
 
 fn repo_display_name(path: &Path, rgctl_dir: &Path) -> String {
     // Prefer the repository root name (parent of `.rgctl`).
-    if rgctl_dir.ends_with(ARTIFACT_DIR_NAME) {
-        if let Some(name) = rgctl_dir
+    if rgctl_dir.ends_with(ARTIFACT_DIR_NAME)
+        && let Some(name) = rgctl_dir
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|s| s.to_str())
-        {
-            return name.to_string();
-        }
+    {
+        return name.to_string();
     }
     path.file_name()
         .and_then(|s| s.to_str())
@@ -235,10 +239,10 @@ fn namespace_node(mut node: Node, repo_name: &str) -> (Uuid, Node) {
     }
     if node.file_path.is_some() {
         node.id = deterministic_node_id(
-            node.file_path.as_deref().map(|s| s.as_ref()),
+            node.file_path.as_deref(),
             node.name.as_ref(),
             node.node_type,
-            node.qualified_name.as_deref().map(|s| s.as_ref()),
+            node.qualified_name.as_deref(),
         );
     }
     (old_id, node)
@@ -287,37 +291,37 @@ impl CrossRepoExportIndex {
                     .push((repo_idx, node.id));
             }
 
-            index.by_name.entry(simple).or_default().push(ExportCandidate {
-                repo_idx,
-                node_id: node.id,
-                node_type: node.node_type,
-                qualified_name: qn,
-                file_path,
-                norm_segments,
-            });
+            index
+                .by_name
+                .entry(simple)
+                .or_default()
+                .push(ExportCandidate {
+                    repo_idx,
+                    node_id: node.id,
+                    node_type: node.node_type,
+                    qualified_name: qn,
+                    file_path,
+                    norm_segments,
+                });
         }
         index
     }
 
-    fn resolve_parked(
-        &self,
-        rec: &ParkedRelationRecord,
-        src_repo: usize,
-    ) -> ResolveOutcome {
+    fn resolve_parked(&self, rec: &ParkedRelationRecord, src_repo: usize) -> ResolveOutcome {
         // Tier 1 — exact cross-repo qualified hint.
-        if let Some(hint) = rec.to_qualified_hint.as_deref() {
-            if let Some(cands) = self.by_qualified.get(hint) {
-                let cross: Vec<_> = cands
-                    .iter()
-                    .copied()
-                    .filter(|(ri, _)| *ri != src_repo)
-                    .collect();
-                if cross.len() == 1 {
-                    return ResolveOutcome::Resolved(cross[0].1);
-                }
-                if cross.len() > 1 {
-                    return ResolveOutcome::Ambiguous;
-                }
+        if let Some(hint) = rec.to_qualified_hint.as_deref()
+            && let Some(cands) = self.by_qualified.get(hint)
+        {
+            let cross: Vec<_> = cands
+                .iter()
+                .copied()
+                .filter(|(ri, _)| *ri != src_repo)
+                .collect();
+            if cross.len() == 1 {
+                return ResolveOutcome::Resolved(cross[0].1);
+            }
+            if cross.len() > 1 {
+                return ResolveOutcome::Ambiguous;
             }
         }
 
@@ -326,75 +330,75 @@ impl CrossRepoExportIndex {
         // Tier 2 — module-path trailing suffix disambiguation.
         if let Some(hint) = rec.import_module_hint.as_deref() {
             let hint_segs = normalize_module_path_segments(hint);
-            if !hint_segs.is_empty() {
-                if let Some(cands) = self.by_name.get(&simple) {
-                    let mut best_score = 0usize;
-                    let mut best: Vec<Uuid> = Vec::new();
-                    for cand in cands.iter().filter(|c| c.repo_idx != src_repo) {
-                        let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
-                        if score < 1 {
-                            continue;
-                        }
-                        if score > best_score {
-                            best_score = score;
-                            best.clear();
-                            best.push(cand.node_id);
-                        } else if score == best_score {
-                            best.push(cand.node_id);
-                        }
+            if !hint_segs.is_empty()
+                && let Some(cands) = self.by_name.get(&simple)
+            {
+                let mut best_score = 0usize;
+                let mut best: Vec<Uuid> = Vec::new();
+                for cand in cands.iter().filter(|c| c.repo_idx != src_repo) {
+                    let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
+                    if score < 1 {
+                        continue;
                     }
-                    best.sort();
-                    best.dedup();
-                    if best.len() == 1 {
-                        return ResolveOutcome::Resolved(best[0]);
+                    if score > best_score {
+                        best_score = score;
+                        best.clear();
+                        best.push(cand.node_id);
+                    } else if score == best_score {
+                        best.push(cand.node_id);
                     }
-                    if best.len() > 1 {
-                        return ResolveOutcome::Ambiguous;
-                    }
+                }
+                best.sort();
+                best.dedup();
+                if best.len() == 1 {
+                    return ResolveOutcome::Resolved(best[0]);
+                }
+                if best.len() > 1 {
+                    return ResolveOutcome::Ambiguous;
                 }
             }
         }
 
         // Tier 3 — type hint + member match.
-        if let Some(type_hint) = rec.to_type_hint.as_deref() {
-            if let Some(cands) = self.by_name.get(&simple) {
-                let mut matches: Vec<&ExportCandidate> = cands
-                    .iter()
-                    .filter(|c| c.repo_idx != src_repo)
-                    .filter(|c| {
-                        let q = &c.qualified_name;
-                        q.contains(&format!("{type_hint}::{simple}"))
-                            || q.contains(&format!("{type_hint}.{simple}"))
-                            || q.eq_ignore_ascii_case(&format!("{type_hint}.{simple}"))
-                            || (c.name_matches_owner(type_hint) && c.name_is(&simple))
-                    })
-                    .collect();
-                if let Some(hint) = rec.import_module_hint.as_deref() {
-                    let hint_segs = normalize_module_path_segments(hint);
-                    if matches.len() > 1 && !hint_segs.is_empty() {
-                        let mut best_score = 0usize;
-                        let mut filtered = Vec::new();
-                        for cand in &matches {
-                            let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
-                            if score > best_score {
-                                best_score = score;
-                                filtered.clear();
-                                filtered.push(*cand);
-                            } else if score == best_score && score >= 1 {
-                                filtered.push(*cand);
-                            }
-                        }
-                        if best_score >= 1 {
-                            matches = filtered;
+        if let Some(type_hint) = rec.to_type_hint.as_deref()
+            && let Some(cands) = self.by_name.get(&simple)
+        {
+            let mut matches: Vec<&ExportCandidate> = cands
+                .iter()
+                .filter(|c| c.repo_idx != src_repo)
+                .filter(|c| {
+                    let q = &c.qualified_name;
+                    q.contains(&format!("{type_hint}::{simple}"))
+                        || q.contains(&format!("{type_hint}.{simple}"))
+                        || q.eq_ignore_ascii_case(&format!("{type_hint}.{simple}"))
+                        || (c.name_matches_owner(type_hint) && c.name_is(&simple))
+                })
+                .collect();
+            if let Some(hint) = rec.import_module_hint.as_deref() {
+                let hint_segs = normalize_module_path_segments(hint);
+                if matches.len() > 1 && !hint_segs.is_empty() {
+                    let mut best_score = 0usize;
+                    let mut filtered = Vec::new();
+                    for cand in &matches {
+                        let score = trailing_suffix_overlap(&hint_segs, &cand.norm_segments);
+                        if score > best_score {
+                            best_score = score;
+                            filtered.clear();
+                            filtered.push(*cand);
+                        } else if score == best_score && score >= 1 {
+                            filtered.push(*cand);
                         }
                     }
+                    if best_score >= 1 {
+                        matches = filtered;
+                    }
                 }
-                if matches.len() == 1 {
-                    return ResolveOutcome::Resolved(matches[0].node_id);
-                }
-                if matches.len() > 1 {
-                    return ResolveOutcome::Ambiguous;
-                }
+            }
+            if matches.len() == 1 {
+                return ResolveOutcome::Resolved(matches[0].node_id);
+            }
+            if matches.len() > 1 {
+                return ResolveOutcome::Ambiguous;
             }
         }
 
@@ -628,7 +632,8 @@ pub fn merge_repositories(repos: &[PathBuf], out: &Path) -> Result<MergeReport> 
 
     if !stubs_to_prune.is_empty() {
         merged_nodes.retain(|n| !stubs_to_prune.contains(&n.id));
-        merged_edges.retain(|e| !stubs_to_prune.contains(&e.from) && !stubs_to_prune.contains(&e.to));
+        merged_edges
+            .retain(|e| !stubs_to_prune.contains(&e.from) && !stubs_to_prune.contains(&e.to));
         let remaining_stubs = merged_nodes.iter().any(is_external_stub);
         if !remaining_stubs {
             merged_nodes.retain(|n| {
@@ -724,8 +729,7 @@ mod tests {
 
         // --- billing ---
         let mut billing_be = MemoryBackend::new();
-        let billing_file =
-            Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
+        let billing_file = Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
         let billing_us = Node::new(NodeType::Class, "UserService")
             .with_file_path("src/user.ts")
             .with_qualified_name("UserService");
@@ -738,16 +742,12 @@ mod tests {
         billing_be
             .insert_nodes_batch(vec![billing_file, billing_us, billing_charge, billing_fmt])
             .unwrap();
-        write_columnar_from_backend(
-            &billing_be,
-            &billing.join(".rgctl").join(SNAPSHOT_FILE),
-        )
-        .unwrap();
+        write_columnar_from_backend(&billing_be, &billing.join(".rgctl").join(SNAPSHOT_FILE))
+            .unwrap();
 
         // --- auth ---
         let mut auth_be = MemoryBackend::new();
-        let auth_file =
-            Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
+        let auth_file = Node::new(NodeType::File, "src/user.ts").with_file_path("src/user.ts");
         let auth_us = Node::new(NodeType::Class, "UserService")
             .with_file_path("src/user.ts")
             .with_qualified_name("UserService");
@@ -773,8 +773,7 @@ mod tests {
             .with_file_path("<external>")
             .with_qualified_name("UserService")
             .with_property("is_external_stub".into(), "true".into());
-        let external_file =
-            Node::new(NodeType::File, "<external>").with_file_path("<external>");
+        let external_file = Node::new(NodeType::File, "<external>").with_file_path("<external>");
         let from_id_orig = checkout.id;
         let stub_id = stub.id;
         let ext_file_id = external_file.id;
@@ -830,16 +829,16 @@ mod tests {
                 stub_node_id: None,
             },
         ];
-        save_parked_relations(
-            &gateway.join(".rgctl").join(PARKED_RELATIONS_FILE),
-            &parked,
-        )
-        .unwrap();
+        save_parked_relations(&gateway.join(".rgctl").join(PARKED_RELATIONS_FILE), &parked)
+            .unwrap();
 
         let out = tmp.path().join("merged");
         let report = merge_repositories(&[gateway, billing, auth], &out).unwrap();
         assert_eq!(report.repos_merged, 3);
-        assert_eq!(report.ambiguous_skipped, 1, "formatCurrency must be skipped");
+        assert_eq!(
+            report.ambiguous_skipped, 1,
+            "formatCurrency must be skipped"
+        );
         assert!(
             report.cross_repo_edges_resolved >= 1,
             "expected Tier-2 UserService/charge resolve, got {report:?}"
@@ -909,7 +908,10 @@ mod tests {
             "expected exactly 1 deduplicated edge checkout→billing UserService; got {matching_edges:?}"
         );
         assert_eq!(
-            matching_edges[0].properties.get("cross_repo").map(String::as_str),
+            matching_edges[0]
+                .properties
+                .get("cross_repo")
+                .map(String::as_str),
             Some("true"),
             "expected cross_repo=true property on merged edge"
         );
@@ -919,14 +921,14 @@ mod tests {
             .iter()
             .find(|n| {
                 n.name.as_str() == "UserService"
-                    && n.file_path.as_deref().is_some_and(|p| p.starts_with("auth/"))
+                    && n.file_path
+                        .as_deref()
+                        .is_some_and(|p| p.starts_with("auth/"))
             })
             .map(|n| n.id);
         if let Some(auth_id) = auth_us_id {
             assert!(
-                !edges
-                    .iter()
-                    .any(|e| e.from == from_id && e.to == auth_id),
+                !edges.iter().any(|e| e.from == from_id && e.to == auth_id),
                 "must not resolve to auth UserService"
             );
         }
@@ -1004,12 +1006,8 @@ mod tests {
             a_fid,
         );
         let (a_nodes, a_edges) = auth_gb.into_graph();
-        write_columnar_from_nodes_edges(
-            a_nodes,
-            a_edges,
-            &auth.join(".rgctl").join(SNAPSHOT_FILE),
-        )
-        .unwrap();
+        write_columnar_from_nodes_edges(a_nodes, a_edges, &auth.join(".rgctl").join(SNAPSHOT_FILE))
+            .unwrap();
 
         // 3. Build `gateway` via GraphBuilder with a real Java-style `import com.acme.billing.UserService;`
         //    and an unresolved `Injects` relation (`CheckoutController -> UserService`).
@@ -1080,11 +1078,8 @@ mod tests {
             &gateway.join(".rgctl").join(SNAPSHOT_FILE),
         )
         .unwrap();
-        save_parked_relations(
-            &gateway.join(".rgctl").join(PARKED_RELATIONS_FILE),
-            &parked,
-        )
-        .unwrap();
+        save_parked_relations(&gateway.join(".rgctl").join(PARKED_RELATIONS_FILE), &parked)
+            .unwrap();
 
         let out = tmp.path().join("merged-java");
         let report = merge_repositories(&[gateway, billing, auth], &out).unwrap();

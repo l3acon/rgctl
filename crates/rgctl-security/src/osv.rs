@@ -84,11 +84,7 @@ pub fn triage_from_vulnerability(doc: Vulnerability) -> OsvTriage {
         let (affected_methods, affected_classes) =
             extract_ecosystem_specific(aff.ecosystem_specific.as_ref());
         let (ecosystem, name, purl) = match aff.package {
-            Some(pkg) => (
-                ecosystem_label(&pkg.ecosystem),
-                pkg.name,
-                pkg.purl,
-            ),
+            Some(pkg) => (ecosystem_label(&pkg.ecosystem), pkg.name, pkg.purl),
             None => ("unknown".into(), String::new(), None),
         };
         packages.push(OsvPackageTriage {
@@ -173,8 +169,9 @@ mod tests {
         assert!(t.versions_array_not_authoritative);
         let pkg = &t.packages[0];
         assert_eq!(pkg.fixed.as_deref(), Some("2.7.2.Final-rhlw-00004"));
-        assert!(pkg
-            .listed_versions
-            .contains(&"2.7.2.Final-rhlw-00004".into()));
+        assert!(
+            pkg.listed_versions
+                .contains(&"2.7.2.Final-rhlw-00004".into())
+        );
     }
 }

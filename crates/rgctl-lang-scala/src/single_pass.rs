@@ -300,12 +300,7 @@ pub fn extract_all_single_pass(
                             let full = node
                                 .utf8_text(source)
                                 .ok()
-                                .map(|s| {
-                                    s.trim()
-                                        .trim_start_matches("import")
-                                        .trim()
-                                        .to_string()
-                                })
+                                .map(|s| s.trim().trim_start_matches("import").trim().to_string())
                                 .unwrap_or(name);
                             ctx.symbols.push(Symbol {
                                 name: full.clone(),

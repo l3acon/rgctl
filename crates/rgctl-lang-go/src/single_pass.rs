@@ -49,18 +49,12 @@ fn go_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn go_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&go_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&go_grammar(), HANDLED_KINDS))
 }
 
 fn go_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&go_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&go_grammar(), MANIFEST_JSON))
 }
-
 
 /// Pending call site: flush after the full symbol list exists (forward refs).
 struct PendingCall<'a> {
@@ -216,13 +210,10 @@ pub fn extract_all_single_pass(
                             func.metadata["type_params"] = serde_json::Value::String(tp);
                         }
                         let params = func.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = func.name.clone();
-                        let qn = func
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = func.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(func);
                         ctx.enter_scope(
                             ScopeKind::Function,
@@ -289,14 +280,10 @@ pub fn extract_all_single_pass(
                                 .unwrap_or(0);
                             ctx.scopes.note_branch(delta);
                         }
-                        "expression_case"
-                        | "type_case"
-                        | "default_case"
-                        | "communication_case" => {
+                        "expression_case" | "type_case" | "default_case" | "communication_case" => {
                             // Cyclomatic only (calculate_cognitive does not count cases).
                             if let Some(f) = ctx.scopes.current_function_mut() {
-                                f.complexity.cyclomatic =
-                                    f.complexity.cyclomatic.saturating_add(1);
+                                f.complexity.cyclomatic = f.complexity.cyclomatic.saturating_add(1);
                             }
                         }
                         "return_statement" => {

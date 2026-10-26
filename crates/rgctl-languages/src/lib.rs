@@ -65,6 +65,19 @@ pub fn register_languages(registry: &mut LanguageRegistry) {
     rgctl_lang_make::register(registry);
     rgctl_lang_starlark::register(registry);
     rgctl_lang_powershell::register(registry);
+    // Legacy / mainframe / enterprise migration
+    rgctl_lang_cobol::register(registry);
+    rgctl_lang_pli::register(registry);
+    rgctl_lang_jcl::register(registry);
+    rgctl_lang_apex::register(registry);
+    rgctl_lang_pascal::register(registry);
+    rgctl_lang_perl::register(registry);
+    rgctl_lang_ada::register(registry);
+    // Register matlab before objc so path-only `.m` defaults stay objc when
+    // content sniff is unavailable; extract paths use sniff_objc_vs_matlab.
+    rgctl_lang_matlab::register(registry);
+    // Re-register objc last so extension_map["m"] defaults to objc.
+    rgctl_lang_objc::register(registry);
 }
 
 /// Default registry with config formats and all built-in languages.
@@ -152,7 +165,11 @@ mod tests {
         assert_eq!(plugin.language_id(), "kotlin");
         // Manifest basename wins over `.kts` language extension
         assert!(registry.is_manifest_file(Path::new("build.gradle.kts")));
-        assert!(registry.get_plugin_for_file(Path::new("build.gradle.kts")).is_err());
+        assert!(
+            registry
+                .get_plugin_for_file(Path::new("build.gradle.kts"))
+                .is_err()
+        );
     }
 
     #[test]
@@ -164,7 +181,11 @@ mod tests {
             .expect("groovy plugin");
         assert_eq!(plugin.language_id(), "groovy");
         assert!(registry.is_manifest_file(Path::new("build.gradle")));
-        assert!(registry.get_plugin_for_file(Path::new("build.gradle")).is_err());
+        assert!(
+            registry
+                .get_plugin_for_file(Path::new("build.gradle"))
+                .is_err()
+        );
     }
 
     #[test]
@@ -182,6 +203,14 @@ mod tests {
             ("math.f90", "fortran"),
             ("adder.v", "verilog"),
             ("Foo.m", "objc"),
+            ("solver.matlab", "matlab"),
+            ("App.cls", "apex"),
+            ("unit1.pas", "pascal"),
+            ("script.pl", "perl"),
+            ("main.adb", "ada"),
+            ("CUSTBILL.cbl", "cobol"),
+            ("billing.pli", "pli"),
+            ("nightly.jcl", "jcl"),
             ("math.clj", "clojure"),
             ("math.ml", "ocaml"),
             ("math.el", "elisp"),
@@ -215,6 +244,25 @@ mod tests {
                 .unwrap_or_else(|_| panic!("{id} plugin for {path}"));
             assert_eq!(plugin.language_id(), id);
         }
+    }
+
+    #[test]
+    fn m_extension_disambiguates_matlab_vs_objc_by_content() {
+        let registry = default_registry();
+        let matlab = registry
+            .get_plugin_for_file_with_source(
+                Path::new("filt.m"),
+                b"function [y] = filt(x)\ny = x;\nend\n",
+            )
+            .expect("matlab");
+        assert_eq!(matlab.language_id(), "matlab");
+        let objc = registry
+            .get_plugin_for_file_with_source(
+                Path::new("Foo.m"),
+                b"#import <Foundation/Foundation.h>\n@interface Foo\n@end\n",
+            )
+            .expect("objc");
+        assert_eq!(objc.language_id(), "objc");
     }
 
     #[test]
@@ -280,13 +328,15 @@ mod tests {
                 ));
                 continue;
             };
-            let manifest_path = crates_dir
-                .join(spec.crate_dir)
-                .join(spec.manifest_file);
+            let manifest_path = crates_dir.join(spec.crate_dir).join(spec.manifest_file);
             let manifest_json = match std::fs::read_to_string(&manifest_path) {
                 Ok(s) => s,
                 Err(e) => {
-                    failures.push(format!("{}: read {}: {e}", spec.id, manifest_path.display()));
+                    failures.push(format!(
+                        "{}: read {}: {e}",
+                        spec.id,
+                        manifest_path.display()
+                    ));
                     continue;
                 }
             };

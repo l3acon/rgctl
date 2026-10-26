@@ -36,14 +36,16 @@ fn init_git(dir: &Path) {
         ["config", "user.email", "t@e.com"],
         ["config", "user.name", "t"],
     ] {
-        assert!(Command::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            Command::new("git")
+                .args(args)
+                .current_dir(dir)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .status()
+                .unwrap()
+                .success()
+        );
     }
 }
 
@@ -55,14 +57,16 @@ fn commit_all(dir: &Path, msg: &str) {
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .status()
         .unwrap();
-    assert!(Command::new("git")
-        .args(["-c", "commit.gpgsign=false", "commit", "-m", msg])
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .status()
-        .unwrap()
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["-c", "commit.gpgsign=false", "commit", "-m", msg])
+            .current_dir(dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .status()
+            .unwrap()
+            .success()
+    );
 }
 
 #[test]
@@ -184,7 +188,11 @@ fn review_export_contract() {
     let repo = tmp.path();
     init_git(repo);
     fs::create_dir_all(repo.join("src")).unwrap();
-    fs::write(repo.join("src/lib.rs"), "pub fn a() { b(); }\npub fn b() {}\n").unwrap();
+    fs::write(
+        repo.join("src/lib.rs"),
+        "pub fn a() { b(); }\npub fn b() {}\n",
+    )
+    .unwrap();
     commit_all(repo, "base");
     fs::write(
         repo.join("src/lib.rs"),

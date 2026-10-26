@@ -2,7 +2,7 @@
 
 use rgctl_graph::schema::{Edge, EdgeType, Node, NodeType};
 use rgctl_graph::{
-    assert_graph_invariants, write_columnar_from_nodes_edges, SnapshotNodeStore, SNAPSHOT_FILE,
+    SNAPSHOT_FILE, SnapshotNodeStore, assert_graph_invariants, write_columnar_from_nodes_edges,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -83,7 +83,12 @@ fn open_col(repo: &Path) -> SnapshotNodeStore {
     SnapshotNodeStore::open(&repo.join(".rgctl").join(SNAPSHOT_FILE)).unwrap()
 }
 
-fn in_repo_topology(store: &SnapshotNodeStore) -> (BTreeSet<(String, String)>, BTreeSet<(String, String, String)>) {
+fn in_repo_topology(
+    store: &SnapshotNodeStore,
+) -> (
+    BTreeSet<(String, String)>,
+    BTreeSet<(String, String, String)>,
+) {
     let col = store.mmap().columnar().unwrap();
     let mut nodes = BTreeSet::new();
     let mut id_to_key = std::collections::HashMap::new();
@@ -92,18 +97,19 @@ fn in_repo_topology(store: &SnapshotNodeStore) -> (BTreeSet<(String, String)>, B
         if n.file_path.as_deref() == Some("<external>") {
             continue;
         }
-        let key = (
-            n.name.to_string(),
-            format!("{:?}", n.node_type),
-        );
+        let key = (n.name.to_string(), format!("{:?}", n.node_type));
         id_to_key.insert(n.id, key.clone());
         nodes.insert(key);
     }
     let mut edges = BTreeSet::new();
     for idx in 0..col.edge_count() {
         let (from, to, et) = col.edge_at(idx).unwrap();
-        let Some(fk) = id_to_key.get(&from) else { continue };
-        let Some(tk) = id_to_key.get(&to) else { continue };
+        let Some(fk) = id_to_key.get(&from) else {
+            continue;
+        };
+        let Some(tk) = id_to_key.get(&to) else {
+            continue;
+        };
         edges.insert((fk.0.clone(), tk.0.clone(), format!("{et:?}")));
     }
     (nodes, edges)
@@ -245,13 +251,11 @@ fn eq2_delta_synth_matches_full_snapshots() {
         ],
     );
     assert_eq!(
-        full["change_summary"]["call_edges"],
-        delta["change_summary"]["call_edges"],
+        full["change_summary"]["call_edges"], delta["change_summary"]["call_edges"],
         "EQ-2 call_edges summary"
     );
     assert_eq!(
-        full["change_summary"]["changed_symbols"],
-        delta["change_summary"]["changed_symbols"],
+        full["change_summary"]["changed_symbols"], delta["change_summary"]["changed_symbols"],
         "EQ-2 changed_symbols"
     );
 }
@@ -291,8 +295,7 @@ fn eq3_worktree_matches_committed_head() {
         ],
     );
     assert_eq!(
-        committed["change_summary"]["call_edges"],
-        worktree["change_summary"]["call_edges"],
+        committed["change_summary"]["call_edges"], worktree["change_summary"]["call_edges"],
         "EQ-3 call_edges"
     );
 }
@@ -337,8 +340,11 @@ fn e2e_session_lifecycle_preserves_artifacts() {
     let repo = tmp.path();
     init_git_repo(repo);
     fs::create_dir_all(repo.join("src")).unwrap();
-    fs::write(repo.join("src/lib.rs"), "pub fn root() { mid(); }\npub fn mid() {}\n")
-        .unwrap();
+    fs::write(
+        repo.join("src/lib.rs"),
+        "pub fn root() { mid(); }\npub fn mid() {}\n",
+    )
+    .unwrap();
     git_commit_all(repo, "init");
     fs::write(
         repo.join("src/lib.rs"),
@@ -349,7 +355,16 @@ fn e2e_session_lifecycle_preserves_artifacts() {
 
     let _ = run_json(
         repo,
-        &["-f", "json", "discover", ".", "-l", "rust", "--with-cfg", "--with-harmonic"],
+        &[
+            "-f",
+            "json",
+            "discover",
+            ".",
+            "-l",
+            "rust",
+            "--with-cfg",
+            "--with-harmonic",
+        ],
     );
     let snap = repo.join(".rgctl/graph.snapshot.bin");
     let hashes = repo.join(".rgctl/file_hashes.json");
@@ -395,7 +410,15 @@ fn e2e_session_lifecycle_preserves_artifacts() {
         .output();
     let _ = Command::new(rgctl_bin())
         .current_dir(repo)
-        .args(["-f", "json", "security", "deps", "check", "--osv", "/dev/null"])
+        .args([
+            "-f",
+            "json",
+            "security",
+            "deps",
+            "check",
+            "--osv",
+            "/dev/null",
+        ])
         .output();
     let _ = Command::new(rgctl_bin())
         .current_dir(repo)
@@ -405,7 +428,11 @@ fn e2e_session_lifecycle_preserves_artifacts() {
     assert_eq!(blake3_file(&snap), d_snap, "snapshot digest changed");
     assert_eq!(blake3_file(&hashes), d_hashes, "file_hashes digest changed");
     if analysis.is_file() {
-        assert_eq!(blake3_file(&analysis), d_analysis, "analysis_results changed");
+        assert_eq!(
+            blake3_file(&analysis),
+            d_analysis,
+            "analysis_results changed"
+        );
     }
     if cfg.is_file() {
         assert_eq!(blake3_file(&cfg), d_cfg, "cfg_pdg changed");

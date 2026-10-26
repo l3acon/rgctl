@@ -21,7 +21,13 @@ pub fn line_col_at(source: &str, byte_offset: usize) -> (usize, usize) {
     (line, col)
 }
 
-pub fn loc(file: &str, start_line: usize, end_line: usize, start_col: usize, end_col: usize) -> SourceLocation {
+pub fn loc(
+    file: &str,
+    start_line: usize,
+    end_line: usize,
+    start_col: usize,
+    end_col: usize,
+) -> SourceLocation {
     SourceLocation {
         file: file.to_string(),
         start_line: start_line.max(1),

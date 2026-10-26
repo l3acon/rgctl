@@ -78,10 +78,7 @@ impl FixtureRepo {
 
     fn run(&self, args: &[&str]) -> Output {
         let mut cmd = Command::new(rgctl_bin());
-        cmd.current_dir(&self.path)
-            
-            .arg("-r")
-            .arg(&self.path);
+        cmd.current_dir(&self.path).arg("-r").arg(&self.path);
         cmd.args(args);
         cmd.output().expect("spawn rgctl")
     }
@@ -207,7 +204,8 @@ fn cli_vhs_tape_markdown_workflow() {
     let repo = FixtureRepo::new();
     repo.discover_json("markdown,java");
 
-    let q1 = "MATCH (n:Module) WHERE n.kind = 'heading' AND n.name LIKE 'Checkout*' RETURN n LIMIT 5";
+    let q1 =
+        "MATCH (n:Module) WHERE n.kind = 'heading' AND n.name LIKE 'Checkout*' RETURN n LIMIT 5";
     assert_eq!(
         repo.gql_count_jq(q1, ".count"),
         1,

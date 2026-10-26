@@ -174,5 +174,9 @@ fn bench_single_pass_vs_multi_pass(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_parallel_parsing, bench_single_pass_vs_multi_pass);
+criterion_group!(
+    benches,
+    bench_parallel_parsing,
+    bench_single_pass_vs_multi_pass
+);
 criterion_main!(benches);

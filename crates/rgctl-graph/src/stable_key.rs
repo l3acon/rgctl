@@ -4,7 +4,7 @@ use crate::columnar_snapshot::{ColumnarGraphMmap, optional_string_at, string_at}
 use crate::normalize_path_str;
 use crate::schema::NodeType;
 use rgctl_error::Result;
-use uuid::{uuid, Uuid};
+use uuid::{Uuid, uuid};
 
 /// UUID v5 namespace for deterministic graph node IDs (`rgctl:stable-node-key`).
 pub const NAMESPACE_RGCTL: Uuid = uuid!("f47ac10b-58cc-4372-a567-0e02b2c3d479");
@@ -76,9 +76,12 @@ pub fn deterministic_node_id(
     qualified_name: Option<&str>,
 ) -> Uuid {
     match file_path {
-        Some(path) => {
-            stable_key_to_uuid(stable_key_from_facets(Some(path), name, node_type, qualified_name))
-        }
+        Some(path) => stable_key_to_uuid(stable_key_from_facets(
+            Some(path),
+            name,
+            node_type,
+            qualified_name,
+        )),
         None => Uuid::new_v4(),
     }
 }
@@ -109,16 +112,18 @@ pub fn stable_key_from_facets(
         hasher.update(b"");
     }
     let hash = hasher.finalize();
-    StableNodeKey(u64::from_le_bytes(hash.as_bytes()[..8].try_into().expect("8 bytes")))
+    StableNodeKey(u64::from_le_bytes(
+        hash.as_bytes()[..8].try_into().expect("8 bytes"),
+    ))
 }
 
 /// Stable key facets from a materialized [`Node`] (same contract as [`stable_key_from_row`]).
 pub fn stable_key_from_node(node: &crate::schema::Node) -> StableNodeKey {
     stable_key_from_facets(
-        node.file_path.as_deref().map(|s| s.as_ref()),
+        node.file_path.as_deref(),
         node.name.as_ref(),
         node.node_type,
-        node.qualified_name.as_deref().map(|s| s.as_ref()),
+        node.qualified_name.as_deref(),
     )
 }
 
@@ -137,12 +142,7 @@ pub fn stable_key_from_row(col: &ColumnarGraphMmap, idx: usize) -> Result<Stable
     )?;
     let node_type = crate::columnar_snapshot::node_type_from_u16(row.node_type)?;
     let qn = col.node_qualified_name_str(idx)?;
-    Ok(stable_key_from_facets(
-        file_path,
-        name,
-        node_type,
-        qn,
-    ))
+    Ok(stable_key_from_facets(file_path, name, node_type, qn))
 }
 
 /// Repo-relative path used for PR scope filtering (file path or file-node name).
@@ -274,7 +274,10 @@ mod tests {
             Some("AuthService.login.$lambda$0"),
         );
         let (_tmp, col) = open_columnar(vec![node]);
-        assert_eq!(col.node_qualified_name_str(0).unwrap(), Some("AuthService.login.$lambda$0"));
+        assert_eq!(
+            col.node_qualified_name_str(0).unwrap(),
+            Some("AuthService.login.$lambda$0")
+        );
         assert_eq!(stable_key_from_row(&col, 0).unwrap(), expected);
     }
 

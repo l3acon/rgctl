@@ -24,7 +24,8 @@ fn rules_dir() -> std::path::PathBuf {
 #[test]
 fn kantra_rules_indexed_in_graph_gql() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }
@@ -46,12 +47,7 @@ fn kantra_rules_indexed_in_graph_gql() {
         String::from_utf8_lossy(&gql.stderr)
     );
     let gql = Command::new(rgctl_bin())
-        .args([
-            "-f",
-            "json",
-            "gql",
-            "MATCH (r:KantraRule) RETURN r",
-        ])
+        .args(["-f", "json", "gql", "MATCH (r:KantraRule) RETURN r"])
         .current_dir(&repo)
         .output()
         .expect("gql");
@@ -76,13 +72,7 @@ fn kantra_embedded_discover_writes_findings_json() {
         return;
     }
     let out = Command::new(rgctl_bin())
-        .args([
-            "discover",
-            ".",
-            "--languages",
-            "java",
-            "--with-kantra",
-        ])
+        .args(["discover", ".", "--languages", "java", "--with-kantra"])
         .current_dir(&repo)
         .output()
         .expect("discover");
@@ -95,7 +85,10 @@ fn kantra_embedded_discover_writes_findings_json() {
     assert!(findings_path.is_file(), "kantra_findings.json missing");
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&findings_path).unwrap()).unwrap();
-    assert_eq!(doc.get("command").and_then(|v| v.as_str()), Some("kantra_findings"));
+    assert_eq!(
+        doc.get("command").and_then(|v| v.as_str()),
+        Some("kantra_findings")
+    );
     assert!(
         doc.get("catalog_id")
             .and_then(|v| v.as_str())
@@ -107,7 +100,8 @@ fn kantra_embedded_discover_writes_findings_json() {
 #[test]
 fn kantra_rules_and_catalog_mutually_exclusive() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }
@@ -160,7 +154,10 @@ fn kantra_discover_writes_findings_json() {
     assert!(findings_path.is_file(), "kantra_findings.json missing");
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&findings_path).unwrap()).unwrap();
-    assert_eq!(doc.get("command").and_then(|v| v.as_str()), Some("kantra_findings"));
+    assert_eq!(
+        doc.get("command").and_then(|v| v.as_str()),
+        Some("kantra_findings")
+    );
     assert_eq!(doc.get("schema_version").and_then(|v| v.as_u64()), Some(2));
     let violations = doc.get("violations").and_then(|v| v.as_array()).unwrap();
     assert!(!violations.is_empty(), "expected at least one violation");
@@ -172,9 +169,7 @@ fn kantra_discover_writes_findings_json() {
     let skipped = doc.get("skipped_rules").and_then(|v| v.as_array()).unwrap();
     assert!(
         skipped.iter().any(|s| {
-            s.get("rule_id")
-                .and_then(|v| v.as_str())
-                == Some("unsupported-dependency")
+            s.get("rule_id").and_then(|v| v.as_str()) == Some("unsupported-dependency")
         }),
         "expected unsupported rule in skipped_rules"
     );
@@ -183,7 +178,8 @@ fn kantra_discover_writes_findings_json() {
 #[test]
 fn kantra_markdown_imports_not_matched_by_go_referenced() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }
@@ -201,7 +197,11 @@ fn kantra_markdown_imports_not_matched_by_go_referenced() {
         .current_dir(&repo)
         .output()
         .expect("discover");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let findings_path = repo.join(".rgctl/kantra_findings.json");
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(findings_path).unwrap()).unwrap();
@@ -220,7 +220,8 @@ fn kantra_markdown_imports_not_matched_by_go_referenced() {
 #[test]
 fn kantra_rule_target_property_gql() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }
@@ -331,7 +332,11 @@ fn kantra_findings_include_enrichment() {
         .current_dir(&repo)
         .output()
         .expect("discover");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(repo.join(".rgctl/kantra_findings.json")).unwrap())
             .unwrap();
@@ -349,7 +354,8 @@ fn kantra_findings_include_enrichment() {
 #[test]
 fn kantra_file_cache_records_hits_on_second_discover() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }
@@ -368,21 +374,28 @@ fn kantra_file_cache_records_hits_on_second_discover() {
         .current_dir(&repo)
         .output()
         .expect("discover");
-    assert!(first.status.success(), "{}", String::from_utf8_lossy(&first.stderr));
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
     let second = Command::new(rgctl_bin())
         .args(args)
         .current_dir(&repo)
         .output()
         .expect("discover");
-    assert!(second.status.success(), "{}", String::from_utf8_lossy(&second.stderr));
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
     assert!(
         repo.join(".rgctl/kantra_cache/manifest.json").is_file(),
         "expected kantra_cache manifest after discover"
     );
-    let doc: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(repo.join(".rgctl/kantra_findings.json")).unwrap(),
-    )
-    .unwrap();
+    let doc: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(repo.join(".rgctl/kantra_findings.json")).unwrap())
+            .unwrap();
     let hits = doc.get("cache_hits").and_then(|v| v.as_u64()).unwrap_or(0);
     assert!(
         hits > 0,
@@ -393,7 +406,8 @@ fn kantra_file_cache_records_hits_on_second_discover() {
 #[test]
 fn kantra_dashboard_export_writes_index() {
     let _guard = TINY_REPO_LOCK.lock().unwrap();
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
+    let repo =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny_polyglot_repo");
     if !repo.is_dir() {
         return;
     }

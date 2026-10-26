@@ -132,10 +132,10 @@ pub fn default_user_home() -> Option<PathBuf> {
 
 /// Legacy daemon workspace root (`RGCTL_HOME` or user home).
 pub fn legacy_daemon_home() -> Option<PathBuf> {
-    if let Ok(p) = env::var("RGCTL_HOME") {
-        if !p.is_empty() {
-            return Some(PathBuf::from(p));
-        }
+    if let Ok(p) = env::var("RGCTL_HOME")
+        && !p.is_empty()
+    {
+        return Some(PathBuf::from(p));
     }
     default_user_home()
 }

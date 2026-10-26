@@ -287,7 +287,7 @@ pub fn package_label(file_path: &str) -> String {
     for marker in JVM_MARKERS {
         if let Some(idx) = slash_path.rfind(marker) {
             let end = idx + marker.len();
-            if best_jvm_end.map_or(true, |prev| end > prev) {
+            if best_jvm_end.is_none_or(|prev| end > prev) {
                 best_jvm_end = Some(end);
             }
         }
@@ -368,10 +368,9 @@ pub fn package_label(file_path: &str) -> String {
     if let Some(c_idx) = parent_segs
         .iter()
         .rposition(|s| WORKSPACE_CONTAINERS.contains(s))
+        && c_idx + 1 < parent_segs.len()
     {
-        if c_idx + 1 < parent_segs.len() {
-            return parent_segs[c_idx + 1..].join(".");
-        }
+        return parent_segs[c_idx + 1..].join(".");
     }
 
     if let Some(a_idx) = parent_segs.iter().rposition(|s| REPO_ANCHORS.contains(s)) {
@@ -438,10 +437,10 @@ pub fn build_migration_graph(
                 entry.max_blast = entry.max_blast.max(b.scores[idx] as f64);
             }
         }
-        if let Some(table) = community_table {
-            if let Some(cid) = table.get(compact_id) {
-                *entry.louvain_votes.entry(cid).or_insert(0) += 1;
-            }
+        if let Some(table) = community_table
+            && let Some(cid) = table.get(compact_id)
+        {
+            *entry.louvain_votes.entry(cid).or_insert(0) += 1;
         }
     });
 
@@ -876,8 +875,14 @@ mod tests {
         );
 
         // Two same-named subdirectories across different crates do not collide
-        assert_eq!(package_label("crates/crate-a/src/models/user.rs"), "crate-a.models");
-        assert_eq!(package_label("crates/crate-b/src/models/user.rs"), "crate-b.models");
+        assert_eq!(
+            package_label("crates/crate-a/src/models/user.rs"),
+            "crate-a.models"
+        );
+        assert_eq!(
+            package_label("crates/crate-b/src/models/user.rs"),
+            "crate-b.models"
+        );
 
         // Top-level `src/`
         assert_eq!(package_label("src/main.rs"), "src");

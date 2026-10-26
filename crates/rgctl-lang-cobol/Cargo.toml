@@ -1,0 +1,16 @@
+[package]
+name = "rgctl-lang-cobol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl language plugin: COBOL (structural mainframe extractor)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+serde_json = "1"
+tree-sitter = { workspace = true }
+
+[lints]
+workspace = true

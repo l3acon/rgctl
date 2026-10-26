@@ -30,8 +30,8 @@ fn main() {
             println!("cargo:rerun-if-changed={}", path.display());
             let text = fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-            let spec: LanguageFrameworkSpec = toml::from_str(&text)
-                .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+            let spec: LanguageFrameworkSpec =
+                toml::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
             validate_language(&spec, &path, &mut seen_ids);
             languages.push(spec);
         }
@@ -46,7 +46,10 @@ fn main() {
     let out_path = out_dir.join("frameworks.bin");
     let bytes = bincode::serialize(&catalog).expect("serialize frameworks catalog");
     fs::write(&out_path, bytes).expect("write frameworks.bin");
-    println!("cargo:rustc-env=RGCTL_FRAMEWORKS_BIN={}", out_path.display());
+    println!(
+        "cargo:rustc-env=RGCTL_FRAMEWORKS_BIN={}",
+        out_path.display()
+    );
 }
 
 fn validate_language(
@@ -62,13 +65,25 @@ fn validate_language(
             panic!("{}: rule id must be non-empty", path.display());
         }
         if rule.framework.trim().is_empty() {
-            panic!("{}: rule {} framework must be non-empty", path.display(), rule.id);
+            panic!(
+                "{}: rule {} framework must be non-empty",
+                path.display(),
+                rule.id
+            );
         }
         if rule.tags.is_empty() {
-            panic!("{}: rule {} tags must be non-empty", path.display(), rule.id);
+            panic!(
+                "{}: rule {} tags must be non-empty",
+                path.display(),
+                rule.id
+            );
         }
         if rule.vocab.trim().is_empty() {
-            panic!("{}: rule {} vocab must be non-empty", path.display(), rule.id);
+            panic!(
+                "{}: rule {} vocab must be non-empty",
+                path.display(),
+                rule.id
+            );
         }
         let key = (spec.language.clone(), rule.id.clone());
         if !seen_ids.insert(key) {

@@ -11,9 +11,7 @@ use tempfile::TempDir;
 fn rgctl_bin() -> PathBuf {
     std::env::var("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/rgctl"))
 }
 
 fn write_target_snapshot(path: &Path, caller_count: usize) {
@@ -87,7 +85,11 @@ fn setup_pr_repo(base_leaves: usize, head_leaves: usize) -> TempDir {
     write_target_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), base_leaves);
     git_commit_all(repo, "base");
 
-    fs::write(repo.join("src/pkg.rs"), "fn target_fn() { /* changed */ }\n").unwrap();
+    fs::write(
+        repo.join("src/pkg.rs"),
+        "fn target_fn() { /* changed */ }\n",
+    )
+    .unwrap();
     write_target_snapshot(&repo.join(".rgctl/graph.snapshot.bin"), head_leaves);
     git_commit_all(repo, "head");
 
@@ -152,8 +154,7 @@ fn pr_check_passes_when_only_existing_violations() {
         "stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
     assert_eq!(doc["schema_version"].as_str(), Some("2"));
     assert_eq!(doc["passed"].as_bool(), Some(true));
     assert!(doc["violations_summary"].is_object());
@@ -181,8 +182,7 @@ fn pr_check_fails_on_new_temporal_violation() {
         &["--base-ref", "HEAD~1", "--head-ref", "HEAD"],
     );
     assert!(!out.status.success());
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
     assert_eq!(doc["passed"].as_bool(), Some(false));
     let violations = doc["violations"].as_array().expect("violations");
     assert!(
@@ -198,7 +198,11 @@ fn pr_check_delta_head_synthesizes_from_base_only() {
     let repo = tmp.path();
     init_git_repo(repo);
     fs::create_dir_all(repo.join("src")).unwrap();
-    fs::write(repo.join("src/lib.rs"), "pub fn helper() {}\npub fn target() {}\n").unwrap();
+    fs::write(
+        repo.join("src/lib.rs"),
+        "pub fn helper() {}\npub fn target() {}\n",
+    )
+    .unwrap();
     git_commit_all(repo, "base");
 
     let discover = Command::new(rgctl_bin())
@@ -249,8 +253,7 @@ fn pr_check_delta_head_synthesizes_from_base_only() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
     assert_eq!(doc["schema_version"].as_str(), Some("2"));
     assert!(doc["scope"]["files"].as_u64().unwrap() >= 1);
     assert!(
@@ -282,9 +285,10 @@ fn pr_check_regression_from_violation_ledger() {
         &policy,
         &["--base-ref", "HEAD~1", "--head-ref", "HEAD"],
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
-    let stable_key = doc["violations"][0]["stable_key"].as_u64().expect("stable_key");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
+    let stable_key = doc["violations"][0]["stable_key"]
+        .as_u64()
+        .expect("stable_key");
 
     let ledger_line = format!(
         r#"{{"stable_key":{},"rule":"max_impact_nodes","class":"resolved","commit":"abc","ts":"1","symbol":"target_fn"}}"#,
@@ -298,8 +302,7 @@ fn pr_check_regression_from_violation_ledger() {
         &["--base-ref", "HEAD~1", "--head-ref", "HEAD"],
     );
     assert!(!out.status.success());
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
     assert!(
         doc["violations"]
             .as_array()
@@ -376,14 +379,14 @@ fn pr_check_bisect_pins_introducing_commit() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
-    let stable_key = doc["violations"][0]["stable_key"].as_u64().expect("stable_key");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
+    let stable_key = doc["violations"][0]["stable_key"]
+        .as_u64()
+        .expect("stable_key");
     let introduced = doc["violations"][0]["introduced_in_commit"]
         .as_str()
         .expect("introduced_in_commit");
-    let expected =
-        first_commit_with_new_violation(repo, &policy, "HEAD~3", "HEAD", stable_key);
+    let expected = first_commit_with_new_violation(repo, &policy, "HEAD~3", "HEAD", stable_key);
     assert_eq!(introduced, expected);
 }
 
@@ -423,17 +426,11 @@ fn first_commit_with_new_violation(
             .output()
             .expect("probe pr-check");
         if !out.status.success() {
-            let doc: serde_json::Value =
-                serde_json::from_slice(&out.stdout).expect("probe json");
-            if doc["violations"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| {
-                    v["stable_key"].as_u64() == Some(stable_key)
-                        && v["classification"].as_str() == Some("new")
-                })
-            {
+            let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("probe json");
+            if doc["violations"].as_array().unwrap().iter().any(|v| {
+                v["stable_key"].as_u64() == Some(stable_key)
+                    && v["classification"].as_str() == Some("new")
+            }) {
                 return commit.to_string();
             }
         }
@@ -470,12 +467,8 @@ fn pr_check_calendar_grace_warns_by_default() {
         "grace should pass:\n{}",
         String::from_utf8_lossy(&out.stdout)
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
-    assert_eq!(
-        doc["violations"][0]["severity"].as_str(),
-        Some("warn")
-    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
+    assert_eq!(doc["violations"][0]["severity"].as_str(), Some("warn"));
 
     let strict = run_pr_check(
         repo,
@@ -541,8 +534,7 @@ fn pr_check_worktree_synthetic_head() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    let doc: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("stdout json");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("stdout json");
     assert!(doc["scope"]["files"].as_u64().unwrap() >= 1);
     assert_eq!(
         fs::read(&live).expect("live after"),

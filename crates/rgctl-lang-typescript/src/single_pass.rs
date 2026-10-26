@@ -1,11 +1,12 @@
 //! Single-pass AST extraction for TypeScript (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{source_location, TypeScriptPlugin};
+use crate::plugin::{TypeScriptPlugin, source_location};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use rgctl_plugin_helpers::{
     extract_class_extends_relations, extract_import_symbols, find_child_kind,
-    is_ecmascript_function_node, is_function_expression_kind, simple_type_name, type_name_from_node,
+    is_ecmascript_function_node, is_function_expression_kind, simple_type_name,
+    type_name_from_node,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -86,24 +87,20 @@ fn ts_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn typescript_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&ts_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&ts_grammar(), HANDLED_KINDS))
 }
 
 fn ts_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&ts_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&ts_grammar(), MANIFEST_JSON))
 }
-
 
 fn function_scope_kind(node: Node) -> ScopeKind {
     match node.kind() {
         "method_definition" => ScopeKind::Method,
         k if is_function_expression_kind(k)
-            || (k == "function" && node.is_named() && node.child_by_field_name("name").is_none()) =>
+            || (k == "function"
+                && node.is_named()
+                && node.child_by_field_name("name").is_none()) =>
         {
             ScopeKind::Lambda
         }
@@ -128,11 +125,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("typescript", ts_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("typescript", ts_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = ts_dispatch();
@@ -170,32 +168,17 @@ pub fn extract_all_single_pass(
                     let loc =
                         ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
                     let name = sym.name.clone();
-                    let qn = sym
-                        .qualified_name
-                        .clone()
-                        .unwrap_or_else(|| name.clone());
+                    let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                     let sk = function_scope_kind(node);
                     ctx.symbols.push(sym);
-                    ctx.enter_scope(
-                        sk,
-                        Some(name),
-                        qn,
-                        node.start_byte(),
-                        node.end_byte(),
-                        true,
-                    );
+                    ctx.enter_scope(sk, Some(name), qn, node.start_byte(), node.end_byte(), true);
                     if let Some(f) = ctx.scopes.current_function_mut() {
                         f.complexity.cyclomatic = 1;
                         f.complexity.param_count = params;
                         f.complexity.loc = loc;
                     }
                     pushed_scope = true;
-                    plugin.emit_decorators_for_node(
-                        node,
-                        source,
-                        file_path,
-                        &mut relations,
-                    );
+                    plugin.emit_decorators_for_node(node, source, file_path, &mut relations);
                 }
 
                 match kind {
@@ -235,12 +218,7 @@ pub fn extract_all_single_pass(
                                 }
                             }
                         }
-                        plugin.emit_decorators_for_node(
-                            node,
-                            source,
-                            file_path,
-                            &mut relations,
-                        );
+                        plugin.emit_decorators_for_node(node, source, file_path, &mut relations);
                     }
                     "interface_declaration" => {
                         let iface = plugin.extract_interface(node, source, &file_path_str)?;
@@ -301,8 +279,11 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "type_alias_declaration" => {
-                        ctx.symbols
-                            .push(plugin.extract_type_alias(node, source, &file_path_str)?);
+                        ctx.symbols.push(plugin.extract_type_alias(
+                            node,
+                            source,
+                            &file_path_str,
+                        )?);
                     }
                     "import_statement" => {
                         ctx.symbols.extend(extract_import_symbols(
@@ -328,10 +309,7 @@ pub fn extract_all_single_pass(
                         );
                     }
                     "abstract_method_signature" => {
-                        if let Some(owner) = ctx
-                            .scopes
-                            .current_type()
-                            .and_then(|f| f.name.clone())
+                        if let Some(owner) = ctx.scopes.current_type().and_then(|f| f.name.clone())
                         {
                             ctx.symbols.push(plugin.extract_abstract_method_signature(
                                 node,
@@ -348,8 +326,7 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "internal_module" | "module" => {
-                        let sym =
-                            plugin.extract_internal_module(node, source, &file_path_str)?;
+                        let sym = plugin.extract_internal_module(node, source, &file_path_str)?;
                         let name = sym.name.clone();
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
@@ -370,43 +347,38 @@ pub fn extract_all_single_pass(
                                 .qualified_name
                                 .clone()
                                 .unwrap_or_else(|| from_fn.name.clone());
-                            if let Some(ctor) = node.child_by_field_name("constructor") {
-                                if let Some(target) = type_name_from_node(ctor, source) {
-                                    relations.push(Relation {
-                                        from,
-                                        to: simple_type_name(&target),
-                                        relation_type: RelationType::Instantiates,
-                                        location: source_location(node, &file_path_str),
-                                        metadata: serde_json::json!({ "language": "typescript" }),
-                                        to_qualified_hint: Some(target),
-                                        to_type_hint: None,
-                                    });
-                                }
+                            if let Some(ctor) = node.child_by_field_name("constructor")
+                                && let Some(target) = type_name_from_node(ctor, source)
+                            {
+                                relations.push(Relation {
+                                    from,
+                                    to: simple_type_name(&target),
+                                    relation_type: RelationType::Instantiates,
+                                    location: source_location(node, &file_path_str),
+                                    metadata: serde_json::json!({ "language": "typescript" }),
+                                    to_qualified_hint: Some(target),
+                                    to_type_hint: None,
+                                });
                             }
                         }
                     }
                     _ => {}
                 }
 
-                if TS_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if TS_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "switch_statement"
-                        | "while_statement"
-                        | "for_statement"
-                        | "for_in_statement"
-                        | "catch_clause"
+                        "if_statement" | "switch_statement" | "while_statement"
+                        | "for_statement" | "for_in_statement" | "catch_clause"
                         | "ternary_expression" => {
                             let delta = 1 + ctx
                                 .scopes

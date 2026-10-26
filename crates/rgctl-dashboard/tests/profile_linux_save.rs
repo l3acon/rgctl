@@ -36,8 +36,7 @@ fn profile_linux_dashboard_export() {
     }
 
     let analysis_path = root.join(".rgctl/analysis_results.bin");
-    let analysis =
-        rgctl_analysis::AnalysisResults::load(&analysis_path).expect("load analysis");
+    let analysis = rgctl_analysis::AnalysisResults::load(&analysis_path).expect("load analysis");
 
     export_dashboard_bundle_with_context(
         &backend,

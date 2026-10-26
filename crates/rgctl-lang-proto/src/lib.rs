@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_proto::LANGUAGE.into())
         .expect("compile Proto tags.scm");
@@ -40,8 +41,23 @@ service Bar { rpc Baz (Foo) returns (Foo); }
         let result = plugin
             .extract_all(Path::new("api.proto"), source)
             .expect("extract_all");
-        assert!(result.symbols.iter().any(|s| s.name == "Foo" && s.symbol_type == SymbolType::Class));
-        assert!(result.symbols.iter().any(|s| s.name == "Bar" && s.symbol_type == SymbolType::Interface));
-        assert!(result.symbols.iter().any(|s| s.name == "Baz" && s.symbol_type == SymbolType::Function));
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Foo" && s.symbol_type == SymbolType::Class)
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Bar" && s.symbol_type == SymbolType::Interface)
+        );
+        assert!(
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "Baz" && s.symbol_type == SymbolType::Function)
+        );
     }
 }

@@ -316,11 +316,11 @@ fn test_update_queue_enqueue_drain_and_result() {
 #[test]
 fn test_update_queue_no_wait_leaves_pending() {
     use rgctl::cli::pipeline_status::{process_alive, update_queue, watch_lock_path};
+    use std::time::Duration;
     use update_queue::{
         UpdateQueueMode, build_request, enqueue, queue_nonempty, queue_pending_count,
         wait_for_result,
     };
-    use std::time::Duration;
 
     let temp = TempDir::new().unwrap();
     let root = temp.path();

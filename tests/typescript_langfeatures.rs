@@ -75,28 +75,40 @@ fn edge_count(repo: &Path, rel: &str) -> usize {
 fn typescript_ecommerce_import_nonzero() {
     ensure_discovered();
     let n = node_count(&repo(), "Import");
-    assert!(n > 0, "expected Import nodes on ecommerce-typescript, got {n}");
+    assert!(
+        n > 0,
+        "expected Import nodes on ecommerce-typescript, got {n}"
+    );
 }
 
 #[test]
 fn typescript_ecommerce_implements_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "IMPLEMENTS");
-    assert!(n > 0, "expected Implements edges on ecommerce-typescript, got {n}");
+    assert!(
+        n > 0,
+        "expected Implements edges on ecommerce-typescript, got {n}"
+    );
 }
 
 #[test]
 fn typescript_ecommerce_annotated_with_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "ANNOTATEDWITH");
-    assert!(n > 0, "expected AnnotatedWith edges on ecommerce-typescript, got {n}");
+    assert!(
+        n > 0,
+        "expected AnnotatedWith edges on ecommerce-typescript, got {n}"
+    );
 }
 
 #[test]
 fn typescript_ecommerce_extends_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "EXTENDS");
-    assert!(n > 0, "expected Extends edges on ecommerce-typescript, got {n}");
+    assert!(
+        n > 0,
+        "expected Extends edges on ecommerce-typescript, got {n}"
+    );
 }
 
 #[test]
@@ -136,7 +148,10 @@ fn typescript_case_declarations_have_no_anonymous_duplicates() {
     );
     let a2 = functions_in_file(&repo(), "caseA2.ts");
     assert_eq!(a2.len(), 2, "caseA2 must have exactly 2 functions: {a2:?}");
-    assert!(a2.contains(&"alpha2".to_string()) && a2.contains(&"beta".to_string()), "{a2:?}");
+    assert!(
+        a2.contains(&"alpha2".to_string()) && a2.contains(&"beta".to_string()),
+        "{a2:?}"
+    );
     assert!(
         a2.iter().all(|n| !n.starts_with("anonymous")),
         "caseA2 must not emit anonymous duplicates: {a2:?}"
@@ -148,11 +163,22 @@ fn typescript_case_b_named_arrows_and_no_decl_duplicates() {
     ensure_discovered();
     let one = functions_in_file(&repo(), "caseB_one.ts");
     for expected in ["dup", "uniqueOne", "dupDecl", "uniqueDecl"] {
-        assert!(one.iter().any(|n| n == expected), "missing {expected} in {one:?}");
+        assert!(
+            one.iter().any(|n| n == expected),
+            "missing {expected} in {one:?}"
+        );
     }
-    assert_eq!(one.len(), 4, "caseB_one must not add anonymous keyword dupes: {one:?}");
+    assert_eq!(
+        one.len(),
+        4,
+        "caseB_one must not add anonymous keyword dupes: {one:?}"
+    );
     let two = functions_in_file(&repo(), "caseB_two.ts");
-    assert_eq!(two.len(), 4, "caseB_two must not add anonymous keyword dupes: {two:?}");
+    assert_eq!(
+        two.len(),
+        4,
+        "caseB_two must not add anonymous keyword dupes: {two:?}"
+    );
 }
 
 fn all_function_names(repo: &Path) -> Vec<String> {
@@ -177,7 +203,10 @@ fn function_rows(repo: &Path) -> Vec<(String, String)> {
     let mut out = Vec::new();
     if let Some(rows) = v.get("rows").and_then(|r| r.as_array()) {
         for row in rows {
-            let cells = row.as_array().map(|a| a.as_slice()).unwrap_or(std::slice::from_ref(row));
+            let cells = row
+                .as_array()
+                .map(|a| a.as_slice())
+                .unwrap_or(std::slice::from_ref(row));
             for cell in cells {
                 let name = cell
                     .get("node")

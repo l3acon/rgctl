@@ -1,6 +1,6 @@
 //! go.mod → DependencyDeclaration.
 
-use super::{loc, DependencyDeclaration};
+use super::{DependencyDeclaration, loc};
 use std::path::Path;
 
 pub fn extract(path: &Path, source: &[u8]) -> Vec<DependencyDeclaration> {

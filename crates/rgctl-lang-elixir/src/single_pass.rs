@@ -320,8 +320,8 @@ pub fn extract_all_single_pass(
                         let line = node.start_position().row + 1;
                         let name = format!("<fn@{line}>");
                         let qn = name.clone();
-                        let loc =
-                            ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         ctx.symbols.push(Symbol {
                             name: name.clone(),
                             symbol_type: SymbolType::Function,
@@ -352,26 +352,26 @@ pub fn extract_all_single_pass(
                         }
                         pushed_scope = true;
                     }
-                    "catch_block" | "rescue_block" | "after_block" | "else_block" => {
-                        if ctx.scopes.current_function().is_some() {
-                            let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
-                            let scope_depth = ctx.scopes.depth();
-                            ctx.scopes.push(ScopeFrame::new(
-                                ScopeKind::GuardBlock,
-                                None,
-                                String::new(),
-                                node.start_byte(),
-                                node.end_byte(),
-                                scope_depth,
-                            ));
-                            stack.push(Visit::LeaveGuard);
-                        }
+                    "catch_block" | "rescue_block" | "after_block" | "else_block"
+                        if ctx.scopes.current_function().is_some() =>
+                    {
+                        let delta = 1 + ctx
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
+                        let scope_depth = ctx.scopes.depth();
+                        ctx.scopes.push(ScopeFrame::new(
+                            ScopeKind::GuardBlock,
+                            None,
+                            String::new(),
+                            node.start_byte(),
+                            node.end_byte(),
+                            scope_depth,
+                        ));
+                        stack.push(Visit::LeaveGuard);
                     }
                     _ => {}
                 }
@@ -448,7 +448,11 @@ end
                 .iter()
                 .any(|s| s.symbol_type == SymbolType::Module && s.name == "Foo"),
             "expected module Foo, got {:?}",
-            result.symbols.iter().map(|s| (&s.name, s.symbol_type)).collect::<Vec<_>>()
+            result
+                .symbols
+                .iter()
+                .map(|s| (&s.name, s.symbol_type))
+                .collect::<Vec<_>>()
         );
         assert!(
             result

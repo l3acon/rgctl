@@ -1,7 +1,7 @@
 //! Single-pass AST extraction for Python (`ScopeStack` + `KindDispatchTable`).
 
 use crate::depth;
-use crate::plugin::{instantiation_target, PythonPlugin};
+use crate::plugin::{PythonPlugin, instantiation_target};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use rgctl_plugin_helpers::{
@@ -73,18 +73,12 @@ fn python_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn python_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&python_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&python_grammar(), HANDLED_KINDS))
 }
 
 fn python_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&python_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&python_grammar(), MANIFEST_JSON))
 }
-
 
 /// Pending call site: flush after the full symbol list exists (forward refs).
 struct PendingCall<'a> {
@@ -162,11 +156,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("python", python_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("python", python_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = python_dispatch();
@@ -217,13 +212,10 @@ pub fn extract_all_single_pass(
                     "function_definition" => {
                         let sym = plugin.extract_function(node, source, &file_path_str)?;
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Function,
@@ -244,10 +236,7 @@ pub fn extract_all_single_pass(
                     "class_definition" => {
                         let sym = plugin.extract_class(node, source, &file_path_str)?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Class,
@@ -267,12 +256,8 @@ pub fn extract_all_single_pass(
                         pushed_scope = true;
                     }
                     "import_statement" | "import_from_statement" => {
-                        let mut imports = extract_python_import_symbols(
-                            node,
-                            source,
-                            &file_path_str,
-                            "python",
-                        );
+                        let mut imports =
+                            extract_python_import_symbols(node, source, &file_path_str, "python");
                         if typing_guard_depth > 0 {
                             for sym in &mut imports {
                                 sym.metadata["guard"] = serde_json::json!("typing");
@@ -377,11 +362,8 @@ pub fn extract_all_single_pass(
                 // match/with as structural nesting and assert/boolean as flat branches.
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "while_statement"
-                        | "for_statement"
-                        | "match_statement"
-                        | "with_statement" => {
+                        "if_statement" | "while_statement" | "for_statement"
+                        | "match_statement" | "with_statement" => {
                             let delta = 1 + ctx
                                 .scopes
                                 .current_function()

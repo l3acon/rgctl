@@ -38,12 +38,7 @@ pub fn classify_ingest_path(path: &Path) -> IngestRoute {
     // Manifest basenames (exclusive — do not also treat as Config).
     if matches!(
         basename.as_str(),
-        "pom.xml"
-            | "cargo.toml"
-            | "package.json"
-            | "go.mod"
-            | "build.gradle"
-            | "build.gradle.kts"
+        "pom.xml" | "cargo.toml" | "package.json" | "go.mod" | "build.gradle" | "build.gradle.kts"
     ) {
         return IngestRoute::Manifest;
     }

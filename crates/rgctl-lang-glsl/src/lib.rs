@@ -9,9 +9,11 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
-    let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_glsl::LANGUAGE_GLSL.into())
-        .expect("compile glsl tags.scm");
+    let plugin =
+        QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_glsl::LANGUAGE_GLSL.into())
+            .expect("compile glsl tags.scm");
     registry.register_language_plugin(Arc::new(plugin));
 }
 
@@ -31,7 +33,8 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_glsl::LANGUAGE_GLSL.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_glsl::LANGUAGE_GLSL.into())
+                .expect("compile");
         let source = br###"void main() {
   helper();
 }
@@ -54,10 +57,12 @@ mod tests {
             result.symbols
         );
         assert!(
-            !result.relations.iter().any(|r| r.from == "main" && r.to == "main"),
+            !result
+                .relations
+                .iter()
+                .any(|r| r.from == "main" && r.to == "main"),
             "must not emit self-call main -> main: {:?}",
             result.relations
         );
-
     }
 }

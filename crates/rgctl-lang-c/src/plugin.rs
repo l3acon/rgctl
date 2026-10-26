@@ -134,7 +134,12 @@ impl CPlugin {
         })
     }
 
-    pub(crate) fn extract_enum(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_enum(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         self.extract_enum_with_typedef(node, source, file_path, None)
     }
 
@@ -254,27 +259,27 @@ impl CPlugin {
                         if child.kind() == "struct_specifier"
                             && (struct_name(child, source).is_some() || typedef_name.is_some())
                         {
-                            symbols.push(
-                                self.extract_struct(child, source, file_path, typedef_name.as_deref())?,
-                            );
+                            symbols.push(self.extract_struct(
+                                child,
+                                source,
+                                file_path,
+                                typedef_name.as_deref(),
+                            )?);
                         } else if child.kind() == "enum_specifier"
                             && (child.child_by_field_name("name").is_some()
                                 || typedef_name.is_some())
                         {
-                            symbols.push(
-                                self.extract_enum_with_typedef(
-                                    child,
-                                    source,
-                                    file_path,
-                                    typedef_name.as_deref(),
-                                )?,
-                            );
+                            symbols.push(self.extract_enum_with_typedef(
+                                child,
+                                source,
+                                file_path,
+                                typedef_name.as_deref(),
+                            )?);
                         } else if child.kind() == "union_specifier"
                             && (child.child_by_field_name("name").is_some()
                                 || typedef_name.is_some())
                         {
-                            let fields =
-                                extract_struct_fields(child, source).unwrap_or_default();
+                            let fields = extract_struct_fields(child, source).unwrap_or_default();
                             if let Some(sym) = crate::depth::extract_union_specifier_named(
                                 child,
                                 source,
@@ -395,10 +400,7 @@ fn find_parameter_list(node: Node) -> Option<Node> {
         if current.kind() == "function_declarator" {
             return current.child_by_field_name("parameters");
         }
-        match current.child_by_field_name("declarator") {
-            Some(inner) => current = inner,
-            None => return None,
-        }
+        current = current.child_by_field_name("declarator")?;
     }
     None
 }
@@ -633,9 +635,7 @@ mod tests {
     fn test_typedef_struct_cart_alias() {
         let source = br#"typedef struct Cart Cart;"#;
         let plugin = CPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("cart.h"), source)
-            .unwrap();
+        let symbols = plugin.extract_symbols(Path::new("cart.h"), source).unwrap();
         let cart = symbols
             .iter()
             .find(|s| s.name == "Cart" && s.symbol_type == SymbolType::Struct)
@@ -837,17 +837,17 @@ void dispatch(void (*handler)(void)) {
 #include "cart.h"
 "#;
         let plugin = CPlugin::new().unwrap();
-        let symbols = plugin
-            .extract_symbols(Path::new("main.c"), source)
-            .unwrap();
+        let symbols = plugin.extract_symbols(Path::new("main.c"), source).unwrap();
         assert!(symbols.iter().any(|s| {
             s.symbol_type == SymbolType::Import
                 && s.name == "stdio.h"
                 && s.metadata.get("kind").and_then(|v| v.as_str()) == Some("include")
         }));
-        assert!(symbols.iter().any(|s| {
-            s.symbol_type == SymbolType::Import && s.name == "cart.h"
-        }));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| { s.symbol_type == SymbolType::Import && s.name == "cart.h" })
+        );
     }
 
     #[test]

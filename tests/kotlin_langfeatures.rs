@@ -63,15 +63,18 @@ fn gql_json(query: &str) -> Value {
 fn row_count(v: &Value) -> usize {
     v.get("count")
         .and_then(|c| c.as_u64())
-        .or_else(|| v.get("rows").and_then(|r| r.as_array()).map(|a| a.len() as u64))
+        .or_else(|| {
+            v.get("rows")
+                .and_then(|r| r.as_array())
+                .map(|a| a.len() as u64)
+        })
         .unwrap_or(0) as usize
 }
 
 #[test]
 fn kotlin_class_and_method_indexed() {
-    let v = gql_json(
-        "MATCH (n:Class) WHERE n.qualified_name = 'demo.OrderService' RETURN n LIMIT 5",
-    );
+    let v =
+        gql_json("MATCH (n:Class) WHERE n.qualified_name = 'demo.OrderService' RETURN n LIMIT 5");
     assert!(row_count(&v) >= 1, "OrderService class: {v}");
     let v = gql_json(
         "MATCH (n:Function) WHERE n.qualified_name = 'demo.OrderService.find' RETURN n LIMIT 5",
@@ -87,12 +90,10 @@ fn kotlin_calls_non_zero() {
 
 #[test]
 fn kotlin_implements_repository() {
-    let impls = gql_json(
-        "MATCH (a)-[:Implements]->(b) WHERE a.name = 'OrderService' RETURN a, b LIMIT 10",
-    );
-    let extends = gql_json(
-        "MATCH (a)-[:Extends]->(b) WHERE a.name = 'OrderService' RETURN a, b LIMIT 10",
-    );
+    let impls =
+        gql_json("MATCH (a)-[:Implements]->(b) WHERE a.name = 'OrderService' RETURN a, b LIMIT 10");
+    let extends =
+        gql_json("MATCH (a)-[:Extends]->(b) WHERE a.name = 'OrderService' RETURN a, b LIMIT 10");
     assert!(
         row_count(&impls) + row_count(&extends) >= 1,
         "expected Extends/Implements: implements={impls} extends={extends}"

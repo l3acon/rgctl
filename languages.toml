@@ -830,3 +830,115 @@ enable_complexity = false
 enable_type_inference = false
 tags_scm = "crates/rgctl-lang-elisp/queries/tags.scm"
 
+# ---------------------------------------------------------------------------
+# Legacy / mainframe / enterprise migration languages
+# ---------------------------------------------------------------------------
+
+[languages.cobol]
+handler = "custom"
+plugin = "CobolPlugin"
+module = "rgctl_lang_cobol"
+crate = "rgctl-lang-cobol"
+extensions = ["cbl", "cob", "cpy"]
+aliases = ["cobol", "cbl", "cob"]
+function_kinds = ["paragraph", "section"]
+class_kinds = ["data_item"]
+import_kinds = ["copy"]
+enable_complexity = false
+enable_type_inference = false
+
+[languages.pli]
+handler = "custom"
+plugin = "PliPlugin"
+module = "rgctl_lang_pli"
+crate = "rgctl-lang-pli"
+extensions = ["pli", "pl1", "inc"]
+aliases = ["pli", "pl1", "pl/i", "pl/1"]
+function_kinds = ["procedure"]
+class_kinds = ["structure"]
+import_kinds = ["include"]
+enable_complexity = false
+enable_type_inference = false
+
+[languages.jcl]
+handler = "custom"
+plugin = "JclPlugin"
+module = "rgctl_lang_jcl"
+crate = "rgctl-lang-jcl"
+extensions = ["jcl", "proc", "cntl"]
+aliases = ["jcl", "zos-jcl", "mvs-jcl"]
+function_kinds = ["step", "proc"]
+class_kinds = []
+import_kinds = ["include"]
+enable_complexity = false
+enable_type_inference = false
+
+[languages.apex]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_apex"
+crate = "tree-sitter-sfapex"
+extensions = ["cls", "trigger", "apex"]
+aliases = ["apex", "sfapex", "salesforce"]
+function_kinds = ["method_declaration", "constructor_declaration"]
+class_kinds = ["class_declaration", "interface_declaration", "enum_declaration", "trigger_declaration"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-apex/queries/tags.scm"
+
+[languages.pascal]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_pascal"
+crate = "tree-sitter-pascal"
+extensions = ["pas", "dpr", "dpk", "lpr"]
+aliases = ["pascal", "delphi", "objectpascal", "freepascal", "fpc"]
+function_kinds = ["defProc", "declProc"]
+class_kinds = ["declClass", "declIntf", "declType"]
+import_kinds = ["declUses"]
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-pascal/queries/tags.scm"
+
+[languages.perl]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_perl"
+crate = "ts-parser-perl"
+extensions = ["pl", "pm", "t"]
+aliases = ["perl", "pl", "pm"]
+function_kinds = ["subroutine_declaration_statement", "method_declaration_statement"]
+class_kinds = []
+import_kinds = ["use_statement", "require_statement"]
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-perl/queries/tags.scm"
+
+[languages.ada]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_ada"
+crate = "tree-sitter-ada"
+extensions = ["adb", "ads", "ada"]
+aliases = ["ada", "adb", "ads"]
+function_kinds = ["subprogram_declaration", "subprogram_body"]
+class_kinds = ["full_type_declaration", "task_type_declaration", "protected_type_declaration"]
+import_kinds = ["with_clause"]
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-ada/queries/tags.scm"
+
+[languages.matlab]
+handler = "queries"
+plugin = "QueryLanguagePlugin"
+module = "rgctl_lang_matlab"
+crate = "tree-sitter-matlab"
+extensions = ["matlab", "m"]
+aliases = ["matlab", "octave"]
+function_kinds = ["function_definition"]
+class_kinds = ["class_definition"]
+import_kinds = []
+enable_complexity = false
+enable_type_inference = false
+tags_scm = "crates/rgctl-lang-matlab/queries/tags.scm"

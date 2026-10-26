@@ -1,7 +1,7 @@
 //! JSON policy file loader for CLI commands.
 
-use rgctl_analysis::{PolicyRegistry, PolicyTemporal};
 use anyhow::{Context, Result};
+use rgctl_analysis::{PolicyRegistry, PolicyTemporal};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;

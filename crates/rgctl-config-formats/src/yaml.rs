@@ -1,7 +1,7 @@
 //! YAML configuration format plugin (span-preserving via `marked-yaml`).
 
 use crate::span_util::loc;
-use marked_yaml::{parse_yaml, Node as YamlNode};
+use marked_yaml::{Node as YamlNode, parse_yaml};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use std::path::Path;

@@ -1,9 +1,9 @@
 //! Single-pass AST extraction for Rust (`ScopeStack` + `KindDispatchTable`).
 
 use crate::extract_depth::{
-    extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
+    AST_MAX_DEPTH, extract_associated_type, extract_enum_variant_symbol, extract_extern_crate,
     extract_macro_definition, extract_mod_symbol, extract_trait_symbols, extract_type_item,
-    extract_use_symbols, module_prefix_from_path, visit_depth_relation_node, AST_MAX_DEPTH,
+    extract_use_symbols, module_prefix_from_path, visit_depth_relation_node,
 };
 use crate::plugin::RustPlugin;
 use rgctl_plugin_api::*;
@@ -60,7 +60,6 @@ const HANDLED_KINDS: &[(&str, HandlerMask)] = &[
     ("yield_expression", HandlerMask::CFG_STMT),
 ];
 
-
 static HANDLERS: OnceLock<AstHandlerTable> = OnceLock::new();
 static DISPATCH: OnceLock<KindDispatchTable> = OnceLock::new();
 
@@ -70,16 +69,11 @@ fn rust_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn rust_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&rust_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&rust_grammar(), HANDLED_KINDS))
 }
 
 fn rust_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&rust_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&rust_grammar(), MANIFEST_JSON))
 }
 
 /// Pending call site: flush after the full symbol list exists (forward refs).
@@ -167,13 +161,10 @@ pub fn extract_all_single_pass(
                             impl_ty.as_deref(),
                         )?;
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         let scope_kind = if sym.symbol_type == SymbolType::Method {
                             ScopeKind::Method
                         } else {
@@ -199,10 +190,7 @@ pub fn extract_all_single_pass(
                         let sym =
                             plugin.extract_type_definition(node, source, &file_path_str, false)?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Struct,
@@ -218,10 +206,7 @@ pub fn extract_all_single_pass(
                         let sym =
                             plugin.extract_type_definition(node, source, &file_path_str, true)?;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Enum,
@@ -240,10 +225,7 @@ pub fn extract_all_single_pass(
                     "mod_item" => {
                         if let Some(m) = extract_mod_symbol(node, source, &file_path_str) {
                             let name = m.name.clone();
-                            let qn = m
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = m.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(m);
                             ctx.enter_scope(
                                 ScopeKind::Module,
@@ -290,9 +272,9 @@ pub fn extract_all_single_pass(
                         let ty = node
                             .child_by_field_name("type")
                             .and_then(|n| {
-                                n.utf8_text(source).ok().map(|s| {
-                                    s.rsplit("::").next().unwrap_or(s).trim().to_string()
-                                })
+                                n.utf8_text(source)
+                                    .ok()
+                                    .map(|s| s.rsplit("::").next().unwrap_or(s).trim().to_string())
                             })
                             .or_else(|| {
                                 let mut c = node.walk();
@@ -349,19 +331,19 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "enum_variant" => {
-                        if let Some(frame) = ctx.scopes.current_type() {
-                            if frame.kind == ScopeKind::Enum {
-                                let enum_name = frame.name.clone().unwrap_or_default();
-                                let enum_qn = frame.qualified_prefix.clone();
-                                if let Some(v) = extract_enum_variant_symbol(
-                                    node,
-                                    source,
-                                    &file_path_str,
-                                    &enum_name,
-                                    &enum_qn,
-                                ) {
-                                    ctx.symbols.push(v);
-                                }
+                        if let Some(frame) = ctx.scopes.current_type()
+                            && frame.kind == ScopeKind::Enum
+                        {
+                            let enum_name = frame.name.clone().unwrap_or_default();
+                            let enum_qn = frame.qualified_prefix.clone();
+                            if let Some(v) = extract_enum_variant_symbol(
+                                node,
+                                source,
+                                &file_path_str,
+                                &enum_name,
+                                &enum_qn,
+                            ) {
+                                ctx.symbols.push(v);
                             }
                         }
                     }
@@ -369,23 +351,19 @@ pub fn extract_all_single_pass(
                 }
 
                 // --- Calls (deferred) ---
-                if RUST_CALL_KINDS.contains(&kind) {
-                    if let Some(frame) = ctx.scopes.current_function() {
-                        if let Some(idx) = frame.symbol_idx {
-                            pending_calls.push(PendingCall {
-                                node,
-                                from_symbol_idx: idx,
-                            });
-                        }
-                    }
+                if RUST_CALL_KINDS.contains(&kind)
+                    && let Some(frame) = ctx.scopes.current_function()
+                    && let Some(idx) = frame.symbol_idx
+                {
+                    pending_calls.push(PendingCall {
+                        node,
+                        from_symbol_idx: idx,
+                    });
                 }
 
                 // --- Depth relations (scope-based from_fn) ---
-                let from_fn = containing_function_from_scope(&ctx.scopes, &ctx.symbols).map(|s| {
-                    s.qualified_name
-                        .clone()
-                        .unwrap_or_else(|| s.name.clone())
-                });
+                let from_fn = containing_function_from_scope(&ctx.scopes, &ctx.symbols)
+                    .map(|s| s.qualified_name.clone().unwrap_or_else(|| s.name.clone()));
                 visit_depth_relation_node(
                     node,
                     source,
@@ -398,11 +376,8 @@ pub fn extract_all_single_pass(
                 // --- Complexity on control-flow / returns ---
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_expression"
-                        | "match_expression"
-                        | "while_expression"
-                        | "for_expression"
-                        | "loop_expression" => {
+                        "if_expression" | "match_expression" | "while_expression"
+                        | "for_expression" | "loop_expression" => {
                             let delta = 1 + ctx
                                 .scopes
                                 .current_function()

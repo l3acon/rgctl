@@ -139,9 +139,9 @@ fn decode_blob_map(bytes: &[u8]) -> Result<HashMap<String, Vec<u8>>> {
         )));
     }
     let mut blobs = HashMap::new();
-    blobs.try_reserve(count as usize).map_err(|_| {
-        Error::SerdeError(format!("content store entry count {count} too large"))
-    })?;
+    blobs
+        .try_reserve(count as usize)
+        .map_err(|_| Error::SerdeError(format!("content store entry count {count} too large")))?;
     for _ in 0..count {
         let klen = read_bincode_u64(bytes, &mut cur)? as usize;
         let key_bytes = read_exact_slice(bytes, &mut cur, klen, "key")?;

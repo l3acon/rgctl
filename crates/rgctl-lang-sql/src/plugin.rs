@@ -25,15 +25,15 @@ impl LanguagePlugin for Plugin {
     fn extract_all(&self, file_path: &Path, source: &[u8]) -> Result<ExtractAllResult> {
         crate::single_pass::extract_all_single_pass(self, file_path, source)
     }
-    
+
     fn extract_symbols(&self, _: &Path, _: &[u8]) -> Result<Vec<Symbol>> {
         unimplemented!("use extract_all")
     }
-    
+
     fn extract_relations(&self, _: &Path, _: &[u8], _: &[Symbol]) -> Result<Vec<Relation>> {
         unimplemented!("use extract_all")
     }
-    
+
     fn calculate_complexity(&self, symbol: &Symbol, _: &[u8]) -> Result<Option<ComplexityMetrics>> {
         Ok(complexity_from_metadata(symbol))
     }

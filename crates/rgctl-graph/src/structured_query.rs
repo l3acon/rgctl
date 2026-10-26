@@ -399,10 +399,10 @@ impl<'a> StructuredQuery<'a> {
         let Some(c) = class else {
             return true;
         };
-        if let Some(qn) = node.qualified_name.as_deref() {
-            if qn.contains(c) {
-                return true;
-            }
+        if let Some(qn) = node.qualified_name.as_deref()
+            && qn.contains(c)
+        {
+            return true;
         }
         if let Some(v) = node.get_property("class") {
             return v == c;
@@ -439,22 +439,18 @@ impl<'a> StructuredQuery<'a> {
         true
     }
 
+    #[allow(clippy::type_complexity)]
     fn indexes(
         &self,
     ) -> Result<Option<Arc<(HashMap<String, Vec<Uuid>>, HashMap<NodeType, Vec<Uuid>>)>>> {
-        Ok(self
-            .store
+        self.store
             .columnar()
             .map(|c| c.indexes_shared())
-            .transpose()?)
+            .transpose()
     }
 
     /// Resolve a unique symbol or return ambiguity / not-found errors.
-    pub fn resolve_symbol(
-        &self,
-        symbol: &str,
-        filters: &QueryFilters,
-    ) -> Result<Node> {
+    pub fn resolve_symbol(&self, symbol: &str, filters: &QueryFilters) -> Result<Node> {
         let mut matches = self.lookup_name_candidates(symbol, filters.exact)?;
         matches.retain(|n| self.node_passes(n, filters));
         match matches.len() {
@@ -483,10 +479,10 @@ impl<'a> StructuredQuery<'a> {
     }
 
     fn lookup_name_candidates(&self, symbol: &str, exact: bool) -> Result<Vec<Node>> {
-        if let Ok(uuid) = Uuid::parse_str(symbol) {
-            if let Some(n) = self.store.get_node(uuid)? {
-                return Ok(vec![n]);
-            }
+        if let Ok(uuid) = Uuid::parse_str(symbol)
+            && let Some(n) = self.store.get_node(uuid)?
+        {
+            return Ok(vec![n]);
         }
         if exact || !is_glob_pattern(symbol) {
             if let Some(indexes) = self.indexes()? {
@@ -552,10 +548,10 @@ impl<'a> StructuredQuery<'a> {
             }
         }
 
-        if let Some(annots) = filters.annotation_names.as_ref() {
-            if !annots.is_empty() {
-                return self.find_by_annotation(annots, pattern, filters);
-            }
+        if let Some(annots) = filters.annotation_names.as_ref()
+            && !annots.is_empty()
+        {
+            return self.find_by_annotation(annots, pattern, filters);
         }
 
         let candidates = if let Some(pat) = pattern {
@@ -586,10 +582,10 @@ impl<'a> StructuredQuery<'a> {
             let need_cold = Self::filters_need_cold_ext(filters);
             let mut out = Vec::new();
             for idx in 0..col.node_count() {
-                if let Some(want) = type_filter {
-                    if col.node_type_at(idx)? != want {
-                        continue;
-                    }
+                if let Some(want) = type_filter
+                    && col.node_type_at(idx)? != want
+                {
+                    continue;
                 }
                 if let Some(want_line) = filters.line {
                     let row = col.node_row_at(idx)?;
@@ -601,12 +597,10 @@ impl<'a> StructuredQuery<'a> {
                     let path = col.node_file_path_str(idx)?.unwrap_or("");
                     let pat = normalize_file_glob(glob);
                     let ok = glob_match(&pat, path)
-                        || (!glob.contains('/')
-                            && !glob.contains('\\')
-                            && {
-                                let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
-                                glob_match(&pat, base) || glob_match(glob, base)
-                            });
+                        || (!glob.contains('/') && !glob.contains('\\') && {
+                            let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+                            glob_match(&pat, base) || glob_match(glob, base)
+                        });
                     if !ok {
                         continue;
                     }
@@ -632,10 +626,10 @@ impl<'a> StructuredQuery<'a> {
             let Some(n) = self.store.get_node(id)? else {
                 continue;
             };
-            if let Some(t) = type_filter {
-                if n.node_type != t {
-                    continue;
-                }
+            if let Some(t) = type_filter
+                && n.node_type != t
+            {
+                continue;
             }
             if self.node_passes(&n, filters) {
                 out.push(n);
@@ -671,7 +665,10 @@ impl<'a> StructuredQuery<'a> {
             let Some(ann) = self.store.get_node(to)? else {
                 return Ok(());
             };
-            if !normalized.iter().any(|want| annotation_name_matches(&ann, want)) {
+            if !normalized
+                .iter()
+                .any(|want| annotation_name_matches(&ann, want))
+            {
                 return Ok(());
             }
             if !seen.insert(from) {
@@ -834,6 +831,7 @@ impl<'a> StructuredQuery<'a> {
     }
 
     /// Seeded or seedless relations.
+    #[allow(clippy::too_many_arguments)]
     pub fn relations(
         &self,
         symbol: Option<&str>,
@@ -884,18 +882,12 @@ impl<'a> StructuredQuery<'a> {
                 return Ok(());
             }
             let (source, target, dir_label, key) = match direction {
-                RelationDirection::In => (
-                    Self::project(&dst),
-                    Self::project(&src),
-                    "in",
-                    (to, from),
-                ),
-                RelationDirection::Out | RelationDirection::Both => (
-                    Self::project(&src),
-                    Self::project(&dst),
-                    "out",
-                    (from, to),
-                ),
+                RelationDirection::In => {
+                    (Self::project(&dst), Self::project(&src), "in", (to, from))
+                }
+                RelationDirection::Out | RelationDirection::Both => {
+                    (Self::project(&src), Self::project(&dst), "out", (from, to))
+                }
             };
             agg.entry(key)
                 .and_modify(|row| row.occurrences = row.occurrences.saturating_add(1))
@@ -931,6 +923,7 @@ impl<'a> StructuredQuery<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn relations_seeded(
         &self,
         symbol: &str,
@@ -978,8 +971,12 @@ impl<'a> StructuredQuery<'a> {
                     {
                         continue;
                     }
-                    if !Self::edge_scope_ok(&src, &dst, filters.scope.as_deref(), filters.scope_mode)
-                    {
+                    if !Self::edge_scope_ok(
+                        &src,
+                        &dst,
+                        filters.scope.as_deref(),
+                        filters.scope_mode,
+                    ) {
                         continue;
                     }
                     let key = (src_id, dst_id, incoming);
@@ -987,10 +984,10 @@ impl<'a> StructuredQuery<'a> {
                         .and_modify(|row| {
                             row.occurrences = row.occurrences.saturating_add(1);
                             // Keep the shortest hop when collapsing duplicates.
-                            if let (Some(h), Some(prev)) = (Some(hop), row.hops) {
-                                if h < prev {
-                                    row.hops = Some(h);
-                                }
+                            if let (Some(h), Some(prev)) = (Some(hop), row.hops)
+                                && h < prev
+                            {
+                                row.hops = Some(h);
                             }
                         })
                         .or_insert(EdgeRow {
@@ -1041,11 +1038,7 @@ impl<'a> StructuredQuery<'a> {
     }
 
     /// Inventory with zero-count enums for type/edge.
-    pub fn inventory(
-        &self,
-        by: InventoryBy,
-        filters: &QueryFilters,
-    ) -> Result<InventoryResult> {
+    pub fn inventory(&self, by: InventoryBy, filters: &QueryFilters) -> Result<InventoryResult> {
         match by {
             InventoryBy::Type => {
                 let mut map: HashMap<NodeType, usize> =
@@ -1163,11 +1156,7 @@ impl<'a> StructuredQuery<'a> {
             InventoryBy::File => {
                 let mut map: HashMap<String, usize> = HashMap::new();
                 for n in self.collect_nodes_hot_scan(None, filters)? {
-                    let key = n
-                        .file_path
-                        .as_deref()
-                        .unwrap_or("<unknown>")
-                        .to_string();
+                    let key = n.file_path.as_deref().unwrap_or("<unknown>").to_string();
                     *map.entry(key).or_insert(0) += 1;
                 }
                 let mut counts: Vec<_> = map
@@ -1323,7 +1312,7 @@ impl InventoryBy {
 
 /// Parse CLI node type string.
 pub fn parse_node_type(s: &str) -> Result<NodeType> {
-    let key = s.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let key = s.to_ascii_lowercase().replace(['-', '_'], "");
     for t in ALL_NODE_TYPES {
         if node_type_cli(*t).replace('_', "") == key {
             return Ok(*t);
@@ -1342,7 +1331,7 @@ pub fn parse_node_type(s: &str) -> Result<NodeType> {
 
 /// Parse CLI edge type string.
 pub fn parse_edge_type(s: &str) -> Result<EdgeType> {
-    let key = s.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let key = s.to_ascii_lowercase().replace(['-', '_'], "");
     if matches!(key.as_str(), "cochange" | "cochangeswith" | "cochanges") {
         return Ok(EdgeType::CoChangesWith);
     }
@@ -1492,19 +1481,19 @@ fn annotation_name_matches(node: &Node, want: &str) -> bool {
     if node.name == want {
         return true;
     }
-    if let Some(simple) = node.name.rsplit('.').next() {
-        if simple == want {
-            return true;
-        }
+    if let Some(simple) = node.name.rsplit('.').next()
+        && simple == want
+    {
+        return true;
     }
     if let Some(qn) = node.qualified_name.as_deref() {
         if qn == want {
             return true;
         }
-        if let Some(simple) = qn.rsplit('.').next() {
-            if simple == want {
-                return true;
-            }
+        if let Some(simple) = qn.rsplit('.').next()
+            && simple == want
+        {
+            return true;
         }
     }
     false
@@ -1558,15 +1547,17 @@ mod tests {
         let base = Node::new(NodeType::Class, "RouteBuilder")
             .with_qualified_name("org.apache.camel.builder.RouteBuilder")
             .with_file_path("<external>");
-        let imp = Node::new(NodeType::Import, "import javax.ws.rs.Path;")
-            .with_file_path("src/Svc.java");
+        let imp =
+            Node::new(NodeType::Import, "import javax.ws.rs.Path;").with_file_path("src/Svc.java");
         let imp_ejb = Node::new(NodeType::Import, "import javax.ejb.MessageDriven;")
             .with_file_path("src/OrderMDB.java");
         let imp_jms = Node::new(NodeType::Import, "import javax.jms.Topic;")
             .with_file_path("src/OrderMDB.java");
-        let imp_eclipselink =
-            Node::new(NodeType::Import, "import org.eclipse.persistence.sessions.Session;")
-                .with_file_path("src/Jpa.java");
+        let imp_eclipselink = Node::new(
+            NodeType::Import,
+            "import org.eclipse.persistence.sessions.Session;",
+        )
+        .with_file_path("src/Jpa.java");
         let mdb_ann = Node::new(NodeType::Annotation, "MessageDriven")
             .with_qualified_name("javax.ejb.MessageDriven")
             .with_file_path("<external>");
@@ -1704,7 +1695,11 @@ mod tests {
             )
             .unwrap();
         assert!(res.total >= 1);
-        assert!(res.entities.iter().any(|e| e.name.starts_with("import javax")));
+        assert!(
+            res.entities
+                .iter()
+                .any(|e| e.name.starts_with("import javax"))
+        );
     }
 
     #[test]
@@ -1832,7 +1827,11 @@ mod tests {
             .inventory(InventoryBy::ImportPrefix, &QueryFilters::default())
             .unwrap();
         assert_eq!(res.by, "import-prefix");
-        let keys: HashMap<_, _> = res.counts.iter().map(|c| (c.key.as_str(), c.count)).collect();
+        let keys: HashMap<_, _> = res
+            .counts
+            .iter()
+            .map(|c| (c.key.as_str(), c.count))
+            .collect();
         assert!(keys.get("javax.ws").copied().unwrap_or(0) >= 1);
         assert!(keys.get("javax.ejb").copied().unwrap_or(0) >= 1);
         assert!(keys.get("javax.jms").copied().unwrap_or(0) >= 1);
@@ -1849,7 +1848,10 @@ mod tests {
             import_package_prefix("import static org.junit.Assert.*;", 2),
             "org.junit"
         );
-        assert_eq!(import_package_prefix("com.fasterxml.jackson.databind.ObjectMapper", 2), "com.fasterxml");
+        assert_eq!(
+            import_package_prefix("com.fasterxml.jackson.databind.ObjectMapper", 2),
+            "com.fasterxml"
+        );
     }
 
     #[test]
@@ -1943,13 +1945,15 @@ mod tests {
             .unwrap_err();
         match err {
             Error::AmbiguousSymbol {
-                count,
-                candidates,
-                ..
+                count, candidates, ..
             } => {
                 assert_eq!(count, 2);
                 assert_eq!(candidates.len(), 2);
-                assert!(candidates.iter().any(|c| c.file.as_deref() == Some("A.java")));
+                assert!(
+                    candidates
+                        .iter()
+                        .any(|c| c.file.as_deref() == Some("A.java"))
+                );
             }
             other => panic!("expected AmbiguousSymbol, got {other:?}"),
         }
@@ -2028,7 +2032,10 @@ mod tests {
 
     #[test]
     fn normalize_file_basename_glob() {
-        assert_eq!(normalize_file_glob("PRTRestServiceRoute.java"), "*PRTRestServiceRoute.java");
+        assert_eq!(
+            normalize_file_glob("PRTRestServiceRoute.java"),
+            "*PRTRestServiceRoute.java"
+        );
         assert_eq!(
             normalize_file_glob("*/printing/**/*.java"),
             "*/printing/**/*.java"
@@ -2041,8 +2048,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("snap.bin");
         let mut backend = MemoryBackend::new();
-        let n = Node::new(NodeType::Function, "ServeHTTP")
-            .with_file_path("/tmp/pkg/util/handler.go");
+        let n =
+            Node::new(NodeType::Function, "ServeHTTP").with_file_path("/tmp/pkg/util/handler.go");
         // No qualified_name — Go/TS style.
         backend.insert_node(n).unwrap();
         write_columnar_from_backend(&backend, &path).unwrap();

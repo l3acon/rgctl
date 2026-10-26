@@ -1,6 +1,6 @@
 # rgctl-analysis
 
-Graph analysis algorithms for [rgctl](https://github.com/sshaaf/rgctl): CSR centrality (pull-based PageRank, sampled Brandes betweenness, HyperBall harmonic), Fast-Leiden community detection, SCC bitset blast radius, cross-language MRO & override resolution, SCIP compiler-index overlay, git co-change churn, lexical-scope-aware CFG/PDG construction, lazy v3 archive slicing, field-sensitive taint analysis, exact/Bloom/SESE+1-WL clone detection, architectural policy & PR review gates, and binary-quantized hybrid semantic search.
+Graph analysis algorithms for [rgctl](https://github.com/rgctl/rgctl): CSR centrality (pull-based PageRank, sampled Brandes betweenness, HyperBall harmonic), Fast-Leiden community detection, SCC bitset blast radius, cross-language MRO & override resolution, SCIP compiler-index overlay, git co-change churn, lexical-scope-aware CFG/PDG construction, lazy v3 archive slicing, field-sensitive taint analysis, exact/Bloom/SESE+1-WL clone detection, architectural policy & PR review gates, and binary-quantized hybrid semantic search.
 
 See [docs/analysis-architecture.md](../../docs/analysis-architecture.md) for the three-tier graph model.
 

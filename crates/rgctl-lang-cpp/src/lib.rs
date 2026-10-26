@@ -25,6 +25,7 @@ mod single_pass;
 pub use plugin::CppPlugin;
 
 /// Register this language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(CppPlugin::new().expect("init CppPlugin")));
 }

@@ -22,11 +22,13 @@ mod source_catalog;
 mod taint_export;
 
 pub use bundle::{
-    DASHBOARD_DIR_NAME, DASHBOARD_LEGACY_ENV, DASHBOARD_V2_ENV, default_dashboard_path, dist_embedded,
+    DASHBOARD_DIR_NAME, DASHBOARD_LEGACY_ENV, DASHBOARD_V2_ENV, default_dashboard_path,
+    dist_embedded,
 };
 pub use communities::{COMMUNITIES_FILE, COMMUNITIES_SCHEMA_VERSION, CommunitiesPayload};
 pub use dataflow_export::{DATAFLOW_INDEX_FILE, DataflowExportSummary};
 pub use export_context::DashboardExportContext;
+pub use kantra_export::{KANTRA_INDEX_FILE, KantraExportSummary};
 pub use manifest::{
     AnalysisSection, DashboardManifest, KantraSection, MANIFEST_SCHEMA_VERSION, MetricsSection,
     SemanticSection, ViewSection,
@@ -38,7 +40,6 @@ pub use migration_export::{
     write_migration_plan_from_repo, write_migration_plan_from_repo_with_context,
 };
 pub use mutations_export::{MUTATIONS_INDEX_FILE, MutationsExportSummary};
-pub use kantra_export::{KANTRA_INDEX_FILE, KantraExportSummary};
 pub use slice_export::{SLICE_INDEX_FILE, SliceExportSummary};
 pub use taint_export::{TAINT_INDEX_FILE, TaintExportSummary};
 
@@ -46,6 +47,7 @@ use blast_export::{export_blast_bundle, load_columnar_uuid_indices};
 use bundle::{extract_static_assets, inject_manifest_bootstrap};
 use dataflow_export::export_dataflow_index;
 use function_metrics_export::export_function_metrics;
+use kantra_export::export_kantra_bundle;
 use manifest::DashboardManifest as Manifest;
 use metagraph::write_metagraph;
 use mutations_export::export_mutations_index;
@@ -56,7 +58,6 @@ use rgctl_graph::schema::{EdgeType, NodeType};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use kantra_export::export_kantra_bundle;
 use taint_export::export_taint_bundle;
 
 /// Write dashboard bundle: static UI, manifest, graph payload copy.
@@ -120,7 +121,8 @@ pub fn export_dashboard_bundle_if_changed_with_context(
                 // bundle was produced"; only the recorded version says *which* bundle it was. Without the
                 // second comparison, switching bundles matched, returned early, and left the previous
                 // bundle extracted — a silent no-op that looks like the flag being ignored.
-                let same_graph = manifest.export_fingerprint.as_deref() == Some(fingerprint.as_str());
+                let same_graph =
+                    manifest.export_fingerprint.as_deref() == Some(fingerprint.as_str());
                 let same_bundle = manifest.bundle_version.as_deref() == Some(version);
                 if same_graph && same_bundle {
                     return Ok(false);
@@ -220,7 +222,9 @@ fn export_dashboard_bundle_inner(
         })?;
     }
     let semantic_summary = semantic_section(repo_root);
-    let kantra_summary = profile_stage("export_kantra", || export_kantra_bundle(repo_root, &out_dir))?;
+    let kantra_summary = profile_stage("export_kantra", || {
+        export_kantra_bundle(repo_root, &out_dir)
+    })?;
     let mut manifest = Manifest::with_phases(
         node_count,
         edge_count,
@@ -526,4 +530,3 @@ fn semantic_section(repo_root: &Path) -> Option<manifest::SemanticSection> {
         graph_digest: index.graph_digest,
     })
 }
-

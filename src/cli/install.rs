@@ -48,7 +48,11 @@ pub fn run(ctx: &CliContext, args: InstallArgs) -> Result<()> {
     if args.global_install {
         validate_global_install(&manifest, &agent_ids).map_err(anyhow::Error::msg)?;
     }
-    let scope = if args.global_install { "global" } else { "local" };
+    let scope = if args.global_install {
+        "global"
+    } else {
+        "local"
+    };
     let prefix = install_prefix(ctx, args.global_install)?;
 
     let artifacts = collect_artifacts(&manifest, &agent_ids, args.skill, args.with_policy)
@@ -176,10 +180,10 @@ fn classify_write(dest: &Path, contents: &[u8], force: bool) -> Result<InstallWr
 }
 
 fn atomic_write(dest: &Path, contents: &[u8]) -> Result<()> {
-    if let Ok(meta) = fs::symlink_metadata(dest) {
-        if meta.file_type().is_symlink() {
-            fs::remove_file(dest).with_context(|| format!("remove symlink {}", dest.display()))?;
-        }
+    if let Ok(meta) = fs::symlink_metadata(dest)
+        && meta.file_type().is_symlink()
+    {
+        fs::remove_file(dest).with_context(|| format!("remove symlink {}", dest.display()))?;
     }
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).with_context(|| format!("mkdir {}", parent.display()))?;

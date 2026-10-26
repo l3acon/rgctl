@@ -2,9 +2,10 @@
 
 use crate::single_pass::{extract_all_single_pass, ruby_ast_handlers};
 use rgctl_plugin_api::{
-    callee_name, containing_function, complexity_from_metadata, parse_with_pool, ruby_call_callee,
-    walk_calls, AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin,
-    Parameter, Relation, RelationType, Result, RUBY_CALL_KINDS, SourceLocation, Symbol, SymbolType,
+    AstHandlerTable, ComplexityMetrics, Error, ExtractAllResult, Field, LanguagePlugin, Parameter,
+    RUBY_CALL_KINDS, Relation, RelationType, Result, SourceLocation, Symbol, SymbolType,
+    callee_name, complexity_from_metadata, containing_function, parse_with_pool, ruby_call_callee,
+    walk_calls,
 };
 use rgctl_plugin_helpers::ComplexityCalculator;
 use std::path::Path;
@@ -119,9 +120,7 @@ impl RubyPlugin {
         for child in params.children(&mut c) {
             match child.kind() {
                 "identifier" | "optional_parameter" | "keyword_parameter" => {
-                    let name_node = child
-                        .child_by_field_name("name")
-                        .unwrap_or(child);
+                    let name_node = child.child_by_field_name("name").unwrap_or(child);
                     if let Ok(name) = name_node.utf8_text(source) {
                         out.push(Parameter {
                             name: name.to_string(),
@@ -130,11 +129,16 @@ impl RubyPlugin {
                         });
                     }
                 }
-                "block_parameter" | "forward_parameter" | "splat_parameter"
+                "block_parameter"
+                | "forward_parameter"
+                | "splat_parameter"
                 | "hash_splat_parameter" => {
                     if let Ok(name) = child.utf8_text(source) {
                         out.push(Parameter {
-                            name: name.trim_start_matches('&').trim_start_matches('*').to_string(),
+                            name: name
+                                .trim_start_matches('&')
+                                .trim_start_matches('*')
+                                .to_string(),
                             param_type: None,
                             default_value: None,
                         });
@@ -177,7 +181,10 @@ impl RubyPlugin {
                     }),
                 )
             } else {
-                (None, serde_json::json!({ "language": "ruby", "is_constructor": true }))
+                (
+                    None,
+                    serde_json::json!({ "language": "ruby", "is_constructor": true }),
+                )
             }
         } else if let Some(tq) = owner_type_qn {
             let qn = if singleton {
@@ -269,11 +276,13 @@ impl RubyPlugin {
         while let Some(node) = stack.pop() {
             if node.kind() == "call" {
                 if let Some(method) = ruby_call_callee(node, source) {
-                    if matches!(method.as_str(), "attr_reader" | "attr_writer" | "attr_accessor") {
+                    if matches!(
+                        method.as_str(),
+                        "attr_reader" | "attr_writer" | "attr_accessor"
+                    ) {
                         let mut c = node.walk();
                         for child in node.children(&mut c) {
-                            if child.kind() == "argument_list" || child.kind() == "simple_symbol"
-                            {
+                            if child.kind() == "argument_list" || child.kind() == "simple_symbol" {
                                 let mut c2 = child.walk();
                                 for arg in child.children(&mut c2) {
                                     if let Some(n) = Self::constant_text(arg, source) {
@@ -333,6 +342,7 @@ impl RubyPlugin {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn traverse_symbols(
         &self,
         node: Node,
@@ -345,7 +355,8 @@ impl RubyPlugin {
     ) -> Result<()> {
         match node.kind() {
             "class" => {
-                let (sym, type_qn) = self.extract_class_or_module(node, source, file_path, scope, false)?;
+                let (sym, type_qn) =
+                    self.extract_class_or_module(node, source, file_path, scope, false)?;
                 symbols.push(sym);
                 scope.push(
                     node.child_by_field_name("name")
@@ -356,7 +367,8 @@ impl RubyPlugin {
                 scope.pop();
             }
             "module" => {
-                let (sym, type_qn) = self.extract_class_or_module(node, source, file_path, scope, true)?;
+                let (sym, type_qn) =
+                    self.extract_class_or_module(node, source, file_path, scope, true)?;
                 symbols.push(sym);
                 scope.push(
                     node.child_by_field_name("name")
@@ -367,7 +379,9 @@ impl RubyPlugin {
                 scope.pop();
             }
             "singleton_class" => {
-                let outer = owner_type_qn.clone().unwrap_or_else(|| Self::join_qn(scope, "Object"));
+                let outer = owner_type_qn
+                    .clone()
+                    .unwrap_or_else(|| Self::join_qn(scope, "Object"));
                 self.walk_type_body(node, source, file_path, scope, Some(outer), symbols)?;
             }
             "method" => {
@@ -500,7 +514,12 @@ impl RubyPlugin {
         Ok(())
     }
 
-    fn symbols_from_tree(&self, root: Node, source: &[u8], file_path: &Path) -> Result<Vec<Symbol>> {
+    fn symbols_from_tree(
+        &self,
+        root: Node,
+        source: &[u8],
+        file_path: &Path,
+    ) -> Result<Vec<Symbol>> {
         let mut symbols = Vec::new();
         let mut scope = Vec::new();
         let file_path_str = file_path.to_string_lossy();
@@ -626,6 +645,7 @@ impl RubyPlugin {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
     fn walk_relation_calls(
         &self,
         node: Node,
@@ -654,9 +674,7 @@ impl RubyPlugin {
                 let from = containing_function(node, function_symbols)
                     .and_then(|f| f.qualified_name.clone())
                     .or_else(|| next_owner.clone())
-                    .or_else(|| {
-                        scope.last().map(|n| Self::join_qn(scope, n))
-                    });
+                    .or_else(|| scope.last().map(|n| Self::join_qn(scope, n)));
                 if let Some(from) = from {
                     if let Some(callee) = ruby_call_callee(node, source) {
                         match callee.as_str() {
@@ -833,7 +851,10 @@ impl LanguagePlugin for RubyPlugin {
             cognitive: ComplexityCalculator::cognitive(func_node, RUBY_COMPLEXITY_BRANCH_KINDS),
             loc: ComplexityCalculator::loc(func_node),
             parameters: symbol.parameters.len(),
-            nesting_depth: ComplexityCalculator::nesting_depth(func_node, &["body_statement", "block"]),
+            nesting_depth: ComplexityCalculator::nesting_depth(
+                func_node,
+                &["body_statement", "block"],
+            ),
             returns: ComplexityCalculator::return_count(func_node, "return"),
         }))
     }
@@ -857,12 +878,13 @@ end
         let plugin = RubyPlugin::new().unwrap();
         let path = Path::new("order.rb");
         let symbols = plugin.extract_symbols(path, source).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Order" && s.symbol_type == SymbolType::Class));
-        let method = symbols.iter().find(|s| s.name == "total").expect("total");
-        assert_eq!(
-            method.qualified_name.as_deref(),
-            Some("Shop::Order#total")
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Order" && s.symbol_type == SymbolType::Class)
         );
+        let method = symbols.iter().find(|s| s.name == "total").expect("total");
+        assert_eq!(method.qualified_name.as_deref(), Some("Shop::Order#total"));
     }
 
     #[test]
@@ -880,7 +902,12 @@ end
             .iter()
             .find(|s| s.name == "initialize")
             .expect("init");
-        assert!(init.metadata.get("is_constructor").and_then(|v| v.as_bool()).unwrap_or(false));
+        assert!(
+            init.metadata
+                .get("is_constructor")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        );
         assert_eq!(init.qualified_name.as_deref(), Some("Order.<init>"));
         let class = symbols.iter().find(|s| s.name == "Order").expect("class");
         assert!(class.fields.iter().any(|f| f.name == "customer"));
@@ -903,7 +930,11 @@ end
         let symbols = plugin.extract_symbols(path, source).unwrap();
         assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Import));
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
-        assert!(relations.iter().any(|r| r.relation_type == RelationType::Calls));
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Calls)
+        );
     }
 
     #[test]
@@ -926,7 +957,8 @@ end
             .find(|r| r.relation_type == RelationType::Extends)
             .expect("extends");
         assert_eq!(extend.from, "OrderDTO", "Extends from should be class QN");
-        let path2 = manifest_dir.join("../../rgctl-tests/ecommerce-ruby/app/services/order_service.rb");
+        let path2 =
+            manifest_dir.join("../../rgctl-tests/ecommerce-ruby/app/services/order_service.rb");
         let source2 = std::fs::read(&path2).expect("read service");
         let extracted2 = plugin.extract_all(&path2, &source2).unwrap();
         assert!(
@@ -957,6 +989,10 @@ end
         let path = Path::new("user.rb");
         let symbols = plugin.extract_symbols(path, source).unwrap();
         let relations = plugin.extract_relations(path, source, &symbols).unwrap();
-        assert!(relations.iter().any(|r| r.relation_type == RelationType::Extends));
+        assert!(
+            relations
+                .iter()
+                .any(|r| r.relation_type == RelationType::Extends)
+        );
     }
 }

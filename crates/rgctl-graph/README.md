@@ -1,6 +1,6 @@
 # rgctl-graph
 
-Graph storage and query layer for [rgctl](https://github.com/sshaaf/rgctl).
+Graph storage and query layer for [rgctl](https://github.com/rgctl/rgctl).
 
 Default discover artifact is **`.rgctl/graph.snapshot.bin`** — an **`RGCL` v2** memory-mapped columnar snapshot (`ColumnarGraphMmap`, `SnapshotNodeStore`). See [docs/graph-storage-architecture.md](../../docs/graph-storage-architecture.md).
 

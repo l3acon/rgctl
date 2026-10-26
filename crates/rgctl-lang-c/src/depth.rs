@@ -57,9 +57,7 @@ pub fn extract_union_specifier_named(
     let tag = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source));
-    let name = typedef_name
-        .map(str::to_string)
-        .or(tag.clone())?;
+    let name = typedef_name.map(str::to_string).or(tag.clone())?;
     let mut metadata = serde_json::json!({
         "language": "c",
         "kind": "union_specifier",
@@ -94,7 +92,9 @@ pub fn extract_preproc_def(node: Node, source: &[u8], file_path: &str) -> Option
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
-    let value = node.child_by_field_name("value").and_then(|n| text(n, source));
+    let value = node
+        .child_by_field_name("value")
+        .and_then(|n| text(n, source));
     Some(Symbol {
         name: name.clone(),
         symbol_type: SymbolType::Macro,
@@ -123,7 +123,9 @@ pub fn extract_preproc_function_def(node: Node, source: &[u8], file_path: &str) 
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
-    let value = node.child_by_field_name("value").and_then(|n| text(n, source));
+    let value = node
+        .child_by_field_name("value")
+        .and_then(|n| text(n, source));
     Some(Symbol {
         name: name.clone(),
         symbol_type: SymbolType::Macro,

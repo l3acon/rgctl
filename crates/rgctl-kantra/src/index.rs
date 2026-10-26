@@ -34,15 +34,7 @@ pub fn hydrate_catalog(backend: &mut MemoryBackend, catalog: &KantraCatalog) -> 
     let classified = classify_rules(&catalog.rules);
     let support_by_index: HashMap<usize, (&RuleSupport, Option<&str>)> = classified
         .iter()
-        .map(|c| {
-            (
-                c.rule_index,
-                (
-                    &c.support,
-                    c.reason.as_deref(),
-                ),
-            )
-        })
+        .map(|c| (c.rule_index, (&c.support, c.reason.as_deref())))
         .collect();
 
     let ruleset_id = ruleset_node_id(&catalog.catalog_id);
@@ -83,13 +75,13 @@ fn build_rule_node(
 ) -> Node {
     let mut node = Node::new(NodeType::KantraRule, rule.rule_id.clone());
     node.qualified_name = Some(rule.rule_id.clone().into());
-    node.properties.insert("rule_id".into(), rule.rule_id.clone());
+    node.properties
+        .insert("rule_id".into(), rule.rule_id.clone());
     if let Some(cat) = &rule.category {
         node.properties.insert("category".into(), cat.clone());
     }
     if let Some(effort) = rule.effort {
-        node.properties
-            .insert("effort".into(), effort.to_string());
+        node.properties.insert("effort".into(), effort.to_string());
     }
     if let Some(msg) = &rule.message {
         node.properties.insert("message".into(), msg.clone());
@@ -98,7 +90,8 @@ fn build_rule_node(
         node.properties
             .insert("support".into(), support_label(support).to_string());
         if let Some(r) = reason {
-            node.properties.insert("support_reason".into(), (*r).to_string());
+            node.properties
+                .insert("support_reason".into(), (*r).to_string());
         }
     }
     apply_konveyor_labels(&mut node.properties, &rule.labels);
@@ -135,16 +128,9 @@ fn strip_kantra_nodes(backend: &mut MemoryBackend) -> Result<()> {
         .map_err(|e| KantraError::msg(e.to_string()))?
         .into_iter()
         .filter(|id| {
-            backend
-                .get_node(*id)
-                .ok()
-                .flatten()
-                .is_some_and(|n| {
-                    matches!(
-                        n.node_type,
-                        NodeType::KantraRule | NodeType::KantraRuleset
-                    )
-                })
+            backend.get_node(*id).ok().flatten().is_some_and(|n| {
+                matches!(n.node_type, NodeType::KantraRule | NodeType::KantraRuleset)
+            })
         })
         .collect();
     for id in to_remove {
@@ -160,7 +146,6 @@ mod tests {
     use super::*;
     use crate::schema::KantraRule;
     use rgctl_graph::backend::MemoryBackend;
-    use serde_yaml::Value;
 
     fn sample_rule(id: &str, labels: &[&str]) -> KantraRule {
         KantraRule {
@@ -184,13 +169,8 @@ mod tests {
         };
         let mut backend = MemoryBackend::new();
         hydrate_catalog(&mut backend, &catalog).unwrap();
-        let rules = backend
-            .find_nodes_by_type(NodeType::KantraRule)
-            .unwrap();
+        let rules = backend.find_nodes_by_type(NodeType::KantraRule).unwrap();
         assert_eq!(rules.len(), 1);
-        assert_eq!(
-            rules[0].get_property("konveyor.io/target"),
-            Some("quarkus")
-        );
+        assert_eq!(rules[0].get_property("konveyor.io/target"), Some("quarkus"));
     }
 }

@@ -52,7 +52,7 @@ impl KindDispatchTable {
         language: &tree_sitter::Language,
         entries: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
     ) -> Self {
-        let capacity = (language.node_kind_count() as usize).max(MAX_KIND_ID);
+        let capacity = language.node_kind_count().max(MAX_KIND_ID);
         let mut table = Self::with_capacity(capacity);
         for (name, label) in entries {
             let Some(mask) = HandlerMask::from_coverage_label(label.as_ref()) else {

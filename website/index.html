@@ -38,6 +38,7 @@
     <script>
       (function () {
         var path = location.pathname.replace(/^\/rgctl\/?/, "/") || "/";
+        if (path === "//") path = "/";
         var href = "https://rgctl.io" + path + location.search + location.hash;
         var a = document.getElementById("dest");
         if (a) {

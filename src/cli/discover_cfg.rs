@@ -1,5 +1,6 @@
 //! Parallel CFG/PDG/taint analysis for discover `--with-cfg` / `--with-taint`.
 
+use crate::analysis::hash_maps::FxHashMap;
 use crate::analysis::storage::stable_function_key;
 use crate::analysis::{
     AnalysisIndexEntry, AnalysisStorage, AstSkeletonRecord, CfgPdgRecord, ControlFlowGraph,
@@ -8,7 +9,6 @@ use crate::analysis::{
     build_file_local_types_from_tree, build_function_skeleton_from_tree, cfg_language_id_from_path,
     extract_writes_from_cfg,
 };
-use crate::analysis::hash_maps::FxHashMap;
 use rayon::prelude::*;
 use rgctl_graph::code_index::hash_code;
 use rgctl_graph::schema::Node;
@@ -106,13 +106,7 @@ pub struct CfgAnalysisBatchResult {
 }
 
 impl CfgAnalysisBatchResult {
-    fn record_skip(
-        &mut self,
-        reason: CfgSkipReason,
-        file_path: &str,
-        symbol: &str,
-        verbose: bool,
-    ) {
+    fn record_skip(&mut self, reason: CfgSkipReason, file_path: &str, symbol: &str, verbose: bool) {
         self.error_count += 1;
         match reason {
             CfgSkipReason::UnsupportedLanguage => self.skip_unsupported_language += 1,
@@ -297,11 +291,7 @@ pub fn run_cfg_analysis_batch(
     }
 
     let stage_profile = stage_ref.map(|stage| {
-        let analyzed = nested
-            .iter()
-            .flatten()
-            .filter(|w| w.is_ok())
-            .count();
+        let analyzed = nested.iter().flatten().filter(|w| w.is_ok()).count();
         emit_stage_profile(stage, analyzed)
     });
     if let (Some(log), true) = (timing_log, options.verbose) {
@@ -324,17 +314,12 @@ pub fn run_cfg_analysis_batch(
         );
     }
 
-    for (group, outcomes) in groups.iter().zip(nested.into_iter()) {
-        for (&func_idx, outcome) in group.func_indices.iter().zip(outcomes.into_iter()) {
+    for (group, outcomes) in groups.iter().zip(nested) {
+        for (&func_idx, outcome) in group.func_indices.iter().zip(outcomes) {
             let func = &functions[func_idx];
             match outcome {
                 Err(reason) => {
-                    result.record_skip(
-                        reason,
-                        &group.file_path,
-                        &func.name,
-                        options.verbose,
-                    );
+                    result.record_skip(reason, &group.file_path, &func.name, options.verbose);
                 }
                 Ok(w) => {
                     if w.from_cache {
@@ -358,10 +343,10 @@ pub fn run_cfg_analysis_batch(
                     if let Some(bytes) = w.archive_bytes {
                         result.archive_record_bytes.push((w.function_id, bytes));
                     }
-                    if let Some(bytes) = w.analysis_bytes {
-                        if !w.skip_persist {
-                            save_bytes.push((w.function_id, bytes));
-                        }
+                    if let Some(bytes) = w.analysis_bytes
+                        && !w.skip_persist
+                    {
+                        save_bytes.push((w.function_id, bytes));
                     }
                 }
             }
@@ -487,17 +472,16 @@ fn process_file_group(
     };
 
     let parsed = ParsedSourceFile::parse(&group.language, source.as_bytes()).ok();
-    let file_locals: FxHashMap<(usize, String), HashMap<String, String>> =
-        parsed
-            .as_ref()
-            .map(|p| {
-                build_file_local_types_from_tree(
-                    &group.language,
-                    p.tree().root_node(),
-                    source.as_bytes(),
-                )
-            })
-            .unwrap_or_default();
+    let file_locals: FxHashMap<(usize, String), HashMap<String, String>> = parsed
+        .as_ref()
+        .map(|p| {
+            build_file_local_types_from_tree(
+                &group.language,
+                p.tree().root_node(),
+                source.as_bytes(),
+            )
+        })
+        .unwrap_or_default();
 
     group
         .func_indices
@@ -585,18 +569,13 @@ fn is_constructor_node(node: &Node) -> bool {
 }
 
 fn function_name_looks_like_ctor(name: &str, node: &Node) -> bool {
-    if let Some(enclosing) = node
-        .properties
-        .get("member_of")
-        .cloned()
-        .or_else(|| {
-            node.qualified_name.as_ref().and_then(|qn| {
-                qn.rsplit_once('#')
-                    .map(|(o, _)| o.to_string())
-                    .or_else(|| qn.rsplit_once('.').map(|(o, _)| o.to_string()))
-            })
+    if let Some(enclosing) = node.properties.get("member_of").cloned().or_else(|| {
+        node.qualified_name.as_ref().and_then(|qn| {
+            qn.rsplit_once('#')
+                .map(|(o, _)| o.to_string())
+                .or_else(|| qn.rsplit_once('.').map(|(o, _)| o.to_string()))
         })
-    {
+    }) {
         return name == enclosing || enclosing.ends_with(&format!(".{name}"));
     }
     false
@@ -735,14 +714,14 @@ fn compute_function_cfg(
     }
 
     // Merge single-pass file locals into CFG before field-write extraction / PDG.
-    if let Some(start) = func_node.start_line {
-        if let Some(locals) = file_locals.get(&(start, func_node.name.to_string())) {
-            for (k, v) in locals {
-                cfg_data
-                    .local_types
-                    .entry(k.clone())
-                    .or_insert_with(|| v.clone());
-            }
+    if let Some(start) = func_node.start_line
+        && let Some(locals) = file_locals.get(&(start, func_node.name.to_string()))
+    {
+        for (k, v) in locals {
+            cfg_data
+                .local_types
+                .entry(k.clone())
+                .or_insert_with(|| v.clone());
         }
     }
 
@@ -796,15 +775,15 @@ fn compute_function_cfg(
         taint_rules,
     )?;
 
-    if let (Some(start), Some(log)) = (total_start, timings) {
-        if let Ok(mut entries) = log.lock() {
-            entries.push(CfgFunctionTiming {
-                file_path: file_path.to_string(),
-                function_name: func_node.name.to_string(),
-                blocks: work.blocks,
-                total_ns: start.elapsed().as_nanos() as u64,
-            });
-        }
+    if let (Some(start), Some(log)) = (total_start, timings)
+        && let Ok(mut entries) = log.lock()
+    {
+        entries.push(CfgFunctionTiming {
+            file_path: file_path.to_string(),
+            function_name: func_node.name.to_string(),
+            blocks: work.blocks,
+            total_ns: start.elapsed().as_nanos() as u64,
+        });
     }
 
     Some(work)
@@ -880,12 +859,10 @@ fn compute_from_cfg(
     } else {
         (None, 0, 0)
     };
-    if enable_taint {
-        if let (Some(stage), Some(start)) = (stage, taint_start) {
-            stage
-                .taint_ns
-                .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        }
+    if enable_taint && let (Some(stage), Some(start)) = (stage, taint_start) {
+        stage
+            .taint_ns
+            .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
     }
 
     let analysis = FunctionAnalysis {

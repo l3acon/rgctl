@@ -107,8 +107,8 @@ impl ViolationLedger {
     }
 
     fn load_from_file(&mut self, path: &Path) -> Result<()> {
-        let file = File::open(path)
-            .map_err(|e| Error::Other(format!("read violation ledger: {e}")))?;
+        let file =
+            File::open(path).map_err(|e| Error::Other(format!("read violation ledger: {e}")))?;
         for line in BufReader::new(file).lines() {
             let line = line.map_err(|e| Error::Other(format!("read ledger line: {e}")))?;
             if line.trim().is_empty() {

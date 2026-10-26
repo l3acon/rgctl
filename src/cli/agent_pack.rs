@@ -173,7 +173,7 @@ fn collect_skills(
     out: &mut Vec<PackArtifact>,
     seen_dest: &mut HashMap<PathBuf, ()>,
 ) -> Result<(), String> {
-    for (path, _) in pack_files() {
+    for path in pack_files().keys() {
         let path = path.to_string_lossy();
         if !path.starts_with(skills_prefix) {
             continue;
@@ -205,7 +205,7 @@ fn collect_commands(
     out: &mut Vec<PackArtifact>,
     seen_dest: &mut HashMap<PathBuf, ()>,
 ) -> Result<(), String> {
-    for (path, _) in pack_files() {
+    for path in pack_files().keys() {
         let path = path.to_string_lossy();
         if !path.starts_with(commands_prefix) {
             continue;
@@ -263,14 +263,11 @@ fn command_workflow_id(after_embed: &str) -> Option<String> {
 }
 
 pub fn bundle_bytes(bundle_rel: &Path) -> Option<&[u8]> {
-    pack_files()
-        .get(bundle_rel)
-        .map(|v| v.as_slice())
+    pack_files().get(bundle_rel).map(|v| v.as_slice())
 }
 
 /// Default install targets when `--tools` is omitted (phased v1 per #84).
-pub const DEFAULT_INSTALL_AGENTS: &[&str] =
-    &["cursor", "claude", "codex", "agents", "antigravity"];
+pub const DEFAULT_INSTALL_AGENTS: &[&str] = &["cursor", "claude", "codex", "agents", "antigravity"];
 
 pub fn all_agent_ids(manifest: &PackManifest) -> Vec<String> {
     manifest.agents.iter().map(|a| a.id.clone()).collect()
@@ -299,9 +296,7 @@ pub fn resolve_tools(
             );
         }
         if ids.is_empty() {
-            return Err(
-                "no valid agent ids in --tools (use `rgctl install --list-agents`)".into(),
-            );
+            return Err("no valid agent ids in --tools (use `rgctl install --list-agents`)".into());
         }
         return Ok(ids);
     }
@@ -321,7 +316,11 @@ pub fn normalize_tool_ids(
     manifest: &PackManifest,
     tools: Vec<String>,
 ) -> Result<(Vec<String>, Vec<String>), String> {
-    let known: HashMap<&str, ()> = manifest.agents.iter().map(|a| (a.id.as_str(), ())).collect();
+    let known: HashMap<&str, ()> = manifest
+        .agents
+        .iter()
+        .map(|a| (a.id.as_str(), ()))
+        .collect();
     if tools.iter().any(|t| t == "all") {
         return Ok((all_agent_ids(manifest), Vec::new()));
     }
@@ -338,7 +337,10 @@ pub fn normalize_tool_ids(
 }
 
 /// Reject `-g` when any selected agent is project-local only.
-pub fn validate_global_install(manifest: &PackManifest, agent_ids: &[String]) -> Result<(), String> {
+pub fn validate_global_install(
+    manifest: &PackManifest,
+    agent_ids: &[String],
+) -> Result<(), String> {
     for id in agent_ids {
         let entry = manifest
             .agents
@@ -362,7 +364,10 @@ mod tests {
     fn embedded_pack_lists_cursor_skills() {
         let n = pack_files()
             .keys()
-            .filter(|p| p.to_string_lossy().starts_with("agents/host-cursor/skills/"))
+            .filter(|p| {
+                p.to_string_lossy()
+                    .starts_with("agents/host-cursor/skills/")
+            })
             .count();
         assert!(n > 5, "expected cursor skills in zip, got {n}");
     }
@@ -371,13 +376,15 @@ mod tests {
     fn embedded_pack_includes_review_skill_and_cursor_command() {
         let m = load_manifest().expect("manifest");
         assert!(
-            m.commands.iter().any(|c| c.id == "review" && c.skill == "rgctl-review"),
+            m.commands
+                .iter()
+                .any(|c| c.id == "review" && c.skill == "rgctl-review"),
             "manifest commands should list review"
         );
         assert!(
-            pack_files()
-                .keys()
-                .any(|p| p.to_string_lossy().ends_with("skills/rgctl-review/SKILL.md")),
+            pack_files().keys().any(|p| p
+                .to_string_lossy()
+                .ends_with("skills/rgctl-review/SKILL.md")),
             "missing rgctl-review skill in zip"
         );
         assert!(
@@ -390,7 +397,8 @@ mod tests {
         let arts = collect_artifacts(&m, &["cursor".to_string()], true, false).expect("arts");
         assert!(
             arts.iter()
-                .any(|a| a.kind == PackArtifactKind::Command && a.workflow.as_deref() == Some("review")),
+                .any(|a| a.kind == PackArtifactKind::Command
+                    && a.workflow.as_deref() == Some("review")),
             "collect_artifacts should include review command"
         );
         assert!(
@@ -406,10 +414,7 @@ mod tests {
     fn default_install_agents_are_v1_quad() {
         let m = load_manifest().expect("manifest");
         let ids = default_agent_ids(&m);
-        assert_eq!(
-            ids,
-            ["cursor", "claude", "codex", "agents", "antigravity"]
-        );
+        assert_eq!(ids, ["cursor", "claude", "codex", "agents", "antigravity"]);
     }
 
     #[test]

@@ -25,9 +25,9 @@ impl SyntheticHeadMode {
         match value {
             None => Ok(Self::None),
             Some("worktree") => Ok(Self::Worktree),
-            Some(other) => anyhow::bail!(
-                "unsupported --synthetic-head value '{other}' (supported: worktree)"
-            ),
+            Some(other) => {
+                anyhow::bail!("unsupported --synthetic-head value '{other}' (supported: worktree)")
+            }
         }
     }
 }
@@ -55,8 +55,9 @@ pub fn prepare_artifacts(
 ) -> Result<PrCheckArtifactPaths> {
     if synthetic_head == SyntheticHeadMode::Worktree {
         let registry: Arc<rgctl_registry::LanguageRegistry> = LanguageRegistry::new().into();
-        let head_snapshot = synthesize_worktree_head_snapshot(&ctx.repo, args.cascade_depth, registry)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let head_snapshot =
+            synthesize_worktree_head_snapshot(&ctx.repo, args.cascade_depth, registry)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let base_snapshot = resolve_worktree_base_snapshot(ctx, args)?;
         return Ok(PrCheckArtifactPaths {
             base_snapshot,
@@ -67,11 +68,9 @@ pub fn prepare_artifacts(
     let delta_head = !args.full_snapshots && args.head_artifact.is_none();
     if delta_head {
         warn_if_delta_reads_diverge_from_head_ref(ctx, args)?;
-        let base_root = resolve_base_artifact_root(
-            &ctx.repo,
-            args.base_artifact.as_deref().map(Path::new),
-        )
-        .map_err(|e| anyhow::anyhow!("{e}\n  {MISSING_BASE_HINT}"))?;
+        let base_root =
+            resolve_base_artifact_root(&ctx.repo, args.base_artifact.as_deref().map(Path::new))
+                .map_err(|e| anyhow::anyhow!("{e}\n  {MISSING_BASE_HINT}"))?;
         let registry: Arc<rgctl_registry::LanguageRegistry> = LanguageRegistry::new().into();
         let head_snapshot = synthesize_head_snapshot(
             &base_root,
@@ -122,9 +121,7 @@ fn resolve_worktree_base_snapshot(
             if live.is_file() {
                 Ok(live)
             } else {
-                Err(anyhow::anyhow!(
-                    "{err}\n  {MISSING_BASE_HINT}"
-                ))
+                Err(anyhow::anyhow!("{err}\n  {MISSING_BASE_HINT}"))
             }
         }
         Err(err) => Err(anyhow::anyhow!("{err}\n  {MISSING_BASE_HINT}")),
@@ -195,8 +192,8 @@ pub fn resolve_scope_paths(
     synthetic_head: SyntheticHeadMode,
 ) -> Result<ScopedPaths> {
     if synthetic_head == SyntheticHeadMode::Worktree {
-        let change_set = git_diff_worktree_vs_head(&ctx.repo)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let change_set =
+            git_diff_worktree_vs_head(&ctx.repo).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         return Ok(ScopedPaths::from_change_set(change_set));
     }
     ScopedPaths::from_git_refs(&ctx.repo, &args.base_ref, &args.head_ref)

@@ -48,10 +48,11 @@ pub fn export_obsidian_vault(
 
     let mut headings: Vec<(uuid::Uuid, String)> = Vec::new();
     backend.for_each_node(|node| {
-        if node.node_type == NodeType::Module && node.get_property("kind") == Some("heading") {
-            if let Some(qn) = node.qualified_name.as_ref() {
-                headings.push((node.id, qn.to_string()));
-            }
+        if node.node_type == NodeType::Module
+            && node.get_property("kind") == Some("heading")
+            && let Some(qn) = node.qualified_name.as_ref()
+        {
+            headings.push((node.id, qn.to_string()));
         }
     })?;
 
@@ -62,8 +63,7 @@ pub fn export_obsidian_vault(
     let worker_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
-        .min(MAX_WRITER_THREADS)
-        .max(1);
+        .clamp(1, MAX_WRITER_THREADS);
     let (job_tx, job_rx) = crossbeam_channel::bounded::<NoteJob>(NOTE_JOB_CHANNEL_CAPACITY);
     let mut workers = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {

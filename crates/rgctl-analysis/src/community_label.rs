@@ -32,23 +32,24 @@ pub fn infer_community_label(hints: &CommunityLabelHints<'_>) -> String {
         return "Infrastructure / Common Library".to_string();
     }
 
-    if let Some(pkg) = majority_token(hints.package_labels, 2) {
-        if !pkg.is_empty() && pkg != "root" {
-            let base = shorten_package_label(&pkg);
-            if let Some(name) = hints.top_pagerank_name {
-                let short = name.split(['/', '.', ':']).next_back().unwrap_or(name);
-                if short.len() > 2 {
-                    return format!("{base}::{short}");
-                }
+    if let Some(pkg) = majority_token(hints.package_labels, 2)
+        && !pkg.is_empty()
+        && pkg != "root"
+    {
+        let base = shorten_package_label(&pkg);
+        if let Some(name) = hints.top_pagerank_name {
+            let short = name.split(['/', '.', ':']).next_back().unwrap_or(name);
+            if short.len() > 2 {
+                return format!("{base}::{short}");
             }
-            return base;
         }
+        return base;
     }
 
-    if let Some(common) = find_common_path_prefix_strings(hints.file_paths) {
-        if !common.is_empty() {
-            return shorten_path_label(&common);
-        }
+    if let Some(common) = find_common_path_prefix_strings(hints.file_paths)
+        && !common.is_empty()
+    {
+        return shorten_path_label(&common);
     }
 
     if let Some(name) = hints.top_pagerank_name {
@@ -258,10 +259,10 @@ fn infer_label_from_names(names: &[String], idx: usize) -> String {
         }
     }
 
-    if let Some((token, _)) = counts.iter().max_by_key(|(_, count)| *count) {
-        if counts[token] * 3 >= names.len() {
-            return (*token).to_string();
-        }
+    if let Some((token, _)) = counts.iter().max_by_key(|(_, count)| *count)
+        && counts[token] * 3 >= names.len()
+    {
+        return (*token).to_string();
     }
 
     format!("Community {idx}")

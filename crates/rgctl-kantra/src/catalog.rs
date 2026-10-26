@@ -141,7 +141,9 @@ impl KantraCatalog {
             return Err(KantraError::msg("kantra catalog truncated"));
         }
         if &bytes[0..4] != RBKC_MAGIC {
-            return Err(KantraError::msg("kantra catalog: bad magic (expected RBKC)"));
+            return Err(KantraError::msg(
+                "kantra catalog: bad magic (expected RBKC)",
+            ));
         }
         let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
         if version != RBKC_VERSION {
@@ -337,7 +339,10 @@ mod tests {
     fn merge_ruleset_labels_dedupes() {
         let mut rule = sample_rule("r", &["konveyor.io/target=quarkus"]);
         merge_ruleset_labels(
-            &["konveyor.io/source=java".into(), "konveyor.io/target=quarkus".into()],
+            &[
+                "konveyor.io/source=java".into(),
+                "konveyor.io/target=quarkus".into(),
+            ],
             &mut rule,
         );
         assert_eq!(rule.labels.len(), 2);

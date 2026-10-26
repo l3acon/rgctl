@@ -267,8 +267,8 @@ fn pagerank_excludes_test_and_intrinsic_nodes_by_default() {
         .with_file_path("src/order.rs");
     let id_cfg_test = cfg_test.id;
 
-    let println_n = Node::new(NodeType::Function, "println!")
-        .with_qualified_name("<external>::println!");
+    let println_n =
+        Node::new(NodeType::Function, "println!").with_qualified_name("<external>::println!");
     let id_println = println_n.id;
 
     let drop_n = Node::new(NodeType::Function, "drop")
@@ -290,11 +290,7 @@ fn pagerank_excludes_test_and_intrinsic_nodes_by_default() {
     insert_call(backend, id_prod, id_prod);
 
     assert_eq!(
-        classify_node_role(
-            "src/order.rs::process_order",
-            Some("src/order.rs"),
-            false
-        ),
+        classify_node_role("src/order.rs::process_order", Some("src/order.rs"), false),
         NodeRole::Production
     );
     assert_eq!(
@@ -332,10 +328,7 @@ fn pagerank_excludes_test_and_intrinsic_nodes_by_default() {
     let role_of = |id: Uuid| {
         let n = backend.get_node(id).unwrap().unwrap();
         let stub = n.get_property("is_external_stub") == Some("true");
-        let name = n
-            .qualified_name
-            .as_deref()
-            .unwrap_or(n.name.as_str());
+        let name = n.qualified_name.as_deref().unwrap_or(n.name.as_str());
         classify_node_role(name, n.file_path.as_deref(), stub)
     };
 
@@ -488,7 +481,9 @@ fn production_hotspots_exclude_tests_and_intrinsics() {
         "production checkout must remain"
     );
     assert!(
-        filtered.iter().all(|(id, _)| *id != id_test && *id != id_intr),
+        filtered
+            .iter()
+            .all(|(id, _)| *id != id_test && *id != id_intr),
         "test/intrinsic must be excluded by default"
     );
 

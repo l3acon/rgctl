@@ -13,11 +13,9 @@ pub use framework_schema::{
 };
 
 use framework_schema::CompiledFrameworkCatalog as Catalog;
-use rgctl_plugin_api::{
-    Relation, RelationType, SourceLocation, Symbol, SymbolType,
-};
+use rgctl_plugin_api::{Relation, RelationType, SourceLocation, Symbol, SymbolType};
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 use tree_sitter::Node;
@@ -162,12 +160,10 @@ pub fn load_with_repo_overrides(repo_root: Option<&Path>) -> RuntimeFrameworkCat
         && std::fs::read_to_string(&cache_hash)
             .ok()
             .is_some_and(|h| h.trim() == digest.as_str())
+        && let Ok(bytes) = std::fs::read(&cache_bin)
+        && let Ok(catalog) = bincode::deserialize::<Catalog>(&bytes)
     {
-        if let Ok(bytes) = std::fs::read(&cache_bin) {
-            if let Ok(catalog) = bincode::deserialize::<Catalog>(&bytes) {
-                return RuntimeFrameworkCatalog::from_compiled(catalog);
-            }
-        }
+        return RuntimeFrameworkCatalog::from_compiled(catalog);
     }
 
     // Merge: start from built-in compiled catalog, replace/extend by language from overrides.
@@ -305,23 +301,22 @@ pub fn apply_framework_catalog(
                 continue;
             }
             for param in &sym.parameters {
-                if indexed.has_param_wrapper {
-                    if let Some(ty) = param.param_type.as_deref() {
-                        if type_mentions_wrappers(ty, &indexed.wrapper_types) {
-                            has_wrapper_param = true;
-                        }
-                    }
+                if indexed.has_param_wrapper
+                    && let Some(ty) = param.param_type.as_deref()
+                    && type_mentions_wrappers(ty, &indexed.wrapper_types)
+                {
+                    has_wrapper_param = true;
                 }
                 if indexed.has_param_call {
-                    if let Some(def) = param.default_value.as_deref() {
-                        if text_mentions_providers(def, &indexed.provider_calls) {
-                            has_provider_param = true;
-                        }
+                    if let Some(def) = param.default_value.as_deref()
+                        && text_mentions_providers(def, &indexed.provider_calls)
+                    {
+                        has_provider_param = true;
                     }
-                    if let Some(ty) = param.param_type.as_deref() {
-                        if text_mentions_providers(ty, &indexed.provider_calls) {
-                            has_provider_param = true;
-                        }
+                    if let Some(ty) = param.param_type.as_deref()
+                        && text_mentions_providers(ty, &indexed.provider_calls)
+                    {
+                        has_provider_param = true;
                     }
                 }
             }
@@ -331,8 +326,7 @@ pub fn apply_framework_catalog(
         }
     }
 
-    let any_trigger =
-        has_ann || has_call || has_router || has_wrapper_param || has_provider_param;
+    let any_trigger = has_ann || has_call || has_router || has_wrapper_param || has_provider_param;
     if !any_trigger {
         return;
     }
@@ -386,17 +380,15 @@ pub fn apply_framework_catalog(
     // Stamp `target_vocab` onto same-file injected provider symbols immediately
     // (works in both in-memory and segmented spill modes).
     for rel in &new_relations {
-        if rel.relation_type == RelationType::Injects {
-            if let Some(tv) = rel
+        if rel.relation_type == RelationType::Injects
+            && let Some(tv) = rel
                 .metadata
                 .get("target_vocab")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
-            {
-                if let Some(target_sym) = find_symbol_mut(symbols, &rel.to) {
-                    stamp_tags_vocab(target_sym, &[], tv);
-                }
-            }
+            && let Some(target_sym) = find_symbol_mut(symbols, &rel.to)
+        {
+            stamp_tags_vocab(target_sym, &[], tv);
         }
     }
 
@@ -466,21 +458,15 @@ fn apply_route_decorator(
         let (display, hint) = format_route_target(&method, &path);
         let loc = rel.location.clone();
         out.push(exposes_route_relation(
-            &rel.from,
-            &display,
-            &hint,
-            &method,
-            &path,
-            rule,
-            loc,
+            &rel.from, &display, &hint, &method, &path, rule, loc,
         ));
         if let Some(sym) = find_symbol_mut(symbols, &rel.from) {
             stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
         }
-        if let Some(cls) = enclosing {
-            if let Some(sym) = find_symbol_mut(symbols, &cls) {
-                stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
-            }
+        if let Some(cls) = enclosing
+            && let Some(sym) = find_symbol_mut(symbols, &cls)
+        {
+            stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
         }
     }
 }
@@ -574,33 +560,32 @@ fn walk_call_nodes(
 ) {
     let kind = node.kind();
     let is_call = kind.contains("call") || kind == "method_invocation" || kind == "member_call";
-    if is_call {
-        if let Some((mra, method_override, path_lit, handler_name)) =
+    if is_call
+        && let Some((mra, method_override, path_lit, handler_name)) =
             extract_route_call_bits(node, source, router_map)
-        {
-            let method = method_override
-                .or_else(|| mra.method.clone())
-                .or_else(|| mra.default_method.clone())
-                .unwrap_or_else(|| "ANY".to_string());
-            let path = normalize_route_path("", &path_lit);
-            let (display, hint) = format_route_target(&method, &path);
-            let from = find_symbol(symbols, &handler_name)
-                .map(symbol_qn)
-                .unwrap_or(handler_name);
-            if emitted_routes.insert((from.clone(), display.clone())) {
-                let loc = SourceLocation {
-                    file: default_file.to_string(),
-                    start_line: node.start_position().row + 1,
-                    end_line: node.end_position().row + 1,
-                    start_column: node.start_position().column,
-                    end_column: node.end_position().column,
-                };
-                out.push(exposes_route_relation(
-                    &from, &display, &hint, &method, &path, rule, loc,
-                ));
-                if let Some(sym) = find_symbol_mut(symbols, &from) {
-                    stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
-                }
+    {
+        let method = method_override
+            .or_else(|| mra.method.clone())
+            .or_else(|| mra.default_method.clone())
+            .unwrap_or_else(|| "ANY".to_string());
+        let path = normalize_route_path("", &path_lit);
+        let (display, hint) = format_route_target(&method, &path);
+        let from = find_symbol(symbols, &handler_name)
+            .map(symbol_qn)
+            .unwrap_or(handler_name);
+        if emitted_routes.insert((from.clone(), display.clone())) {
+            let loc = SourceLocation {
+                file: default_file.to_string(),
+                start_line: node.start_position().row + 1,
+                end_line: node.end_position().row + 1,
+                start_column: node.start_position().column,
+                end_column: node.end_position().column,
+            };
+            out.push(exposes_route_relation(
+                &from, &display, &hint, &method, &path, rule, loc,
+            ));
+            if let Some(sym) = find_symbol_mut(symbols, &from) {
+                stamp_tags_vocab(sym, &rule.tags, &rule.vocab);
             }
         }
     }
@@ -628,11 +613,7 @@ fn extract_route_call_bits<'a>(
     let text = std::str::from_utf8(slice).ok()?;
     let (before_paren, after_open) = text.split_once('(')?;
     // Reject huge chained prefixes before '(' unless we take the trailing receiver.callee
-    let tail = before_paren
-        .lines()
-        .last()
-        .unwrap_or(before_paren)
-        .trim();
+    let tail = before_paren.lines().last().unwrap_or(before_paren).trim();
     let callee = tail
         .rsplit(['.', ':'])
         .next()?
@@ -746,7 +727,11 @@ fn extract_handler_and_method_from_args(args: &[String]) -> Option<(Option<Strin
             verb_cand.as_str(),
             "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "OPTIONS" | "HEAD" | "ANY"
         ) {
-            let handler_inner = inner.rsplit_once(')').map(|(a, _)| a).unwrap_or(inner).trim();
+            let handler_inner = inner
+                .rsplit_once(')')
+                .map(|(a, _)| a)
+                .unwrap_or(inner)
+                .trim();
             let h = handler_inner
                 .rsplit(['.', ':'])
                 .next()
@@ -770,12 +755,12 @@ fn extract_handler_and_method_from_args(args: &[String]) -> Option<(Option<Strin
     }
 
     // Laravel `[OrderController::class, 'index']`
-    if last.starts_with('[') && last.ends_with(']') {
-        if let Some(action) = extract_first_string_literal(last) {
-            if !action.is_empty() {
-                return Some((None, action));
-            }
-        }
+    if last.starts_with('[')
+        && last.ends_with(']')
+        && let Some(action) = extract_first_string_literal(last)
+        && !action.is_empty()
+    {
+        return Some((None, action));
     }
 
     if last.starts_with('"') || last.starts_with('\'') || last.starts_with('`') {
@@ -870,10 +855,10 @@ fn apply_ctor_or_stereotype_inject(
             // Do NOT promote a field annotation (`Class.field`) to `Class`,
             // or non-constructor methods on `Class` would be misclassified.
             annotated_ctors.insert(rel.from.clone());
-            if let Some(parent) = enclosing_class_qn(&rel.from) {
-                if parent.ends_with(".<init>") || parent.ends_with(".constructor") {
-                    annotated_ctors.insert(parent);
-                }
+            if let Some(parent) = enclosing_class_qn(&rel.from)
+                && (parent.ends_with(".<init>") || parent.ends_with(".constructor"))
+            {
+                annotated_ctors.insert(parent);
             }
         }
     }
@@ -992,10 +977,7 @@ fn apply_param_call_inject(
         let qn = symbol_qn(sym);
         let mut stamped = false;
         for param in &sym.parameters {
-            let haystacks = [
-                param.default_value.as_deref(),
-                param.param_type.as_deref(),
-            ];
+            let haystacks = [param.default_value.as_deref(), param.param_type.as_deref()];
             for hay in haystacks.into_iter().flatten() {
                 if let Some(provider) = extract_provider_call(hay, &providers) {
                     out.push(injects_relation(
@@ -1164,13 +1146,13 @@ fn resolve_http_method(mra: &MethodRouteAnnotation, metadata: &Value) -> String 
     if let Some(m) = &mra.method {
         return m.to_uppercase();
     }
-    if mra.method_arg.is_some() {
-        if let Some(args) = metadata.get("arguments").and_then(|v| v.as_str()) {
-            // Look for GET/POST tokens in arguments
-            for verb in ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
-                if args.to_uppercase().contains(verb) {
-                    return verb.to_string();
-                }
+    if mra.method_arg.is_some()
+        && let Some(args) = metadata.get("arguments").and_then(|v| v.as_str())
+    {
+        // Look for GET/POST tokens in arguments
+        for verb in ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
+            if args.to_uppercase().contains(verb) {
+                return verb.to_string();
             }
         }
     }
@@ -1224,9 +1206,7 @@ fn find_symbol<'a>(symbols: &'a [Symbol], name: &str) -> Option<&'a Symbol> {
 
 fn find_symbol_mut<'a>(symbols: &'a mut [Symbol], name: &str) -> Option<&'a mut Symbol> {
     symbols.iter_mut().find(|s| {
-        s.qualified_name.as_deref() == Some(name)
-            || s.name == name
-            || symbol_qn(s) == name
+        s.qualified_name.as_deref() == Some(name) || s.name == name || symbol_qn(s) == name
     })
 }
 
@@ -1237,15 +1217,15 @@ fn symbol_qn(sym: &Symbol) -> String {
 }
 
 fn enclosing_class_qn(qn: &str) -> Option<String> {
-    if let Some((cls, _)) = qn.rsplit_once('.') {
-        if !cls.is_empty() {
-            return Some(cls.to_string());
-        }
+    if let Some((cls, _)) = qn.rsplit_once('.')
+        && !cls.is_empty()
+    {
+        return Some(cls.to_string());
     }
-    if let Some((cls, _)) = qn.rsplit_once("::") {
-        if !cls.is_empty() {
-            return Some(cls.to_string());
-        }
+    if let Some((cls, _)) = qn.rsplit_once("::")
+        && !cls.is_empty()
+    {
+        return Some(cls.to_string());
     }
     None
 }
@@ -1268,12 +1248,10 @@ fn resolve_field_type(
 ) -> Option<String> {
     // Direct field symbol
     if let Some(sym) = symbols.iter().find(|s| {
-        matches!(s.symbol_type, SymbolType::Variable)
-            && (symbol_qn(s) == from || s.name == from)
-    }) {
-        if let Some(sig) = &sym.signature {
-            return Some(sig.clone());
-        }
+        matches!(s.symbol_type, SymbolType::Variable) && (symbol_qn(s) == from || s.name == from)
+    }) && let Some(sig) = &sym.signature
+    {
+        return Some(sig.clone());
     }
     let field = field_name?;
     let class = symbols.iter().find(|s| {
@@ -1307,7 +1285,9 @@ fn strip_generics_and_prefix(ty: &str) -> String {
 }
 
 fn peel_known_containers(ty: &str) -> String {
-    for wrap in ["Arc", "RwLock", "Mutex", "Box", "Rc", "RefCell", "Provider", "List", "Optional"] {
+    for wrap in [
+        "Arc", "RwLock", "Mutex", "Box", "Rc", "RefCell", "Provider", "List", "Optional",
+    ] {
         if let Some(rest) = strip_wrapper_prefix(ty, wrap) {
             return rest;
         }
@@ -1354,6 +1334,7 @@ fn unwrap_wrapper_type(ty: &str, wrappers: &FxHashSet<String>) -> Option<String>
     // Match Wrapper<...> or path::Wrapper<...>
     for w in wrappers {
         if let Some(inner) = strip_wrapper_prefix(trimmed, w) {
+            // After stripping wrapper, peel Arc/Mutex and take simple name
             let mut cur = inner;
             loop {
                 let next = peel_known_containers(&cur);
@@ -1361,27 +1342,6 @@ fn unwrap_wrapper_type(ty: &str, wrappers: &FxHashSet<String>) -> Option<String>
                     break;
                 }
                 cur = next;
-            }
-            if let Some(g) = first_generic_arg(&format!("X<{cur}>")) {
-                // if still generic, keep peeling
-                let _ = g;
-            }
-            // After stripping wrapper, peel Arc/Mutex and take simple name
-            let mut cur = cur;
-            loop {
-                let next = peel_known_containers(&cur);
-                if next == cur {
-                    break;
-                }
-                cur = next;
-            }
-            if let Some(inner2) = first_generic_arg(&format!("T<{cur}>")) {
-                // only if cur still has generics without outer name — handle Arc<AppState>
-                if cur.contains('<') {
-                    cur = first_generic_arg(&cur).unwrap_or(cur);
-                } else {
-                    let _ = inner2;
-                }
             }
             if cur.contains('<') {
                 cur = first_generic_arg(&cur).unwrap_or(cur);
@@ -1404,7 +1364,9 @@ fn strip_wrapper_prefix(ty: &str, wrapper: &str) -> Option<String> {
         format!("::{lower_w}<"),
         format!(".{lower_w}<"),
     ];
-    let idx = candidates.iter().find_map(|pat| ty.find(pat.as_str()).map(|i| (i, pat.len())))?;
+    let idx = candidates
+        .iter()
+        .find_map(|pat| ty.find(pat.as_str()).map(|i| (i, pat.len())))?;
     let start = idx.0 + idx.1 - 1; // at '<'
     let end = find_matching_angle(ty, start)?;
     Some(ty[start + 1..end].trim().to_string())
@@ -1416,8 +1378,8 @@ fn find_matching_angle(s: &str, open_idx: usize) -> Option<usize> {
         return None;
     }
     let mut depth = 0i32;
-    for i in open_idx..bytes.len() {
-        match bytes[i] {
+    for (i, &b) in bytes.iter().enumerate().skip(open_idx) {
+        match b {
             b'<' => depth += 1,
             b'>' => {
                 depth -= 1;
@@ -1460,7 +1422,8 @@ fn type_mentions_wrappers(ty: &str, wrappers: &FxHashSet<String>) -> bool {
     wrappers.iter().any(|w| {
         ty.contains(&format!("{w}<"))
             || ty.contains(&format!("::{w}<"))
-            || ty.split(|c: char| !c.is_alphanumeric() && c != '_')
+            || ty
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
                 .any(|p| p == w.as_str())
     })
 }
@@ -1518,12 +1481,7 @@ fn is_primitive(name: &str) -> bool {
 }
 
 fn is_constructor(sym: &Symbol, class_qn: &str) -> bool {
-    if sym
-        .metadata
-        .get("is_constructor")
-        .and_then(|v| v.as_bool())
-        == Some(true)
-    {
+    if sym.metadata.get("is_constructor").and_then(|v| v.as_bool()) == Some(true) {
         return enclosing_class_qn(&symbol_qn(sym))
             .map(|c| c == class_qn || simple_name(&c) == simple_name(class_qn))
             .unwrap_or(true);
@@ -1545,7 +1503,9 @@ fn is_constructor(sym: &Symbol, class_qn: &str) -> bool {
 }
 
 fn source_has_route_path_literal(source: &[u8]) -> bool {
-    source.windows(2).any(|w| w == b"\"/" || w == b"'/" || w == b"`/")
+    source
+        .windows(2)
+        .any(|w| w == b"\"/" || w == b"'/" || w == b"`/")
 }
 
 #[cfg(test)]
@@ -1660,11 +1620,11 @@ mod tests {
             routes[0].to_qualified_hint.as_deref(),
             Some("route::GET /users")
         );
-        let handler = symbols
-            .iter()
-            .find(|s| s.name == "list")
-            .expect("handler");
-        let tags = handler.metadata.get("framework_tags").and_then(|v| v.as_str());
+        let handler = symbols.iter().find(|s| s.name == "list").expect("handler");
+        let tags = handler
+            .metadata
+            .get("framework_tags")
+            .and_then(|v| v.as_str());
         assert!(tags.is_some_and(|t| t.contains("role:endpoint")));
     }
 
@@ -1700,7 +1660,13 @@ mod tests {
     fn fast_reject_empty_c_like() {
         let mut symbols = vec![empty_sym("main", "main", SymbolType::Function)];
         let mut relations = Vec::new();
-        apply_framework_catalog("python", b"int main(){}", None, &mut symbols, &mut relations);
+        apply_framework_catalog(
+            "python",
+            b"int main(){}",
+            None,
+            &mut symbols,
+            &mut relations,
+        );
         assert!(relations.is_empty());
         assert!(symbols[0].metadata.get("framework_tags").is_none());
     }
