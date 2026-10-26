@@ -368,9 +368,13 @@ fn semantic_query_scope_docs_and_function_are_enforced() {
         !function_query.status.success(),
         "function scope query should fail against docs-only index"
     );
+    // JSON mode emits classified errors on stdout; plain text may still hit stderr.
+    let stdout = str::from_utf8(&function_query.stdout).unwrap_or("");
     let stderr = str::from_utf8(&function_query.stderr).unwrap_or("");
     assert!(
-        stderr.contains("semantic query scope"),
-        "expected scope mismatch message, got stderr={stderr}"
+        stdout.contains("semantic query scope")
+            || stdout.contains("INDEX_SCOPE_MISMATCH")
+            || stderr.contains("semantic query scope"),
+        "expected scope mismatch message, got stdout={stdout} stderr={stderr}"
     );
 }

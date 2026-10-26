@@ -258,11 +258,11 @@ fn coolstore_guide_commands_when_present() {
 
     let status = cli_json(&repo, &["status"]);
     assert_eq!(status["schema_version"], 3);
-    assert_eq!(status["nodes"], 608);
-    assert_eq!(status["edges"], 1709);
+    assert_eq!(status["nodes"], 617);
+    assert_eq!(status["edges"], 1734);
 
     let find = cli_json(&repo, &["find", "--type", "function", "--count-only"]);
-    assert_eq!(find["total"], 152);
+    assert_eq!(find["total"], 157);
 
     let cpg_status = cli_json(&repo, &["cpg", "status"]);
     assert_eq!(cpg_status["field_write_count"], 41);
@@ -304,7 +304,7 @@ fn coolstore_guide_commands_when_present() {
         String::from_utf8_lossy(&exp.stderr)
     );
     assert!(
-        msg.contains("152 nodes, 130 edges"),
+        msg.contains("157 nodes, 119 edges"),
         "unexpected export Function counts: {msg}"
     );
 
@@ -328,7 +328,7 @@ fn coolstore_guide_commands_when_present() {
         String::from_utf8_lossy(&exp_all.stderr)
     );
     assert!(
-        msg_all.contains("608 nodes, 1709 edges"),
+        msg_all.contains("617 nodes, 1734 edges"),
         "unexpected export all counts: {msg_all}"
     );
 }

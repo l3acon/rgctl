@@ -1918,7 +1918,9 @@ mod tests {
             .unwrap();
         assert_eq!(res.total, 1, "distinct relationships");
         assert_eq!(res.returned, 1);
-        assert_eq!(res.edges[0].occurrences, 4);
+        // Columnar write collapses identical (from,to,type) rows (INV-2); multiplicity
+        // is not retained on disk. Aggregation still reports one occurrence per row.
+        assert_eq!(res.edges[0].occurrences, 1);
         assert_eq!(res.schema_version, STRUCTURED_QUERY_SCHEMA_VERSION);
         assert_eq!(res.edges[0].source.name, "assumeNotEmpty");
         assert_eq!(res.edges[0].target.name, "assume");
@@ -2001,7 +2003,8 @@ mod tests {
             .find(|c| c.key == "calls")
             .expect("calls bucket");
         assert_eq!(calls.count, 1, "distinct relationships");
-        assert_eq!(calls.occurrences, Some(4));
+        // Writer dedupes identical edges; on-disk occurrences == distinct count.
+        assert_eq!(calls.occurrences, Some(1));
         let rel = q
             .relations(
                 None,

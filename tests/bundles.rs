@@ -6,7 +6,13 @@ use std::path::Path;
 #[test]
 fn test_all_tier1_plugins_registered() {
     let registry = LanguageRegistry::new();
-    assert_eq!(registry.stats().language_plugins, 10);
+    // Full catalog (~60+) is registered by default; keep a floor so we notice
+    // accidental shrink without freezing the exact count on every language add.
+    assert!(
+        registry.stats().language_plugins >= 60,
+        "expected full language catalog, got {}",
+        registry.stats().language_plugins
+    );
     for id in [
         "rust",
         "python",
@@ -18,6 +24,15 @@ fn test_all_tier1_plugins_registered() {
         "c",
         "cpp",
         "markdown",
+        // legacy / enterprise migration languages (#143)
+        "cobol",
+        "pli",
+        "jcl",
+        "apex",
+        "pascal",
+        "perl",
+        "ada",
+        "matlab",
     ] {
         assert!(registry.has_plugin(id), "missing plugin {id}");
     }

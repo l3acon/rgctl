@@ -46,9 +46,9 @@
           pattern: UNIQUE_COMPOSITE_B
 
 - ruleID: unsupported-dependency
-  description: Should be skipped
+  description: Should be skipped (annotated.elements is not implemented)
   category: mandatory
   message: n/a
   when:
-    java.dependency:
-      name: foo
+    java.referenced.annotated.elements:
+      pattern: foo

@@ -362,7 +362,20 @@ fn merge_type_env(
     _function_name: &str,
     type_env: &mut HashMap<String, String>,
 ) {
-    *type_env = type_env_from_node(func);
+    *type_env = type_env_for_field_writes(func, cfg);
+}
+
+/// Build the receiver type environment used by field-write extraction.
+///
+/// Includes parameter types from the function node, `this`/`self` from the
+/// enclosing type (qualified name / `member_of`), and CFG `local_types`.
+/// Callers on the fused discover path must use this — passing only
+/// `cfg.local_types` leaves `ThisField` writes unresolved.
+pub fn type_env_for_field_writes(
+    func: Option<&Node>,
+    cfg: &ControlFlowGraph,
+) -> HashMap<String, String> {
+    let mut type_env = type_env_from_node(func);
     if let Some(node) = func
         && let Some(enclosing) = enclosing_type_name(node)
     {
@@ -372,6 +385,7 @@ fn merge_type_env(
     for (k, v) in &cfg.local_types {
         type_env.entry(k.clone()).or_insert_with(|| v.clone());
     }
+    type_env
 }
 
 fn type_env_from_node(func: Option<&Node>) -> HashMap<String, String> {

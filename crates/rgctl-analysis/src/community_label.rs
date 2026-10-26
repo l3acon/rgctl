@@ -317,7 +317,9 @@ fn split_identifier_tokens(name: &str) -> Vec<String> {
         let chars: Vec<char> = part.chars().collect();
         for (i, &ch) in chars.iter().enumerate() {
             let boundary = if ch.is_uppercase() && !current.is_empty() {
-                let prev_lower = chars.get(i.wrapping_sub(1)).is_some_and(|c| c.is_lowercase());
+                let prev_lower = chars
+                    .get(i.wrapping_sub(1))
+                    .is_some_and(|c| c.is_lowercase());
                 let next_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
                 prev_lower || next_lower
             } else {

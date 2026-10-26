@@ -287,7 +287,7 @@ pub fn package_label(file_path: &str) -> String {
     for marker in JVM_MARKERS {
         if let Some(idx) = slash_path.rfind(marker) {
             let end = idx + marker.len();
-            if best_jvm_end.map_or(true, |prev| end > prev) {
+            if best_jvm_end.is_none_or(|prev| end > prev) {
                 best_jvm_end = Some(end);
             }
         }
@@ -876,8 +876,14 @@ mod tests {
         );
 
         // Two same-named subdirectories across different crates do not collide
-        assert_eq!(package_label("crates/crate-a/src/models/user.rs"), "crate-a.models");
-        assert_eq!(package_label("crates/crate-b/src/models/user.rs"), "crate-b.models");
+        assert_eq!(
+            package_label("crates/crate-a/src/models/user.rs"),
+            "crate-a.models"
+        );
+        assert_eq!(
+            package_label("crates/crate-b/src/models/user.rs"),
+            "crate-b.models"
+        );
 
         // Top-level `src/`
         assert_eq!(package_label("src/main.rs"), "src");
