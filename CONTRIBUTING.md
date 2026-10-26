@@ -64,7 +64,22 @@ Full GitHub Actions CI does **not** run on every PR. That saves minutes and keep
 | Who | How to run CI |
 |-----|----------------|
 | Maintainer | Add the **`ci`** label on the PR (or **Actions → CI → Run workflow**) |
-| Contributor | Wait for a maintainer to label; run the commands above locally |
+| Contributor | Run `./scripts/preflight-pr.sh` locally before opening/updating a PR |
+
+### Local pre-flight PR check (`./scripts/preflight-pr.sh`)
+
+Before opening or pushing to a PR, run the pre-flight check script (mirrors [`.github/workflows/ci.yml`](.github/workflows/ci.yml), including `RGCTL_AST_COVERAGE_STRICT=1`, AI commit trailer checks, DCO sign-off checks, `cargo fmt`, all CI `cargo clippy` gates, and test compilation/execution):
+
+```bash
+# Fast gate (~15–30s incremental): commit checks + fmt + all CI clippy gates + compile all unit & integration tests
+./scripts/preflight-pr.sh --quick
+
+# Standard pre-PR check: runs the above + executes workspace unit, integration, and QE test suites
+./scripts/preflight-pr.sh
+
+# Full CI mirror: adds --release CLI golden paths, scale/perf gates, benchmark compile smoke, and AST coverage tracking
+./scripts/preflight-pr.sh --full
+```
 
 Without `ci`, the Checks tab shows a single green **awaiting maintainer `ci` label** notice. Adding the label re-runs the workflow and starts cargo check / fmt / clippy / tests.
 
@@ -148,7 +163,7 @@ Tier 1 depth (Layers A–F): [docs/tier-1-language-support.md](docs/tier-1-langu
 1. Branch from `main` (or the active integration branch).
 2. Keep commits focused; match existing Rust style and `cargo fmt` / `clippy` expectations.
 3. **Sign every commit** with **DCO sign-off** (`git commit -s`). See [Developer Certificate of Origin](https://developercertificate.org/) and [contributor checklist §6](docs/contributor-checklist.md#6-documentation--pr).
-4. Run the [standard test workflow](docs/contributor-checklist.md#5-standard-test-workflow) and list the commands you ran in the PR template.
+4. Run `./scripts/preflight-pr.sh` (or `--quick` + targeted tests from the [standard test workflow](docs/contributor-checklist.md#5-standard-test-workflow)) and list the commands you ran in the PR template.
 
 ### AI coding tools and authorship
 

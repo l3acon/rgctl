@@ -154,7 +154,20 @@ When changing `dashboard/` or `crates/rgctl-dashboard/`:
 
 ## 5. Standard test workflow
 
-Run before opening a PR (add path-specific targets from [§2](#2-programming-languages), [§3](#3-config--markup), or [§4](#4-feature-updates)):
+Run `./scripts/preflight-pr.sh` before opening a PR (mirrors [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
+
+```bash
+# Fast gate (commit checks + fmt + all CI clippy gates + compile all unit/integration tests)
+./scripts/preflight-pr.sh --quick
+
+# Standard pre-PR suite (above + runs workspace unit/integration/QE tests)
+./scripts/preflight-pr.sh
+
+# Full CI mirror (adds --release CLI golden paths, scale/perf gates, cargo bench --no-run, AST coverage gate)
+./scripts/preflight-pr.sh --full
+```
+
+Or run the individual CI steps manually (and add path-specific targets from [§2](#2-programming-languages), [§3](#3-config--markup), or [§4](#4-feature-updates)):
 
 ```bash
 cargo fmt --all -- --check

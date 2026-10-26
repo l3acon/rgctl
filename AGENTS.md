@@ -25,6 +25,7 @@
 - **Grammar bumps:** When you bump a tree-sitter grammar pin, update that language’s `*-ast-coverage.json` (and add the language to `rgctl-ast-coverage::bundled_specs` for new languages). Unit tests hard-fail the same drift; `cargo check -p rgctl-languages` warns (`RGCTL_AST_COVERAGE_STRICT=1` fails). The [rgctl-website](https://github.com/rgctl/rgctl-website) `/docs/languages/` pages are generated from those JSON files — do not maintain parallel tables under `docs/languages/`. User-facing guides are edited in **rgctl-website** (`docs/guides/`), not here.
 - **Releases:** Follow **Releases** below (and [docs/releasing.md](docs/releasing.md)). Do not hand-edit dozens of crate `version =` lines.
 - **AI-assisted contributions:** Contributors may use AI coding agents freely. The human author must still review every change and is solely responsible for the PR and its content. Do **not** add AI `Co-Authored-By` / `Assisted-By` / `Generated-By` trailers (or agent emails as author/committer) — PR CI enforces this via `scripts/check-no-ai-commit-trailers.py` (see [CONTRIBUTING.md](CONTRIBUTING.md#ai-coding-tools-and-authorship)). Prefer DCO `Signed-off-by` only.
+- **Pre-flight PR gate (mandatory before concluding code changes / PRs):** Always run `./scripts/preflight-pr.sh --quick` (or `./scripts/preflight-pr.sh` / `--full`) before concluding a coding task or opening/updating a PR. This enforces `RGCTL_AST_COVERAGE_STRICT=1`, `cargo fmt --all -- --check`, all CI `cargo clippy` gates (`--lib --bins`, `-p rgctl-analysis`, `-p rgctl-graph -p rgctl-core` with `-D warnings`), and compiles all unit & integration test targets (`--workspace --lib --bins --tests`) so integration tests in `tests/` never break CI.
 
 ---
 
@@ -129,6 +130,7 @@ File counts are approximate (goal **O(10⁴)** sources). Exclude `vendor/`, `nod
 
 | Kind | Command | Practice |
 |------|---------|----------|
+| Pre-flight PR gate | `./scripts/preflight-pr.sh --quick` (or `--full`) | **Mandatory** before PR / task completion; checks fmt, all CI clippy targets, `RGCTL_AST_COVERAGE_STRICT=1`, and compiles/runs `--workspace --lib --bins --tests` |
 | Workspace | `cargo test` | Default before merge for touched crates |
 | Release CLI goldens | `cargo test --release --test subprocess_golden_path` (and related) | CLI surface changes |
 | Cold profile gates | `cargo test --release --test cold_profile_gates -- --ignored --nocapture --test-threads=1` | Perf / extraction / ingest; **Gate A** for scale-sensitive work |
