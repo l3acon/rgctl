@@ -130,14 +130,14 @@ fn b(flag: bool) {
 }
 #[test]
 fn irreducible_cfg_maintains_acyclic_idom() {
+    use rgctl::analysis::cfg::{BasicBlock, BlockId, CfgEdgeType, Statement, StatementKind};
+
     let mut cfg = ControlFlowGraph::new();
     let entry = cfg.entry;
-    let a = uuid::Uuid::new_v4();
-    let b = uuid::Uuid::new_v4();
-    let c = uuid::Uuid::new_v4();
-    let exit = uuid::Uuid::new_v4();
-    use rgctl::analysis::cfg::{BasicBlock, CfgEdgeType, Statement, StatementKind};
-    use std::collections::HashSet;
+    let a = BlockId::new(1);
+    let b = BlockId::new(2);
+    let c = BlockId::new(3);
+    let exit = BlockId::new(4);
 
     for (id, label) in [(a, "a"), (b, "b"), (c, "c")] {
         cfg.add_block(BasicBlock {
@@ -146,8 +146,8 @@ fn irreducible_cfg_maintains_acyclic_idom() {
                 kind: StatementKind::Expression,
                 line: 1,
                 text: label.into(),
-                defined_vars: HashSet::new(),
-                used_vars: HashSet::new(),
+                defined_vars: Default::default(),
+                used_vars: Default::default(),
             }],
             start_line: 1,
             end_line: 1,
