@@ -24,11 +24,12 @@ fn fixture(name: &str) -> PathBuf {
 
 fn run_json(args: &[&str]) -> Value {
     let bin = rgctl_bin();
-    assert!(bin.is_file(), "missing {}; run cargo build --release --bin rgctl", bin.display());
-    let out = Command::new(&bin)
-        .args(args)
-        .output()
-        .expect("spawn rgctl");
+    assert!(
+        bin.is_file(),
+        "missing {}; run cargo build --release --bin rgctl",
+        bin.display()
+    );
+    let out = Command::new(&bin).args(args).output().expect("spawn rgctl");
     assert!(
         out.status.success(),
         "rgctl {:?} failed: {}\n{}",
@@ -60,11 +61,13 @@ fn release_vuln_analyze_coolstore_ab() {
     ]);
     assert_eq!(a["deps_verdict"], "not_affected");
     assert_eq!(a["exploitability"], "not_affected");
-    assert!(a["phases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|p| p != "sink_first_taint"));
+    assert!(
+        a["phases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p != "sink_first_taint")
+    );
 
     let b = run_json(&[
         "-r",
@@ -84,7 +87,9 @@ fn release_vuln_analyze_coolstore_ab() {
         exp == "not_exploitable" || exp == "under_investigation",
         "unexpected exploitability {exp}"
     );
-    let status = b["openvex"]["statements"][0]["status"].as_str().unwrap_or("");
+    let status = b["openvex"]["statements"][0]["status"]
+        .as_str()
+        .unwrap_or("");
     assert!(
         status == "not_affected" || status == "under_investigation",
         "unexpected openvex status {status}"
@@ -110,7 +115,14 @@ fn release_vuln_triage_non_java_cargo_fixture() {
     // Reuse jackson triage shape is Java; use a tiny synthetic cargo-ish OSV via deps check still works.
     // Non-Java smoke: triage + package resolve via find --package on a cargo coord (no repo required for triage).
     let osv = fixture("jackson-CVE-2022-42004.json");
-    let v = run_json(&["-f", "json", "vuln", "triage", "--osv", osv.to_str().unwrap()]);
+    let v = run_json(&[
+        "-f",
+        "json",
+        "vuln",
+        "triage",
+        "--osv",
+        osv.to_str().unwrap(),
+    ]);
     assert!(v["id"].as_str().unwrap().contains("GHSA") || v["id"].as_str().is_some());
 
     // Resolver smoke via unit path: package resolve is library-tested; CLI find needs a repo.

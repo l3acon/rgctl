@@ -224,8 +224,7 @@ impl WorkflowSession {
             .output()
             .expect("discover");
         assert_ok(&disc, "discover");
-        let migration =
-            rgctl_graph::paths::artifact_path(&source_repo, "migration_plan.json");
+        let migration = rgctl_graph::paths::artifact_path(&source_repo, "migration_plan.json");
         assert!(
             migration.is_file(),
             "[{}] missing migration plan at {}",
@@ -362,13 +361,12 @@ pub fn run_full_workflow(project: &UserGuideProject) {
         "MATCH (a:Function)-[:CALLS]->(b:Function) WHERE b.name = '{}' RETURN a,b",
         project.calls_callee
     );
-    let calls = session.parse_json(
-        project,
-        "gql CALLS",
-        &session.run_json(&["gql", &calls_q]),
-    );
+    let calls = session.parse_json(project, "gql CALLS", &session.run_json(&["gql", &calls_q]));
     assert!(
-        calls.get("count").and_then(|v| v.as_u64()).is_some_and(|n| n > 0),
+        calls
+            .get("count")
+            .and_then(|v| v.as_u64())
+            .is_some_and(|n| n > 0),
         "[{}] gql CALLS to {}: {calls}",
         project.id,
         project.calls_callee
@@ -385,7 +383,11 @@ pub fn run_full_workflow(project: &UserGuideProject) {
     assert!(!rows.is_empty(), "[{}] communities jq empty", project.id);
     for row in rows {
         let map = row.as_object().expect("community row object");
-        assert!(map.contains_key("id"), "[{}] community row missing id", project.id);
+        assert!(
+            map.contains_key("id"),
+            "[{}] community row missing id",
+            project.id
+        );
         assert!(
             map.contains_key("label"),
             "[{}] community row missing label",
@@ -506,7 +508,11 @@ pub fn run_full_workflow(project: &UserGuideProject) {
             slice_doc.get("schema_version").and_then(|v| v.as_u64()),
             Some(1)
         );
-        assert!(slice_doc.get("nodes").is_some(), "[{}] slice nodes", project.id);
+        assert!(
+            slice_doc.get("nodes").is_some(),
+            "[{}] slice nodes",
+            project.id
+        );
     }
 
     // 11. semantic index + queries (local; uses artifact root via -r)
@@ -550,7 +556,11 @@ pub fn run_full_workflow(project: &UserGuideProject) {
         ".hits | map({name, ranking, score})",
     );
     let hits2 = sem2.as_array().expect("semantic community hits");
-    assert!(!hits2.is_empty(), "[{}] semantic community hits", project.id);
+    assert!(
+        !hits2.is_empty(),
+        "[{}] semantic community hits",
+        project.id
+    );
     assert!(
         hits2.iter().all(|h| {
             h.get("ranking")
@@ -562,8 +572,7 @@ pub fn run_full_workflow(project: &UserGuideProject) {
     );
 
     // 12. export mermaid
-    let export_path =
-        std::env::temp_dir().join(format!("rgctl-ug-{}-clearCart.mmd", project.id));
+    let export_path = std::env::temp_dir().join(format!("rgctl-ug-{}-clearCart.mmd", project.id));
     let _ = fs::remove_file(&export_path);
     let export = session.run(&[
         "export",

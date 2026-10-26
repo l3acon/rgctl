@@ -220,8 +220,7 @@ fn leiden_every_community_is_connected_subgraph() {
         backend.insert_node(l).unwrap();
         backend.insert_node(r).unwrap();
     }
-    let bridge = Node::new(NodeType::Function, "bridge")
-        .with_qualified_name("pkg::bridge");
+    let bridge = Node::new(NodeType::Function, "bridge").with_qualified_name("pkg::bridge");
     let id_b = bridge.id;
     backend.insert_node(bridge).unwrap();
 
@@ -262,8 +261,8 @@ fn statistical_hub_stripping_isolates_logger_hub() {
         domain_ids.push(build_clique(backend, domain, 10));
     }
 
-    let logger = Node::new(NodeType::Function, "Logger::info")
-        .with_qualified_name("util::Logger::info");
+    let logger =
+        Node::new(NodeType::Function, "Logger::info").with_qualified_name("util::Logger::info");
     let id_logger = logger.id;
     backend.insert_node(logger).unwrap();
 
@@ -318,9 +317,7 @@ fn node_insertion_order_invariance() {
         // Deterministic LCG Fisher–Yates.
         let mut state = seed;
         for i in (1..names.len()).rev() {
-            state = state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1);
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let j = (state as usize) % (i + 1);
             names.swap(i, j);
         }

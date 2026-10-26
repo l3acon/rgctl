@@ -9,7 +9,6 @@ fn main() -> anyhow::Result<()> {
     // Custom root help: visual Lifecycle / Query / … groups (clap cannot heading-group subcommands).
     let cmd = cli::root_command::<Cli>();
     let matches = cmd.get_matches();
-    let cli = Cli::from_arg_matches(&matches)
-        .context("parse CLI arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("parse CLI arguments")?;
     cli.run()
 }

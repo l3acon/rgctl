@@ -93,9 +93,7 @@ impl ConfigUsageDetector {
 
     /// Normalize a config key for matching (strip defaults already done; Spring relaxed form).
     pub fn normalize_key(key: &str) -> String {
-        key.trim()
-            .replace(['-', '_'], ".")
-            .to_ascii_lowercase()
+        key.trim().replace(['-', '_'], ".").to_ascii_lowercase()
     }
 
     fn detect_rust(source: &str, file: &str) -> Vec<ConfigUsage> {
@@ -324,7 +322,11 @@ System.getenv("PATH");
 "#;
         let usages = ConfigUsageDetector::detect("java", src, Path::new("App.java"));
         assert!(usages.iter().any(|u| u.key == "app.jwt.secret"));
-        assert!(usages.iter().any(|u| u.key == "quarkus.datasource.jdbc.url"));
+        assert!(
+            usages
+                .iter()
+                .any(|u| u.key == "quarkus.datasource.jdbc.url")
+        );
         assert!(usages.iter().any(|u| u.key == "PATH"));
     }
 

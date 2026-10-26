@@ -1,7 +1,7 @@
 //! Java properties / INI-style configuration plugin (span-accurate).
 
-use rgctl_plugin_api::{ConfigKey, ConfigValueType, Error, Result, SourceLocation};
 use rgctl_plugin_api::ConfigFormatPlugin;
+use rgctl_plugin_api::{ConfigKey, ConfigValueType, Error, Result, SourceLocation};
 use std::path::Path;
 
 /// Properties file config format plugin
@@ -151,7 +151,10 @@ mod tests {
         let keys = plugin
             .extract_config_keys(Path::new("app.properties"), source)
             .unwrap();
-        assert!(keys.iter().any(|k| k.key_path == "server.port" && k.value == "8080"));
+        assert!(
+            keys.iter()
+                .any(|k| k.key_path == "server.port" && k.value == "8080")
+        );
         let long = keys.iter().find(|k| k.key_path == "long.value").unwrap();
         assert_eq!(long.value, "foobar");
         assert!(long.location.start_line >= 1);

@@ -1,13 +1,10 @@
 //! PHP CFG analysis against the ecommerce-php fixture.
 
-use rgctl::analysis::{
-    ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path,
-};
+use rgctl::analysis::{ProgramDependenceGraph, build_cfg_for_function, cfg_language_id_from_path};
 use std::path::Path;
 
 fn php_repo() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("rgctl-tests/ecommerce-php")
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rgctl-tests/ecommerce-php")
 }
 
 #[test]

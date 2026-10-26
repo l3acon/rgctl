@@ -4,7 +4,7 @@
 # Override install dir: RGCTL_INSTALL_DIR=/usr/local/bin curl -fsSL ... | sh
 set -eu
 
-REPO="${RGCTL_REPO:-sshaaf/rgctl}"
+REPO="${RGCTL_REPO:-rgctl/rgctl}"
 INSTALL_DIR="${RGCTL_INSTALL_DIR:-${HOME}/.local/bin}"
 API="https://api.github.com/repos/${REPO}/releases/latest"
 

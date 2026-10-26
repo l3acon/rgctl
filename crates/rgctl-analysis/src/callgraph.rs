@@ -408,10 +408,10 @@ impl CallGraph {
                 }
             } else if let Some(&idx) = scc.first() {
                 let id = graph[idx];
-                if let Some(&self_idx) = self.id_to_index.get(&id) {
-                    if self.success_list[self_idx as usize].contains(&self_idx) {
-                        recursive.insert(id);
-                    }
+                if let Some(&self_idx) = self.id_to_index.get(&id)
+                    && self.success_list[self_idx as usize].contains(&self_idx)
+                {
+                    recursive.insert(id);
                 }
             }
         }

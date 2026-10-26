@@ -9,9 +9,11 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
-    let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_ocaml::LANGUAGE_OCAML.into())
-        .expect("compile ocaml tags.scm");
+    let plugin =
+        QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_ocaml::LANGUAGE_OCAML.into())
+            .expect("compile ocaml tags.scm");
     registry.register_language_plugin(Arc::new(plugin));
 }
 
@@ -31,17 +33,15 @@ mod tests {
     #[test]
     fn extract_smoke() {
         let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_ocaml::LANGUAGE_OCAML.into()).expect("compile");
+            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_ocaml::LANGUAGE_OCAML.into())
+                .expect("compile");
         let source = br###"let add a b = a + b
 "###;
         let result = plugin
             .extract_all(Path::new("math.ml"), source)
             .expect("extract_all");
         assert!(
-            result
-                .symbols
-                .iter()
-                .any(|s| s.name.contains("add")),
+            result.symbols.iter().any(|s| s.name.contains("add")),
             "expected symbol containing 'add', got {:?}",
             result.symbols
         );

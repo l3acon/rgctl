@@ -81,8 +81,8 @@ pub fn run(ctx: &CliContext, args: PrCheckArgs) -> Result<()> {
     let mut deltas = eval.deltas;
 
     let rgctl_dir = ctx.repo.join(GRAPH_DIR);
-    let mut ledger = ViolationLedger::open(&rgctl_dir)
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut ledger =
+        ViolationLedger::open(&rgctl_dir).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     apply_ledger_regression(&mut deltas, &ledger);
 
     let introduced_in_commit = if args.bisect {
@@ -129,15 +129,12 @@ pub fn run(ctx: &CliContext, args: PrCheckArgs) -> Result<()> {
         if response.violations_summary.resolved > 0 {
             println!(
                 "PR check passed ({} scoped entities, {} file changes); resolved {} violations (debt paid down)",
-                response.scope.entities,
-                response.scope.files,
-                response.violations_summary.resolved
+                response.scope.entities, response.scope.files, response.violations_summary.resolved
             );
         } else {
             println!(
                 "PR check passed ({} scoped entities, {} file changes)",
-                response.scope.entities,
-                response.scope.files
+                response.scope.entities, response.scope.files
             );
         }
     } else {
@@ -146,10 +143,7 @@ pub fn run(ctx: &CliContext, args: PrCheckArgs) -> Result<()> {
             if let Some(commit) = &v.introduced_in_commit {
                 println!(
                     "  {} [{}]: {} (introduced in {})",
-                    v.symbol,
-                    v.classification,
-                    v.violation,
-                    commit
+                    v.symbol, v.classification, v.violation, commit
                 );
             } else {
                 println!("  {} [{}]: {}", v.symbol, v.classification, v.violation);
@@ -209,7 +203,8 @@ pub fn evaluate_read_only(ctx: &CliContext, args: &PrCheckArgs) -> Result<PrChec
     // The on-disk ledger, opened for reading only. `ViolationLedger::open` loads the file if it exists and
     // creates nothing, so the only mutation in the `run` path — `record_deltas_to_ledger` — is the one
     // thing this function leaves out.
-    let ledger = ViolationLedger::open(&ctx.repo.join(GRAPH_DIR)).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let ledger = ViolationLedger::open(&ctx.repo.join(GRAPH_DIR))
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     apply_ledger_regression(&mut deltas, &ledger);
 
     let calendar = evaluate_calendar_for_deltas(
@@ -256,28 +251,28 @@ fn evaluate_pr_check(
     if args.strict && paths.is_empty() {
         anyhow::bail!("strict diff scope: no changed files between refs");
     }
-    if let Some(max) = max_changed_files {
-        if paths.len() > max {
-            anyhow::bail!(
-                "changed file count {} exceeds policy size_limits.max_changed_files {}",
-                paths.len(),
-                max
-            );
-        }
+    if let Some(max) = max_changed_files
+        && paths.len() > max
+    {
+        anyhow::bail!(
+            "changed file count {} exceeds policy size_limits.max_changed_files {}",
+            paths.len(),
+            max
+        );
     }
 
     let unified = resolve_unified_diff(ctx, &temporal, synthetic_head)?;
     let hunk_index = HunkIndex::from_unified_diff(&unified);
     let scope = EntityScope::new(&pair.head, &paths, Some(&hunk_index));
     let scope_keys = scope.changed_entities()?;
-    if let Some(max) = max_scoped_entities {
-        if scope_keys.len() > max {
-            anyhow::bail!(
-                "scoped entity count {} exceeds policy size_limits.max_scoped_entities {}",
-                scope_keys.len(),
-                max
-            );
-        }
+    if let Some(max) = max_scoped_entities
+        && scope_keys.len() > max
+    {
+        anyhow::bail!(
+            "scoped entity count {} exceeds policy size_limits.max_scoped_entities {}",
+            scope_keys.len(),
+            max
+        );
     }
 
     let head_seed_ids = scope_entity_ids(&pair.head, &scope_keys)?;
@@ -303,7 +298,7 @@ fn evaluate_pr_check(
         &head_engine,
         &base_engine,
         &scope_keys,
-        &registry,
+        registry,
         &centrality,
     )?;
 

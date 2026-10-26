@@ -2,7 +2,9 @@
 
 use crate::command::{SearchArgs, SearchScope};
 use crate::error::{Result, ServiceError};
-use crate::semantic_json::{SemanticHitJson, build_query_response, hit_from_semantic, query_response_to_json};
+use crate::semantic_json::{
+    SemanticHitJson, build_query_response, hit_from_semantic, query_response_to_json,
+};
 use rgctl_analysis::{
     AnalysisResults, CommunityQueryContext, OnnxReloadOptions, SemanticFusionConfig, SemanticIndex,
     query_communities, query_index_with_fusion,
@@ -15,7 +17,9 @@ use std::path::Path;
 /// Run semantic query. Missing index is handled by the caller (status JSON).
 pub fn run_search(graph: &CodeGraph, repo: &Path, args: &SearchArgs) -> Result<Value> {
     if args.text.trim().is_empty() {
-        return Err(ServiceError::InvalidParams("`text` must not be empty".into()));
+        return Err(ServiceError::InvalidParams(
+            "`text` must not be empty".into(),
+        ));
     }
     let path = SemanticIndex::default_path(repo);
     let index = SemanticIndex::load(&path).map_err(ServiceError::from)?;
@@ -74,7 +78,8 @@ pub fn run_search(graph: &CodeGraph, repo: &Path, args: &SearchArgs) -> Result<V
                 ranking: Some("community".into()),
             })
             .collect();
-        let response = build_query_response(&args.text, &index.model_id, index.dimensions, hits, None);
+        let response =
+            build_query_response(&args.text, &index.model_id, index.dimensions, hits, None);
         return Ok(query_response_to_json(&response));
     }
 

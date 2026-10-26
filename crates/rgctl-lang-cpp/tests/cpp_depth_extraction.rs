@@ -45,9 +45,9 @@ class Derived : public Base {
         "namespace N missing"
     );
     assert!(
-        out.symbols.iter().any(|s| {
-            s.name == "IntVec" && s.symbol_type == SymbolType::TypeAlias
-        }),
+        out.symbols
+            .iter()
+            .any(|s| { s.name == "IntVec" && s.symbol_type == SymbolType::TypeAlias }),
         "alias IntVec missing"
     );
     assert!(
@@ -101,9 +101,9 @@ class Derived : public Base {
         out.relations
     );
     assert!(
-        out.relations.iter().any(|r| {
-            r.relation_type == RelationType::Calls && r.to.contains("foo")
-        }),
+        out.relations
+            .iter()
+            .any(|r| { r.relation_type == RelationType::Calls && r.to.contains("foo") }),
         "template_function call foo missing: {:?}",
         out.relations
     );
@@ -117,11 +117,7 @@ fn enumerator_as_symbol_kind_visited() {
     let out = plugin
         .extract_all(Path::new("e.cpp"), source)
         .expect("extract_all");
-    let e = out
-        .symbols
-        .iter()
-        .find(|s| s.name == "E")
-        .expect("E");
+    let e = out.symbols.iter().find(|s| s.name == "E").expect("E");
     assert_eq!(e.fields.len(), 2);
 }
 
@@ -132,12 +128,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../cpp-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_cpp::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "cpp",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("cpp", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

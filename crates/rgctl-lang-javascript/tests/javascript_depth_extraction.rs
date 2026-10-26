@@ -62,9 +62,9 @@ class Order {}
         out.relations
     );
     assert!(
-        out.relations.iter().any(|r| {
-            r.relation_type == RelationType::AnnotatedWith && r.to == "controller"
-        }),
+        out.relations
+            .iter()
+            .any(|r| { r.relation_type == RelationType::AnnotatedWith && r.to == "controller" }),
         "class decorator missing: {:?}",
         out.relations
     );
@@ -77,12 +77,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../javascript-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_javascript::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "javascript",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("javascript", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

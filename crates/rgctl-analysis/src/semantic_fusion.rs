@@ -105,10 +105,10 @@ pub fn keyword_and_matches(
     if keywords.is_empty() {
         return true;
     }
-    if let Some(bloom) = node_bloom {
-        if satisfies_keyword_and(keywords, bloom) {
-            return true;
-        }
+    if let Some(bloom) = node_bloom
+        && satisfies_keyword_and(keywords, bloom)
+    {
+        return true;
     }
     keyword_and_matches_metadata(entry, keywords)
 }
@@ -167,7 +167,7 @@ pub fn hamming_similarity(distance: u32, dimensions: usize) -> f64 {
 pub fn entry_package_key(entry: &SemanticEntry) -> Option<String> {
     if let Some(qn) = &entry.qualified_name {
         let parts: Vec<&str> = qn
-            .split(|c: char| c == '.' || c == ':' || c == '/')
+            .split(['.', ':', '/'])
             .filter(|part| !part.is_empty())
             .collect();
         if parts.len() >= 2 {
@@ -317,6 +317,7 @@ pub fn fuse_candidates(
 }
 
 /// Search with optional two-stage Hamming + late fusion ranking.
+#[allow(clippy::too_many_arguments)]
 pub fn query_index_with_fusion(
     index: &SemanticIndex,
     query: &str,

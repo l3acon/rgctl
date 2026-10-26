@@ -13,8 +13,7 @@ mod single_pass;
 pub use plugin::PuppetPlugin;
 
 /// Register the Puppet language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
-    registry.register_language_plugin(Arc::new(
-        PuppetPlugin::new().expect("init PuppetPlugin"),
-    ));
+    registry.register_language_plugin(Arc::new(PuppetPlugin::new().expect("init PuppetPlugin")));
 }

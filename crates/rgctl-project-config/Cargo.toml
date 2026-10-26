@@ -20,3 +20,6 @@ toml = "0.8"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[lints.clippy]
+collapsible_if = "allow"

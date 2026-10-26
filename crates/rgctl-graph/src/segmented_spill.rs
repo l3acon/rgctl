@@ -12,15 +12,15 @@ use crate::columnar_snapshot::{
 };
 use crate::csr::edge_type_to_u8;
 use crate::schema::{Edge, Node, NodeType};
+use rayon::prelude::*;
 use rgctl_error::{Error, Result};
 use std::cmp::Ordering;
-use rayon::prelude::*;
-use std::thread;
 use std::collections::{BinaryHeap, HashMap};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::thread;
 use uuid::Uuid;
 
 /// Default run size for external merge-sort (~256 MiB of record payload).
@@ -40,11 +40,7 @@ pub fn set_sort_run_bytes_override(bytes: Option<usize>) {
 
 fn effective_sort_run_bytes() -> usize {
     let o = SORT_RUN_BYTES_OVERRIDE.load(AtomicOrdering::Relaxed);
-    if o == 0 {
-        DEFAULT_SORT_RUN_BYTES
-    } else {
-        o
-    }
+    if o == 0 { DEFAULT_SORT_RUN_BYTES } else { o }
 }
 
 const NODE_KEY_LEN: usize = 16;
@@ -204,8 +200,12 @@ pub fn materialize_sorted_graph(spill: &FinishedSpill) -> Result<(Vec<Node>, Vec
                 spill.edge_count,
             )
         });
-        node_err.join().map_err(|_| Error::GraphError("node sort panicked".into()))??;
-        edge_err.join().map_err(|_| Error::GraphError("edge sort panicked".into()))??;
+        node_err
+            .join()
+            .map_err(|_| Error::GraphError("node sort panicked".into()))??;
+        edge_err
+            .join()
+            .map_err(|_| Error::GraphError("edge sort panicked".into()))??;
         Ok(())
     })?;
 
@@ -267,8 +267,12 @@ pub fn write_columnar_from_spill(spill: FinishedSpill, path: &Path) -> Result<St
                 edge_count,
             )
         });
-        node_err.join().map_err(|_| Error::GraphError("node sort panicked".into()))??;
-        edge_err.join().map_err(|_| Error::GraphError("edge sort panicked".into()))??;
+        node_err
+            .join()
+            .map_err(|_| Error::GraphError("node sort panicked".into()))??;
+        edge_err
+            .join()
+            .map_err(|_| Error::GraphError("edge sort panicked".into()))??;
         Ok(())
     })?;
 
@@ -375,10 +379,7 @@ fn external_sort_records(
     }
 
     let parent = output.parent().unwrap_or_else(|| Path::new("."));
-    let run_prefix = output
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("run");
+    let run_prefix = output.file_stem().and_then(|s| s.to_str()).unwrap_or("run");
     let mut run_paths = Vec::new();
     let mut reader = BufReader::with_capacity(8 * 1024 * 1024, File::open(input)?);
     let mut remaining = record_count;
@@ -496,11 +497,7 @@ fn read_record_or_eof<R: Read>(reader: &mut R, key_len: usize) -> Result<Option<
             Error::IoError(e)
         }
     })?;
-    Ok(Some(SpillRecord {
-        key,
-        key_len,
-        blob,
-    }))
+    Ok(Some(SpillRecord { key, key_len, blob }))
 }
 
 fn read_all_records(path: &Path, key_len: usize, count: usize) -> Result<Vec<SpillRecord>> {
@@ -561,14 +558,13 @@ fn k_way_merge(run_paths: &[PathBuf], output: &Path, key_len: usize) -> Result<(
 
     let mut heap = BinaryHeap::new();
     for (i, reader) in readers.iter_mut().enumerate() {
-        match read_record_or_eof(reader, key_len)? {
-            Some(rec) => heap.push(HeapEntry {
+        if let Some(rec) = read_record_or_eof(reader, key_len)? {
+            heap.push(HeapEntry {
                 key: rec.key,
                 key_len: rec.key_len,
                 blob: rec.blob,
                 run_idx: i,
-            }),
-            None => {}
+            })
         }
     }
 
@@ -641,7 +637,8 @@ mod tests {
         let mut bytes = vec![0u8; NODE_KEY_LEN];
         bytes.extend_from_slice(&8u64.to_le_bytes());
         bytes.extend_from_slice(&[1, 2, 3]); // short blob
-        let err = read_one_record_at(&mut bytes.as_slice(), NODE_KEY_LEN, "node", 0, 1).unwrap_err();
+        let err =
+            read_one_record_at(&mut bytes.as_slice(), NODE_KEY_LEN, "node", 0, 1).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("truncated"), "{msg}");
     }

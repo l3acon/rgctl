@@ -121,13 +121,13 @@ impl FileDiscoverer {
                 continue;
             }
 
-            if let Some(ref languages) = self.config.languages
-                && !self.matches_language_filter(path, languages)
-            {
+            if self.is_too_large(path)? {
                 continue;
             }
 
-            if self.is_too_large(path)? {
+            if let Some(ref languages) = self.config.languages
+                && !self.matches_language_filter(path, languages)
+            {
                 continue;
             }
 
@@ -143,6 +143,14 @@ impl FileDiscoverer {
     }
 
     fn matches_language_filter(&self, path: &Path, languages: &[String]) -> bool {
+        if path.extension().and_then(|e| e.to_str()) == Some("m") {
+            let wants_matlab = languages.iter().any(|l| l == "matlab");
+            let wants_objc = languages.iter().any(|l| l == "objc");
+            if wants_matlab != wants_objc {
+                return true;
+            }
+        }
+
         if let Ok(plugin) = self.registry.get_plugin_for_file(path) {
             return languages.iter().any(|l| l == plugin.language_id());
         }

@@ -87,17 +87,16 @@ fn scoped_var_matches(stored: &str, query: &str) -> bool {
 }
 
 fn def_var_from_wire(s: String) -> DefVar {
-    if let Some((receiver, member)) = s.rsplit_once('.') {
-        if !receiver.is_empty()
-            && !member.is_empty()
-            && !receiver.contains('(')
-            && !member.contains('(')
-        {
-            return DefVar::Field {
-                receiver: receiver.to_string(),
-                member: member.to_string(),
-            };
-        }
+    if let Some((receiver, member)) = s.rsplit_once('.')
+        && !receiver.is_empty()
+        && !member.is_empty()
+        && !receiver.contains('(')
+        && !member.contains('(')
+    {
+        return DefVar::Field {
+            receiver: receiver.to_string(),
+            member: member.to_string(),
+        };
     }
     DefVar::Local(s)
 }

@@ -56,7 +56,7 @@ Hand-labeled facts live in `ecommerce-*/correctness/expected-facts.json` (see [`
 
 ### Install rgctl from GitHub Releases
 
-[`install_rgctl_release.sh`](install_rgctl_release.sh) downloads the platform archive published by [rgctl releases](https://github.com/sshaaf/rgctl/releases):
+[`install_rgctl_release.sh`](install_rgctl_release.sh) downloads the platform archive published by [rgctl releases](https://github.com/rgctl/rgctl/releases):
 
 ```bash
 ./scripts/install_rgctl_release.sh
@@ -78,7 +78,7 @@ Environment variables:
 
 [`.github/workflows/rgctl-report.yml`](../.github/workflows/rgctl-report.yml) runs when:
 
-1. **rgctl publishes a release** — the [rgctl release workflow](https://github.com/sshaaf/rgctl/blob/main/.github/workflows/release.yml) sends a `repository_dispatch` (`rgctl-released`) with the new tag.
+1. **rgctl publishes a release** — the [rgctl release workflow](https://github.com/rgctl/rgctl/blob/main/.github/workflows/release.yml) sends a `repository_dispatch` (`rgctl-released`) with the new tag.
 2. **Manual run** — Actions → **rgctl Report** → Run workflow.
 
 The workflow:

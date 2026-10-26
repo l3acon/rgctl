@@ -1,6 +1,6 @@
 //! package.json → DependencyDeclaration.
 
-use super::{loc, DependencyDeclaration};
+use super::{DependencyDeclaration, loc};
 use std::path::Path;
 
 pub fn extract(path: &Path, source: &[u8]) -> Vec<DependencyDeclaration> {
@@ -44,6 +44,10 @@ mod tests {
         let src = br#"{"dependencies":{"lodash":"^4.17.21"},"devDependencies":{"jest":"29.0.0"}}"#;
         let decls = extract(Path::new("package.json"), src);
         assert!(decls.iter().any(|d| d.name == "lodash"));
-        assert!(decls.iter().any(|d| d.name == "jest" && d.scope.as_deref() == Some("dev")));
+        assert!(
+            decls
+                .iter()
+                .any(|d| d.name == "jest" && d.scope.as_deref() == Some("dev"))
+        );
     }
 }

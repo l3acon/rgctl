@@ -1,7 +1,7 @@
 //! Session graph status: cheap freshness / presence check (no rediscover).
 
-use super::context::CliContext;
 use super::OutputFormat;
+use super::context::CliContext;
 use crate::discovery::{DiscoveryConfig, FileDiscoverer};
 use crate::languages::registry::LanguageRegistry;
 use anyhow::Result;
@@ -165,9 +165,7 @@ fn build_capabilities(repo: &Path, structural_ready: bool) -> SessionCapabilitie
             } else {
                 None
             },
-            path: sem_path
-                .is_file()
-                .then(|| sem_path.display().to_string()),
+            path: sem_path.is_file().then(|| sem_path.display().to_string()),
             unlock_command: "rgctl semantic index",
         },
         agent_skills: AgentSkillsCapability {
@@ -375,23 +373,21 @@ fn emit_capabilities_text(ctx: &CliContext, caps: &SessionCapabilities) -> Resul
         "  structural_graph: {sg}  ({})",
         caps.structural_graph.unlock_command
     ))?;
-    let cfg = if caps.cfg_cpg.ready { "ready" } else { "missing" };
+    let cfg = if caps.cfg_cpg.ready {
+        "ready"
+    } else {
+        "missing"
+    };
     ctx.stdout_line(&format!(
         "  cfg_cpg: {cfg} overlay={} ast_skeleton={}  ({})",
-        caps.cfg_cpg.cpg_overlay,
-        caps.cfg_cpg.ast_skeleton,
-        caps.cfg_cpg.unlock_command
+        caps.cfg_cpg.cpg_overlay, caps.cfg_cpg.ast_skeleton, caps.cfg_cpg.unlock_command
     ))?;
     let sem = if caps.semantic_index.ready {
         "ready"
     } else {
         "missing"
     };
-    let scope = caps
-        .semantic_index
-        .scope
-        .as_deref()
-        .unwrap_or("-");
+    let scope = caps.semantic_index.scope.as_deref().unwrap_or("-");
     ctx.stdout_line(&format!(
         "  semantic_index: {sem} scope={scope}  ({})",
         caps.semantic_index.unlock_command

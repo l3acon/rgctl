@@ -212,14 +212,13 @@ fn puppet_callable_name(node: Node<'_>, source: &[u8]) -> Option<String> {
         if matches!(
             child.kind(),
             "class_identifier" | "identifier" | "node_name" | "string"
-        ) {
-            if let Ok(t) = child.utf8_text(source) {
-                let name = t.trim_matches('\'').trim_matches('"');
-                if node.kind() == "node_definition" {
-                    return Some(format!("node:{name}"));
-                }
-                return Some(name.to_string());
+        ) && let Ok(t) = child.utf8_text(source)
+        {
+            let name = t.trim_matches('\'').trim_matches('"');
+            if node.kind() == "node_definition" {
+                return Some(format!("node:{name}"));
             }
+            return Some(name.to_string());
         }
     }
     extract_name_from_node(node, source).ok().flatten()
@@ -243,20 +242,18 @@ fn walk_skeleton(
         && node.kind() != "singleton_method";
 
     let mut child_parent = parent;
-    if emit {
-        if let Some(k) = kind {
-            let id = *next_id;
-            *next_id += 1;
-            out.push(AstSkeletonNode {
-                id,
-                parent: Some(parent),
-                kind: k,
-                start_line: node.start_position().row + 1,
-                end_line: node.end_position().row + 1,
-                label: truncate_label(node.utf8_text(source).unwrap_or("")),
-            });
-            child_parent = id;
-        }
+    if emit && let Some(k) = kind {
+        let id = *next_id;
+        *next_id += 1;
+        out.push(AstSkeletonNode {
+            id,
+            parent: Some(parent),
+            kind: k,
+            start_line: node.start_position().row + 1,
+            end_line: node.end_position().row + 1,
+            label: truncate_label(node.utf8_text(source).unwrap_or("")),
+        });
+        child_parent = id;
     }
 
     let mut cursor = node.walk();
@@ -275,10 +272,11 @@ fn classify(kind: &str) -> Option<AstSkeletonKind> {
         | "while" | "until" | "for" | "iterator_statement" | "case_statement" => {
             AstSkeletonKind::Loop
         }
-        "call_expression" | "method_invocation" | "invocation_expression" | "function_call"
-        | "call" => {
-            AstSkeletonKind::Call
-        }
+        "call_expression"
+        | "method_invocation"
+        | "invocation_expression"
+        | "function_call"
+        | "call" => AstSkeletonKind::Call,
         "assignment_expression"
         | "assignment"
         | "assignment_statement"

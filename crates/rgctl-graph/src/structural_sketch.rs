@@ -199,8 +199,7 @@ mod tests {
 
     #[test]
     fn bloom_detects_inserted_body_token() {
-        let bloom =
-            build_token_bloom("helper", None, None, Some("let port = ntohs(raw);"), None);
+        let bloom = build_token_bloom("helper", None, None, Some("let port = ntohs(raw);"), None);
         assert!(keyword_in_bloom("ntohs", &bloom));
     }
 

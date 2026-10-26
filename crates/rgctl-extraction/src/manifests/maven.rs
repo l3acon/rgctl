@@ -1,6 +1,6 @@
 //! Maven `pom.xml` → DependencyDeclaration.
 
-use super::{loc, DependencyDeclaration};
+use super::{DependencyDeclaration, loc};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -160,10 +160,7 @@ mod tests {
             .iter()
             .find(|d| d.name == "io.quarkus:quarkus-bom")
             .unwrap();
-        assert_eq!(
-            bom.version_requirement.as_deref(),
-            Some("2.16.12.Final")
-        );
+        assert_eq!(bom.version_requirement.as_deref(), Some("2.16.12.Final"));
         assert_eq!(bom.scope.as_deref(), Some("import"));
     }
 }

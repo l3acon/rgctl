@@ -36,10 +36,7 @@ impl ScopedPaths {
             .into_iter()
             .map(|p| Arc::<str>::from(normalize_path_str(&p)))
             .collect();
-        Self {
-            files,
-            change_set,
-        }
+        Self { files, change_set }
     }
 
     /// Build from an explicit path list (normalized).
@@ -62,11 +59,7 @@ impl ScopedPaths {
     /// Paths that must be invalidated in a base snapshot before delta compact.
     pub fn invalidation_paths(&self) -> Vec<String> {
         if self.change_set.is_empty() {
-            return self
-                .files
-                .iter()
-                .map(|p| p.to_string())
-                .collect();
+            return self.files.iter().map(|p| p.to_string()).collect();
         }
         self.change_set.invalidation_paths()
     }
@@ -85,10 +78,9 @@ impl ScopedPaths {
     pub fn contains_path(&self, path: &str) -> bool {
         let normalized = normalize_path_str(path);
         self.files.contains(normalized.as_ref())
-            || self
-                .files
-                .iter()
-                .any(|p| normalized.ends_with(p.as_ref()) || p.as_ref().ends_with(normalized.as_ref()))
+            || self.files.iter().any(|p| {
+                normalized.ends_with(p.as_ref()) || p.as_ref().ends_with(normalized.as_ref())
+            })
     }
 
     /// Interned path set.
@@ -135,11 +127,7 @@ impl HunkIndex {
                     continue;
                 };
                 if let Some(range) = parse_hunk_new_range(header) {
-                    index
-                        .ranges
-                        .entry(file)
-                        .or_default()
-                        .push(range);
+                    index.ranges.entry(file).or_default().push(range);
                 }
             }
         }
@@ -178,12 +166,12 @@ pub struct EntityScope<'a> {
 
 impl<'a> EntityScope<'a> {
     /// Create a scope over head nodes constrained by git paths and optional hunks.
-    pub fn new(head: &'a SnapshotNodeStore, paths: &'a ScopedPaths, hunks: Option<&'a HunkIndex>) -> Self {
-        Self {
-            head,
-            paths,
-            hunks,
-        }
+    pub fn new(
+        head: &'a SnapshotNodeStore,
+        paths: &'a ScopedPaths,
+        hunks: Option<&'a HunkIndex>,
+    ) -> Self {
+        Self { head, paths, hunks }
     }
 
     /// Stable keys for head entities overlapping the scoped diff.
@@ -327,39 +315,25 @@ pub fn parse_name_status_z(stdout: &[u8]) -> ChangeSet {
         idx += 1;
 
         match letter {
-            Some('A') => {
-                if idx < parts.len() {
-                    added.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('A') if idx < parts.len() => {
+                added.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('M') | Some('T') => {
-                if idx < parts.len() {
-                    changed.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('M') | Some('T') if idx < parts.len() => {
+                changed.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('D') => {
-                if idx < parts.len() {
-                    deleted.push(
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned(),
-                    );
-                    idx += 1;
-                }
+            Some('D') if idx < parts.len() => {
+                deleted.push(normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned());
+                idx += 1;
             }
-            Some('R') | Some('C') => {
-                if idx + 1 < parts.len() {
-                    let old_path =
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned();
-                    let new_path =
-                        normalize_path_str(&String::from_utf8_lossy(parts[idx + 1])).into_owned();
-                    renamed.push((old_path, new_path));
-                    idx += 2;
-                }
+            Some('R') | Some('C') if idx + 1 < parts.len() => {
+                let old_path =
+                    normalize_path_str(&String::from_utf8_lossy(parts[idx])).into_owned();
+                let new_path =
+                    normalize_path_str(&String::from_utf8_lossy(parts[idx + 1])).into_owned();
+                renamed.push((old_path, new_path));
+                idx += 2;
             }
             _ => {}
         }
@@ -421,7 +395,11 @@ pub fn git_unified_diff_worktree(repo_root: &Path) -> Result<String> {
 }
 
 /// Commits reachable from `head_ref` but not `base_ref`, oldest first.
-pub fn git_rev_list_reverse(repo_root: &Path, base_ref: &str, head_ref: &str) -> Result<Vec<String>> {
+pub fn git_rev_list_reverse(
+    repo_root: &Path,
+    base_ref: &str,
+    head_ref: &str,
+) -> Result<Vec<String>> {
     let range = format!("{base_ref}..{head_ref}");
     let output = Command::new("git")
         .args(["rev-list", "--reverse", &range])
@@ -488,10 +466,7 @@ pub fn resolve_pr_check_artifacts(
 }
 
 /// Resolve the base snapshot path (no head existence check).
-pub fn resolve_base_snapshot(
-    repo: &Path,
-    base_artifact: Option<&Path>,
-) -> Result<PathBuf> {
+pub fn resolve_base_snapshot(repo: &Path, base_artifact: Option<&Path>) -> Result<PathBuf> {
     let base_root = resolve_base_artifact_root(repo, base_artifact)?;
     let base_snapshot = resolve_snapshot_path(&base_root);
     ensure_snapshot_exists(&base_snapshot, "base")?;
@@ -499,10 +474,7 @@ pub fn resolve_base_snapshot(
 }
 
 /// Root directory for the base artifact (for delta head synthesis).
-pub fn resolve_base_artifact_root(
-    repo: &Path,
-    base_artifact: Option<&Path>,
-) -> Result<PathBuf> {
+pub fn resolve_base_artifact_root(repo: &Path, base_artifact: Option<&Path>) -> Result<PathBuf> {
     resolve_base_artifact_root_impl(repo, base_artifact)
 }
 
@@ -656,9 +628,21 @@ index 111..222 100644
         assert!(scoped.contains_path("src/modify.rs"));
         assert!(scoped.contains_path("src/remove.rs"));
         assert!(scoped.contains_path("src/new_name.rs"));
-        assert!(scoped.invalidation_paths().contains(&"src/remove.rs".to_string()));
-        assert!(scoped.invalidation_paths().contains(&"src/old_name.rs".to_string()));
-        assert!(!scoped.invalidation_paths().contains(&"src/added.rs".to_string()));
+        assert!(
+            scoped
+                .invalidation_paths()
+                .contains(&"src/remove.rs".to_string())
+        );
+        assert!(
+            scoped
+                .invalidation_paths()
+                .contains(&"src/old_name.rs".to_string())
+        );
+        assert!(
+            !scoped
+                .invalidation_paths()
+                .contains(&"src/added.rs".to_string())
+        );
     }
 
     #[test]
@@ -706,7 +690,10 @@ index 111..222 100644
         fs::write(rgctl.join("graph.snapshot.bin"), b"snap").unwrap();
 
         let err = resolve_pr_check_artifacts(tmp.path(), None, None).unwrap_err();
-        assert!(err.to_string().contains("base graph snapshot not configured"));
+        assert!(
+            err.to_string()
+                .contains("base graph snapshot not configured")
+        );
 
         let base = tmp.path().join(DEFAULT_BASE_ARTIFACT_SUBDIR);
         fs::create_dir_all(base.join(".rgctl")).unwrap();

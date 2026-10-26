@@ -46,7 +46,9 @@ pub fn extract_alias_declaration(
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
-    let aliased = node.child_by_field_name("type").and_then(|n| text(n, source));
+    let aliased = node
+        .child_by_field_name("type")
+        .and_then(|n| text(n, source));
     let qn = scopes.qualified_name_sep(&name, "::");
     Some(Symbol {
         name,
@@ -122,9 +124,7 @@ pub fn extract_union_specifier_named(
     let tag = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source));
-    let name = typedef_name
-        .map(str::to_string)
-        .or(tag.clone())?;
+    let name = typedef_name.map(str::to_string).or(tag.clone())?;
     let fields = crate::plugin::extract_type_fields(node, source).unwrap_or_default();
     let qn = scopes.qualified_name_sep(&name, "::");
     let mut metadata = serde_json::json!({
@@ -161,7 +161,9 @@ pub fn extract_preproc_def(node: Node, source: &[u8], file_path: &str) -> Option
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
-    let value = node.child_by_field_name("value").and_then(|n| text(n, source));
+    let value = node
+        .child_by_field_name("value")
+        .and_then(|n| text(n, source));
     Some(Symbol {
         name: name.clone(),
         symbol_type: SymbolType::Macro,
@@ -190,7 +192,9 @@ pub fn extract_preproc_function_def(node: Node, source: &[u8], file_path: &str) 
     let name = node
         .child_by_field_name("name")
         .and_then(|n| text(n, source))?;
-    let value = node.child_by_field_name("value").and_then(|n| text(n, source));
+    let value = node
+        .child_by_field_name("value")
+        .and_then(|n| text(n, source));
     Some(Symbol {
         name: name.clone(),
         symbol_type: SymbolType::Macro,
@@ -237,11 +241,7 @@ pub fn extract_namespace_definition(node: Node, source: &[u8], file_path: &str) 
 }
 
 /// `using std::vector;` → Uses relation.
-pub fn using_declaration_relation(
-    node: Node,
-    source: &[u8],
-    file_path: &str,
-) -> Option<Relation> {
+pub fn using_declaration_relation(node: Node, source: &[u8], file_path: &str) -> Option<Relation> {
     if node.kind() != "using_declaration" {
         return None;
     }

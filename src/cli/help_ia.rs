@@ -19,13 +19,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Lifecycle",
         &[
-            "discover",
-            "status",
-            "update",
-            "watch",
-            "merge",
-            "serve",
-            "diff",
+            "discover", "status", "update", "watch", "merge", "serve", "diff",
         ],
     ),
     (
@@ -107,10 +101,8 @@ pub fn render_grouped_commands(cmd: &Command) -> String {
             if about.is_empty() && *name != "help" {
                 continue;
             }
-            let _ = std::fmt::Write::write_fmt(
-                &mut out,
-                format_args!("  {name:width$}  {about}\n"),
-            );
+            let _ =
+                std::fmt::Write::write_fmt(&mut out, format_args!("  {name:width$}  {about}\n"));
         }
         out.push('\n');
     }
@@ -126,10 +118,8 @@ pub fn render_grouped_commands(cmd: &Command) -> String {
         out.push_str("Other:\n");
         for name in extras {
             let about = abouts.get(&name).map(String::as_str).unwrap_or("");
-            let _ = std::fmt::Write::write_fmt(
-                &mut out,
-                format_args!("  {name:width$}  {about}\n"),
-            );
+            let _ =
+                std::fmt::Write::write_fmt(&mut out, format_args!("  {name:width$}  {about}\n"));
         }
         out.push('\n');
     }

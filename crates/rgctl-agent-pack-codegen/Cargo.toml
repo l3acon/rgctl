@@ -19,3 +19,6 @@ path = "src/main.rs"
 [lib]
 name = "rgctl_agent_pack_codegen"
 path = "src/lib.rs"
+
+[lints.clippy]
+collapsible_if = "allow"

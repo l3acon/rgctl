@@ -2,7 +2,7 @@
 
 Agent-first docs: index once, query with `-f json`, deepen in the User Guide when a human needs the full walkthrough.
 
-> **Feature guides** (`docs/guides/` historically) now live in **[rgctl-website](https://github.com/sshaaf/rgctl-website)** (`docs/guides/`) and are published at [shaaf.dev/rgctl/docs/guides/](https://rgctl.io/docs/guides/). This repo keeps a [pointer stub](guides/README.md).
+> **Feature guides** (`docs/guides/` historically) now live in **[rgctl-website](https://github.com/rgctl/rgctl-website)** (`docs/guides/`) and are published at [shaaf.dev/rgctl/docs/guides/](https://rgctl.io/docs/guides/). This repo keeps a [pointer stub](guides/README.md).
 
 ## Primary (start here)
 

@@ -454,9 +454,11 @@ impl CfgPdgArchiveMmap {
     fn toc_entry_at(&self, index: usize) -> Result<TocEntry> {
         let start = self
             .toc_offset
-            .checked_add(index.checked_mul(TOC_ENTRY_SIZE).ok_or_else(|| {
-                Error::SerdeError("cfg_pdg TOC index overflow".into())
-            })?)
+            .checked_add(
+                index
+                    .checked_mul(TOC_ENTRY_SIZE)
+                    .ok_or_else(|| Error::SerdeError("cfg_pdg TOC index overflow".into()))?,
+            )
             .ok_or_else(|| Error::SerdeError("cfg_pdg TOC offset overflow".into()))?;
         let end = start + TOC_ENTRY_SIZE;
         if end > self.mmap.len().saturating_sub(TOC_TRAILER_SIZE) {
@@ -641,20 +643,20 @@ fn write_v3_archive(
             len: length,
             flags: TOC_FLAG_PRIMARY,
         });
-        if let Some(alias) = stable_alias_uuid_from_payload(bytes) {
-            if alias != *id {
-                toc_entries.push(TocEntry {
-                    uuid: *alias.as_bytes(),
-                    offset: abs_offset,
-                    len: length,
-                    flags: TOC_FLAG_STABLE_ALIAS,
-                });
-            }
+        if let Some(alias) = stable_alias_uuid_from_payload(bytes)
+            && alias != *id
+        {
+            toc_entries.push(TocEntry {
+                uuid: *alias.as_bytes(),
+                offset: abs_offset,
+                len: length,
+                flags: TOC_FLAG_STABLE_ALIAS,
+            });
         }
         payload.extend_from_slice(bytes);
         abs_offset += u64::from(length);
     }
-    toc_entries.sort_by(|a, b| a.uuid.cmp(&b.uuid));
+    toc_entries.sort_by_key(|a| a.uuid);
 
     let payload_end = header_len + payload.len();
     let toc_offset = (payload_end + 7) & !7; // 8-byte align
@@ -691,10 +693,16 @@ fn parse_v3_footer(mmap: &[u8]) -> Result<(usize, usize, Option<String>)> {
     let trailer_start = mmap.len() - TOC_TRAILER_SIZE;
     let toc_offset =
         u64::from_le_bytes(mmap[trailer_start..trailer_start + 8].try_into().unwrap()) as usize;
-    let toc_count =
-        u32::from_le_bytes(mmap[trailer_start + 8..trailer_start + 12].try_into().unwrap()) as usize;
-    let magic =
-        u32::from_le_bytes(mmap[trailer_start + 12..trailer_start + 16].try_into().unwrap());
+    let toc_count = u32::from_le_bytes(
+        mmap[trailer_start + 8..trailer_start + 12]
+            .try_into()
+            .unwrap(),
+    ) as usize;
+    let magic = u32::from_le_bytes(
+        mmap[trailer_start + 12..trailer_start + 16]
+            .try_into()
+            .unwrap(),
+    );
     if magic != TOC_FOOTER_MAGIC {
         return Err(Error::SerdeError(
             "cfg_pdg archive missing TOC3 footer".into(),
@@ -703,7 +711,7 @@ fn parse_v3_footer(mmap: &[u8]) -> Result<(usize, usize, Option<String>)> {
     let toc_bytes = toc_count
         .checked_mul(TOC_ENTRY_SIZE)
         .ok_or_else(|| Error::SerdeError("cfg_pdg TOC overflow".into()))?;
-    if toc_offset % 8 != 0 {
+    if !toc_offset.is_multiple_of(8) {
         return Err(Error::SerdeError(
             "cfg_pdg TOC footer not 8-byte aligned".into(),
         ));
@@ -905,9 +913,7 @@ fn read_header_digest(mmap: &[u8]) -> Option<String> {
     if end > mmap.len() {
         return None;
     }
-    std::str::from_utf8(&mmap[12..end])
-        .ok()
-        .map(str::to_string)
+    std::str::from_utf8(&mmap[12..end]).ok().map(str::to_string)
 }
 
 fn serde_err(e: bincode::Error) -> Error {

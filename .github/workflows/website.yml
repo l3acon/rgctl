@@ -1,6 +1,6 @@
-# Legacy GitHub Pages site (shaaf.dev/rgctl/) → redirect stub to https://rgctl.io/
+# Legacy GitHub Pages site (sshaaf.dev/rgctl/, shaaf.dev/rgctl/, *.github.io/rgctl/) → redirect stub to https://rgctl.io/
 #
-# Full site + guides: https://github.com/sshaaf/rgctl-website
+# Full site + guides: https://github.com/rgctl/rgctl-website
 
 name: Website
 
@@ -31,16 +31,17 @@ jobs:
       - name: Stage redirect site
         run: |
           mkdir -p _pages
+          touch _pages/.nojekyll
           cp website/index.html website/404.html _pages/
           cp scripts/install.sh _pages/install.sh
-          # Optional: keep llms.txt pointing at the new host
+          # Keep llms.txt pointing at the new host
           printf '%s\n' \
             '# rgctl' \
             '' \
             '> Code knowledge graph for LLM agents.' \
             '' \
             'Website: https://rgctl.io/' \
-            'Repository: https://github.com/sshaaf/rgctl' \
+            'Repository: https://github.com/rgctl/rgctl' \
             'Install: `curl -fsSL https://rgctl.io/install.sh | sh`' \
             > _pages/llms.txt
 

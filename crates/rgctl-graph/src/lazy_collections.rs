@@ -15,7 +15,10 @@ fn empty_string_map() -> &'static HashMap<String, String> {
 const SORT_STACK_CAP: usize = 8;
 
 /// `HashMap<String, String>` with no heap until the first insert.
+///
+/// Boxed so an empty map stays a single null pointer until first insert.
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::box_collection)]
 pub struct LazyStringMap(Option<Box<HashMap<String, String>>>);
 
 impl LazyStringMap {

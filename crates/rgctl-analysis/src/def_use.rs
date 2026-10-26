@@ -9,7 +9,10 @@ use tree_sitter::Node;
 const AST_WALK_MAX_DEPTH: usize = 2048;
 
 /// Extract variables defined and used in a statement node.
-pub fn extract_def_use(node: Node, source: &[u8]) -> (SmallVec<[DefVar; 2]>, SmallVec<[String; 3]>) {
+pub fn extract_def_use(
+    node: Node,
+    source: &[u8],
+) -> (SmallVec<[DefVar; 2]>, SmallVec<[String; 3]>) {
     let mut defined = HashSet::new();
     let mut used = HashSet::new();
     let mut stack = vec![(node, false, 0usize)];
@@ -55,24 +58,24 @@ fn field_access_def(node: Node, source: &[u8]) -> Option<DefVar> {
             }
         }
         // Last identifier is the member; everything before is the receiver expression.
-        if let Some((last, prefix)) = named.split_last() {
-            if matches!(last.kind(), "identifier" | "simple_identifier") {
-                let member = last.utf8_text(source).ok()?.to_string();
-                let receiver = if prefix.is_empty() {
-                    None
-                } else if prefix.len() == 1 {
-                    prefix[0].utf8_text(source).ok().map(str::to_string)
-                } else {
-                    // Multi-hop `a.b.c` — use full prefix text as receiver (best-effort).
-                    let start = prefix[0].start_byte();
-                    let end = prefix[prefix.len() - 1].end_byte();
-                    std::str::from_utf8(&source[start..end])
-                        .ok()
-                        .map(str::to_string)
-                };
-                if let Some(receiver) = receiver {
-                    return Some(DefVar::Field { receiver, member });
-                }
+        if let Some((last, prefix)) = named.split_last()
+            && matches!(last.kind(), "identifier" | "simple_identifier")
+        {
+            let member = last.utf8_text(source).ok()?.to_string();
+            let receiver = if prefix.is_empty() {
+                None
+            } else if prefix.len() == 1 {
+                prefix[0].utf8_text(source).ok().map(str::to_string)
+            } else {
+                // Multi-hop `a.b.c` — use full prefix text as receiver (best-effort).
+                let start = prefix[0].start_byte();
+                let end = prefix[prefix.len() - 1].end_byte();
+                std::str::from_utf8(&source[start..end])
+                    .ok()
+                    .map(str::to_string)
+            };
+            if let Some(receiver) = receiver {
+                return Some(DefVar::Field { receiver, member });
             }
         }
         return node
@@ -273,7 +276,9 @@ fn collect_def_use_node<'a>(
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 match child.kind() {
-                    "var_spec" => collect_go_var_spec(child, source, defined, used, depth + 1, stack),
+                    "var_spec" => {
+                        collect_go_var_spec(child, source, defined, used, depth + 1, stack)
+                    }
                     "var_spec_list" => {
                         let mut c2 = child.walk();
                         for spec in child.children(&mut c2) {
@@ -383,18 +388,25 @@ fn collect_def_use_node<'a>(
         }
 
         // Shared identifiers
-        "identifier" | "shorthand_field_identifier" | "field_identifier" | "type_identifier"
+        "identifier"
+        | "shorthand_field_identifier"
+        | "field_identifier"
+        | "type_identifier"
         | "variable_name" => {
             if is_def_target {
-                if let Ok(name) = node.utf8_text(source) {
-                    if kind == "identifier" || kind == "shorthand_field_identifier" || kind == "variable_name" {
-                        defined.insert(DefVar::local(name.trim_start_matches('$')));
-                    }
+                if let Ok(name) = node.utf8_text(source)
+                    && (kind == "identifier"
+                        || kind == "shorthand_field_identifier"
+                        || kind == "variable_name")
+                {
+                    defined.insert(DefVar::local(name.trim_start_matches('$')));
                 }
-            } else if kind == "identifier" || kind == "shorthand_field_identifier" || kind == "variable_name" {
-                if let Ok(name) = node.utf8_text(source) {
-                    used.insert(name.trim_start_matches('$').to_string());
-                }
+            } else if (kind == "identifier"
+                || kind == "shorthand_field_identifier"
+                || kind == "variable_name")
+                && let Ok(name) = node.utf8_text(source)
+            {
+                used.insert(name.trim_start_matches('$').to_string());
             }
         }
 
@@ -733,7 +745,8 @@ mod tests {
 
     #[test]
     fn test_go_field_assignment_def_use() {
-        let source = "package demo\nfunc Process(order *OrderDTO) {\n  order.Status = \"PROCESSED\"\n}\n";
+        let source =
+            "package demo\nfunc Process(order *OrderDTO) {\n  order.Status = \"PROCESSED\"\n}\n";
         let tree = parse_go(source);
         let assign = find_kind(tree.root_node(), "assignment_statement").expect("assignment");
         let (defs, uses) = extract_def_use(assign, source.as_bytes());

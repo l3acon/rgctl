@@ -160,11 +160,20 @@ pub fn diff_snapshots(
 
     let mut stats = DiffStats::default();
     diff_nodes(&base_index, &head_index, sink, &mut stats)?;
-    diff_edges(base_col, head_col, &base_index, &head_index, sink, &mut stats)?;
+    diff_edges(
+        base_col,
+        head_col,
+        &base_index,
+        &head_index,
+        sink,
+        &mut stats,
+    )?;
     Ok(stats)
 }
 
-fn require_columnar(store: &SnapshotNodeStore) -> Result<&crate::columnar_snapshot::ColumnarGraphMmap> {
+fn require_columnar(
+    store: &SnapshotNodeStore,
+) -> Result<&crate::columnar_snapshot::ColumnarGraphMmap> {
     store
         .columnar()
         .ok_or_else(|| Error::SerdeError("snapshot diff requires columnar v2 snapshots".into()))
@@ -192,10 +201,10 @@ fn build_node_index_parallel(
         .map(|shard| {
             let mut map = HashMap::with_capacity(shard_cap);
             for idx in (shard..count).step_by(NODE_INDEX_SHARDS) {
-                if let Ok(key) = stable_key_from_row(col, idx) {
-                    if let Ok(row_ref) = node_row_ref(col, idx) {
-                        map.insert(key, row_ref);
-                    }
+                if let Ok(key) = stable_key_from_row(col, idx)
+                    && let Ok(row_ref) = node_row_ref(col, idx)
+                {
+                    map.insert(key, row_ref);
                 }
             }
             map
@@ -355,10 +364,7 @@ fn diff_edges(
 }
 
 fn uuid_to_stable_map(index: &HashMap<StableNodeKey, NodeRowRef>) -> HashMap<Uuid, StableNodeKey> {
-    index
-        .iter()
-        .map(|(key, row)| (row.id, *key))
-        .collect()
+    index.iter().map(|(key, row)| (row.id, *key)).collect()
 }
 
 fn emit_edge_removed(
@@ -540,7 +546,10 @@ mod tests {
 
         let mut sink = VecDiffSink::default();
         let stats = diff_snapshots(&pair.base, &pair.head, &mut sink).unwrap();
-        assert_eq!(stats.nodes_changed, 0, "must report 0 changed nodes for identical input");
+        assert_eq!(
+            stats.nodes_changed, 0,
+            "must report 0 changed nodes for identical input"
+        );
         assert_eq!(stats.nodes_added, 0);
         assert_eq!(stats.nodes_removed, 0);
         assert!(sink.nodes.is_empty(), "sink should receive 0 node deltas");

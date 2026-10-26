@@ -53,7 +53,11 @@ pub fn resolve_package(coords: &str) -> Result<PackageResolution, PackageResolve
     }
     // npm scoped (@scope/name) before Maven GAV (group:artifact)
     if trimmed.starts_with('@') {
-        let name = trimmed.split('@').nth(1).map(|s| format!("@{s}")).unwrap_or_else(|| trimmed.to_string());
+        let name = trimmed
+            .split('@')
+            .nth(1)
+            .map(|s| format!("@{s}"))
+            .unwrap_or_else(|| trimmed.to_string());
         // Actually "@types/node".split('@') => ["", "types/node"] → "@types/node"
         let name = if trimmed.starts_with('@') {
             trimmed.to_string()
@@ -290,10 +294,7 @@ fn enrich_xalan_jdk_dual_path(group: &str, mut resolved: PackageResolution) -> P
         return resolved;
     }
     resolved.runtime_bundled = true;
-    for alias in [
-        "javax.xml.transform",
-        "com.sun.org.apache.xalan.internal",
-    ] {
+    for alias in ["javax.xml.transform", "com.sun.org.apache.xalan.internal"] {
         if !resolved.import_prefixes.iter().any(|p| p == alias) {
             resolved.import_prefixes.push(alias.into());
         }
@@ -325,7 +326,10 @@ fn maven_table() -> &'static HashMap<String, String> {
         // Non-trivial short groups
         m.insert("xalan".into(), "org.apache.xalan".into());
         m.insert("xalan:xalan".into(), "org.apache.xalan".into());
-        m.insert("xalan:serializer".into(), "org.apache.xml.serializer".into());
+        m.insert(
+            "xalan:serializer".into(),
+            "org.apache.xml.serializer".into(),
+        );
         m.insert(
             "xalan:serializer-bcel-6.6.1".into(),
             "org.apache.xml.serializer".into(),
@@ -350,7 +354,10 @@ fn maven_table() -> &'static HashMap<String, String> {
             "com.fasterxml.jackson".into(),
         );
         m.insert("org.slf4j:slf4j-api".into(), "org.slf4j".into());
-        m.insert("ch.qos.logback:logback-classic".into(), "ch.qos.logback".into());
+        m.insert(
+            "ch.qos.logback:logback-classic".into(),
+            "ch.qos.logback".into(),
+        );
         m
     })
 }
@@ -388,7 +395,11 @@ mod tests {
     fn jackson_gav_to_prefix() {
         let r = resolve_package("com.fasterxml.jackson.core:jackson-databind").unwrap();
         assert_eq!(r.ecosystem, "Maven");
-        assert!(r.import_prefixes.iter().any(|p| p == "com.fasterxml.jackson"));
+        assert!(
+            r.import_prefixes
+                .iter()
+                .any(|p| p == "com.fasterxml.jackson")
+        );
     }
 
     #[test]
@@ -400,7 +411,11 @@ mod tests {
 
     #[test]
     fn xalan_includes_jdk_jaxp_aliases() {
-        for coords in ["xalan:xalan", "xalan:serializer", "pkg:maven/xalan/xalan@2.7.2"] {
+        for coords in [
+            "xalan:xalan",
+            "xalan:serializer",
+            "pkg:maven/xalan/xalan@2.7.2",
+        ] {
             let r = resolve_package(coords).unwrap();
             assert!(
                 r.runtime_bundled,
@@ -424,10 +439,12 @@ mod tests {
             );
         }
         let serializer = resolve_package("xalan:serializer").unwrap();
-        assert!(serializer
-            .import_prefixes
-            .iter()
-            .any(|p| p == "org.apache.xml.serializer"));
+        assert!(
+            serializer
+                .import_prefixes
+                .iter()
+                .any(|p| p == "org.apache.xml.serializer")
+        );
         let core = resolve_package("xalan:xalan").unwrap();
         assert!(core.import_prefixes.iter().any(|p| p == "org.apache.xalan"));
     }
@@ -435,7 +452,10 @@ mod tests {
     #[test]
     fn unmapped_short_maven_group_errors() {
         let err = resolve_package("unknownshort:thing").unwrap_err();
-        assert!(matches!(err, PackageResolveError::UnmappedMavenGroup { .. }));
+        assert!(matches!(
+            err,
+            PackageResolveError::UnmappedMavenGroup { .. }
+        ));
     }
 
     #[test]

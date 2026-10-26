@@ -342,7 +342,12 @@ fn snapshot_digest(store: &Path) -> Option<String> {
     store.content_digest().ok().map(str::to_string)
 }
 
-fn sources_unchanged(source: &Path, store: &Path, languages: Option<&str>, exclude: Option<&str>) -> bool {
+fn sources_unchanged(
+    source: &Path,
+    store: &Path,
+    languages: Option<&str>,
+    exclude: Option<&str>,
+) -> bool {
     let mut discovery = DiscoveryConfig::default();
     if let Some(langs) = languages {
         discovery.languages = Some(
@@ -382,7 +387,8 @@ fn should_skip_basic(
         return false;
     };
     let marker = pipeline_status::read_digest_marker(store, MATERIALIZED_FIELDS_DIGEST_FILE);
-    marker.as_deref() == Some(digest.as_str()) && sources_unchanged(source, store, languages, exclude)
+    marker.as_deref() == Some(digest.as_str())
+        && sources_unchanged(source, store, languages, exclude)
 }
 
 fn should_skip_deep(store: &Path) -> bool {

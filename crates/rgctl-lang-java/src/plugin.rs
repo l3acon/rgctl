@@ -87,16 +87,22 @@ impl ExtractCtx {
         while let Some(node) = stack.pop() {
             if node.kind() == "import_declaration" {
                 let mut cursor = node.walk();
-                if let Some(name_node) = node.children(&mut cursor).find(|c| {
-                    c.kind() == "identifier" || c.kind() == "scoped_identifier"
-                }) && let Ok(fqn) = name_node.utf8_text(source)
+                if let Some(name_node) = node
+                    .children(&mut cursor)
+                    .find(|c| c.kind() == "identifier" || c.kind() == "scoped_identifier")
+                    && let Ok(fqn) = name_node.utf8_text(source)
                 {
                     let simple = fqn.rsplit('.').next().unwrap_or(fqn).to_string();
                     map.insert(simple, fqn.to_string());
                 }
             }
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor).collect::<Vec<_>>().into_iter().rev() {
+            for child in node
+                .children(&mut cursor)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+            {
                 stack.push(child);
             }
         }
@@ -1069,7 +1075,12 @@ impl JavaPlugin {
         })
     }
 
-    pub(crate) fn extract_package_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_package_symbol(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let mut cursor = node.walk();
         let name = node
             .children(&mut cursor)
@@ -1096,7 +1107,12 @@ impl JavaPlugin {
     /// `module-info.java`'s `module_declaration`. Directives (`requires`,
     /// `exports`, `opens`, `uses`, `provides`) are recorded as best-effort
     /// string lists in metadata for GQL inspection (per D4).
-    pub(crate) fn extract_module_symbol(&self, node: Node, source: &[u8], file_path: &str) -> Result<Symbol> {
+    pub(crate) fn extract_module_symbol(
+        &self,
+        node: Node,
+        source: &[u8],
+        file_path: &str,
+    ) -> Result<Symbol> {
         let name = node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok())
@@ -1343,13 +1359,14 @@ impl LanguagePlugin for JavaPlugin {
     }
 
     fn extract_symbols(&self, file_path: &Path, source: &[u8]) -> Result<Vec<Symbol>> {
-        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: 0,
-                message: e,
-            },
-        )?;
+        let tree =
+            parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(|e| {
+                Error::ParseError {
+                    file: file_path.to_path_buf(),
+                    line: 0,
+                    message: e,
+                }
+            })?;
         self.symbols_from_tree(tree.root_node(), source, file_path)
     }
 
@@ -1359,13 +1376,14 @@ impl LanguagePlugin for JavaPlugin {
         source: &[u8],
         symbols: &[Symbol],
     ) -> Result<Vec<Relation>> {
-        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: file_path.to_path_buf(),
-                line: 0,
-                message: e,
-            },
-        )?;
+        let tree =
+            parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(|e| {
+                Error::ParseError {
+                    file: file_path.to_path_buf(),
+                    line: 0,
+                    message: e,
+                }
+            })?;
         let root = tree.root_node();
         let mut relations = self.relations_from_tree(root, source, file_path, symbols)?;
         let mut sym_copy = symbols.to_vec();
@@ -1400,13 +1418,14 @@ impl LanguagePlugin for JavaPlugin {
             return Ok(Some(metrics));
         }
 
-        let tree = parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(
-            |e| Error::ParseError {
-                file: symbol.location.file.clone().into(),
-                line: symbol.location.start_line,
-                message: e,
-            },
-        )?;
+        let tree =
+            parse_with_pool("java", tree_sitter_java::LANGUAGE.into(), source).map_err(|e| {
+                Error::ParseError {
+                    file: symbol.location.file.clone().into(),
+                    line: symbol.location.start_line,
+                    message: e,
+                }
+            })?;
         let root = tree.root_node();
         let target_row = symbol.location.start_line.saturating_sub(1);
 
@@ -1612,8 +1631,7 @@ impl JavaPlugin {
                         child.kind(),
                         "type_identifier" | "generic_type" | "scoped_type_identifier"
                     ) {
-                        let Some(parent_class) = Self::inheritance_type_name(child, source)
-                        else {
+                        let Some(parent_class) = Self::inheritance_type_name(child, source) else {
                             continue;
                         };
                         relations.push(Relation {

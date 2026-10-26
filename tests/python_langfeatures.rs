@@ -89,12 +89,18 @@ fn python_ecommerce_extends_nonzero() {
 fn python_ecommerce_annotated_with_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "ANNOTATEDWITH");
-    assert!(n > 0, "expected AnnotatedWith edges on ecommerce-python, got {n}");
+    assert!(
+        n > 0,
+        "expected AnnotatedWith edges on ecommerce-python, got {n}"
+    );
 }
 
 #[test]
 fn python_ecommerce_instantiates_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "INSTANTIATES");
-    assert!(n > 0, "expected Instantiates edges on ecommerce-python, got {n}");
+    assert!(
+        n > 0,
+        "expected Instantiates edges on ecommerce-python, got {n}"
+    );
 }

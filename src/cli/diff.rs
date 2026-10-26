@@ -43,14 +43,17 @@ pub fn run(ctx: &CliContext, args: DiffArgs) -> Result<()> {
     let wall_start = Instant::now();
 
     let open_start = Instant::now();
-    let pair = SnapshotPair::open(&base, &head)
-        .with_context(|| format!("open snapshot pair {} vs {}", base.display(), head.display()))?;
+    let pair = SnapshotPair::open(&base, &head).with_context(|| {
+        format!(
+            "open snapshot pair {} vs {}",
+            base.display(),
+            head.display()
+        )
+    })?;
     let open_secs = open_start.elapsed().as_secs_f64();
 
     let digest_start = Instant::now();
-    let digest_equal = pair
-        .digest_equal()
-        .context("compare content digests")?;
+    let digest_equal = pair.digest_equal().context("compare content digests")?;
     let digest_secs = digest_start.elapsed().as_secs_f64();
 
     let diff_start = Instant::now();

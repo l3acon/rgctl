@@ -24,3 +24,6 @@ uuid = { version = "1", features = ["v4", "serde"] }
 [dev-dependencies]
 tempfile = { workspace = true }
 rgctl-languages = { workspace = true }
+
+[lints.clippy]
+collapsible_if = "allow"

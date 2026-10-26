@@ -53,14 +53,8 @@ fn print_hotspot_rows(title: &str, rows: &[serde_json::Value], score_key: &str) 
             .or_else(|| row.get("file_path").and_then(|v| v.as_str()))
             .unwrap_or("<unknown>");
         let kind = row.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
-        let file = row
-            .get("file_path")
-            .and_then(|v| v.as_str())
-            .unwrap_or("-");
-        let score = row
-            .get(score_key)
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let file = row.get("file_path").and_then(|v| v.as_str()).unwrap_or("-");
+        let score = row.get(score_key).and_then(|v| v.as_f64()).unwrap_or(0.0);
         println!(
             "  {:>2}. {:<8} {:<32} {:>10.6}  {}",
             rank + 1,
@@ -215,8 +209,14 @@ fn collect_churn_hotspots(
     }
 
     file_rows.sort_by(|a, b| {
-        let sa = a.get("hotspot_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let sb = b.get("hotspot_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let sa = a
+            .get("hotspot_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let sb = b
+            .get("hotspot_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         sb.total_cmp(&sa)
     });
     file_rows.truncate(limit);
@@ -242,8 +242,14 @@ fn collect_churn_hotspots(
         }));
     }
     fn_rows.sort_by(|a, b| {
-        let sa = a.get("hotspot_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let sb = b.get("hotspot_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let sa = a
+            .get("hotspot_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let sb = b
+            .get("hotspot_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         sb.total_cmp(&sa)
     });
     fn_rows.truncate(limit.min(10));
@@ -288,17 +294,15 @@ pub fn run(ctx: &CliContext, args: MetricsArgs) -> Result<()> {
 
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
-    let churn_available =
-        git_churn_json_exists(&ctx.repo) || backend_has_git_hotspot(backend);
+    let churn_available = git_churn_json_exists(&ctx.repo) || backend_has_git_hotspot(backend);
     let emit_churn = args.churn || (run_all && churn_available);
 
     use super::metrics_output::{
         MetricsCommunitiesSection, MetricsPagerankSection, build_metrics_response_with_churn,
     };
     use crate::analysis::{
-        BetweennessCentrality, CommunityDetector, FastPageRank, PetGraphView,
-        classify_node_role, community_edge_types_for_backend, default_behavioral_edges,
-        filter_scores_by_role,
+        BetweennessCentrality, CommunityDetector, FastPageRank, PetGraphView, classify_node_role,
+        community_edge_types_for_backend, default_behavioral_edges, filter_scores_by_role,
     };
 
     let view = PetGraphView::from_backend(backend)?;
@@ -320,10 +324,7 @@ pub fn run(ctx: &CliContext, args: MetricsArgs) -> Result<()> {
                 .flatten()
                 .map(|n| {
                     let stub = n.get_property("is_external_stub") == Some("true");
-                    let name = n
-                        .qualified_name
-                        .as_deref()
-                        .unwrap_or(n.name.as_str());
+                    let name = n.qualified_name.as_deref().unwrap_or(n.name.as_str());
                     classify_node_role(name, n.file_path.as_deref(), stub)
                 })
                 .unwrap_or(crate::analysis::NodeRole::Production)

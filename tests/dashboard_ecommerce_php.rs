@@ -2,9 +2,7 @@
 
 mod dashboard_harness;
 
-use dashboard_harness::{
-    assert_dashboard_bundle_all_analysis, default_php_repo, run_discover_all,
-};
+use dashboard_harness::{assert_dashboard_bundle_all_analysis, default_php_repo, run_discover_all};
 use rgctl_dashboard::dist_embedded;
 
 const PHP_MIN_NODES: u64 = 10;
@@ -60,9 +58,6 @@ fn discover_all_writes_php_cfg_dashboard_bundle() {
 
     eprintln!(
         "ecommerce-php OK: {} nodes, {} functions, {} cfg functions, {} calls",
-        manifest["graph"]["node_count"],
-        functions,
-        cfg_index["function_count"],
-        calls_count
+        manifest["graph"]["node_count"], functions, cfg_index["function_count"], calls_count
     );
 }

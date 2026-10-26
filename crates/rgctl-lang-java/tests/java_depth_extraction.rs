@@ -64,9 +64,9 @@ class Widget extends Base implements Named {
         out.relations
     );
     assert!(
-        out.relations.iter().any(|r| {
-            r.relation_type == RelationType::Instantiates && r.to.contains("String")
-        }),
+        out.relations
+            .iter()
+            .any(|r| { r.relation_type == RelationType::Instantiates && r.to.contains("String") }),
         "object_creation Instantiates missing: {:?}",
         out.relations
     );
@@ -79,12 +79,9 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../java-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_java::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "java",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker =
+        rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("java", MANIFEST, &lang)
+            .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

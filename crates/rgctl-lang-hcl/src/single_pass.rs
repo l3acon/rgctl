@@ -156,11 +156,10 @@ pub fn extract_all_single_pass(
                 let mut pushed_scope = false;
 
                 if kind == "block" {
-                    if let Some((block_type, name, symbol_type)) =
-                        block_type_and_name(node, source)
+                    if let Some((block_type, name, symbol_type)) = block_type_and_name(node, source)
                     {
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let qn = name.clone();
                         ctx.symbols.push(Symbol {
                             name: name.clone(),
@@ -295,7 +294,10 @@ module "vpc" {
         let path = PathBuf::from("main.tf");
         let result = extract_all_single_pass(&plugin, &path, src.as_bytes()).unwrap();
         assert!(
-            result.symbols.iter().any(|s| s.name == "resource.aws_instance.web"),
+            result
+                .symbols
+                .iter()
+                .any(|s| s.name == "resource.aws_instance.web"),
             "expected resource block, got {:?}",
             result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
         );

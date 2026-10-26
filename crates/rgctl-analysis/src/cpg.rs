@@ -149,12 +149,11 @@ fn function_matches(node: &Node, symbol: &str) -> bool {
 
 /// Resolve a function by simple name, FQN, or UUID string.
 pub fn find_function_nodes(backend: &MemoryBackend, symbol: &str) -> Result<Vec<Node>> {
-    if let Ok(id) = Uuid::parse_str(symbol) {
-        if let Some(node) = backend.get_node(id)? {
-            if node.node_type == NodeType::Function {
-                return Ok(vec![node]);
-            }
-        }
+    if let Ok(id) = Uuid::parse_str(symbol)
+        && let Some(node) = backend.get_node(id)?
+        && node.node_type == NodeType::Function
+    {
+        return Ok(vec![node]);
     }
 
     let mut matches: Vec<Node> = backend

@@ -1,8 +1,6 @@
 //! Deep Python AST extraction helpers (OpenSpec 3.2).
 
-use rgctl_plugin_api::{
-    Field, Relation, RelationType, SourceLocation, Symbol, SymbolType,
-};
+use rgctl_plugin_api::{Field, Relation, RelationType, SourceLocation, Symbol, SymbolType};
 use std::collections::HashSet;
 use tree_sitter::Node;
 
@@ -197,14 +195,15 @@ pub fn is_typing_guard_if(node: Node, source: &[u8]) -> bool {
     if node.kind() != "if_statement" {
         return false;
     }
-    let cond = node
-        .child_by_field_name("condition")
-        .or_else(|| {
-            let mut c = node.walk();
-            node.children(&mut c).find(|ch| {
-                !matches!(ch.kind(), "if" | ":" | "block" | "elif_clause" | "else_clause")
-            })
-        });
+    let cond = node.child_by_field_name("condition").or_else(|| {
+        let mut c = node.walk();
+        node.children(&mut c).find(|ch| {
+            !matches!(
+                ch.kind(),
+                "if" | ":" | "block" | "elif_clause" | "else_clause"
+            )
+        })
+    });
     let Some(cond) = cond else {
         return false;
     };

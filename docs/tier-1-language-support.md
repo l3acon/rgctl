@@ -4,27 +4,30 @@ This document defines what **fully supported** means for a programming language 
 
 **Audience:** contributors adding a new Tier 1 language or bringing a language to parity with the current bar (Java-shaped Layer F + Layers A–E).
 
-**Related docs:** [language-testing-guide.md](language-testing-guide.md) (where to add tests / what to assert), [Code_structure.md](Code_structure.md) (crate layout), [dashboard-design.md](dashboard-design.md) (dashboard bundle), [user-guide.md](user-guide.md) (discover / serve), [hybrid-cpg-plan.md](design/hybrid-cpg-plan.md) (CPG).
+**Related docs:** [tier-2-language-support.md](tier-2-language-support.md) (declarative `tags.scm` query plugins), [language-testing-guide.md](language-testing-guide.md) (where to add tests / what to assert), [Code_structure.md](Code_structure.md) (crate layout), [dashboard-design.md](dashboard-design.md) (dashboard bundle), [user-guide.md](user-guide.md) (discover / serve), [hybrid-cpg-plan.md](design/hybrid-cpg-plan.md) (CPG).
 
 ---
 
 ## 1. Language tiers (quick reference)
 
-rgctl uses a **hybrid tiering** model:
+rgctl uses a **hybrid tiering** model across **~69 language plugins**:
 
 | Tier | Handler | Crate pattern | Indexing | CFG / PDG / taint | Call graph | Hybrid CPG (Layer F) |
 |------|---------|---------------|----------|-------------------|------------|----------------------|
-| **Tier 1** | `custom` — dedicated `LanguagePlugin` | `rgctl-lang-{id}/` | Rich symbols + relations | **Required** | **Required** (`Calls` at minimum) | **Required** — same bar as Java |
-| **Tier 2** | Generic tree-sitter | `rgctl-lang-{id}/` + `config.rs` | Kinds from `LanguageConfig` | Optional | Usually none | Not required |
-| **Tier 3** | Regex | `rgctl-lang-{id}/` + regex patterns | Pattern-based symbols | No | No | No |
+| **Tier 1** | `custom` — dedicated `LanguagePlugin` | `rgctl-lang-{id}/` (`{id}-ast-coverage.json`) | Rich symbols + relations | **Required** | **Required** (`Calls`, `Extends`, `Implements`, …) | **Required** — same bar as Java |
+| **Tier 2** | `queries` — `QueryLanguagePlugin` | `rgctl-lang-{id}/` (`queries/tags.scm` + `config.rs`) | Symbols + container spans from `tags.scm` | Optional | `@reference.call` → `Calls`, `@reference.class` → `References`, `@reference.implementation` → `Implements`, `@import.path` → `Import` | Not required |
+| **Tier 3** | Regex supplement | `rgctl-lang-{id}/` + regex patterns | Pattern-based symbols | No | No | No |
 
-**Tier-1 deep-analysis** languages (custom plugins with `*-ast-coverage.json`, CFG/PDG, Layer F) today include: Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++, Puppet, Kotlin, Groovy — see `languages.toml` (`handler = "custom"`). That set is **not** the same as the full **~60** language/config/IaC plugins registered in [`languages.toml`](../languages.toml).
+**Tier-1 custom plugins** (`handler = "custom"`, with `{id}-ast-coverage.json` manifests) include 23 languages: Rust, Python, Ruby, PHP, TypeScript, JavaScript, Go, Java, C#, C, C++, Puppet, Kotlin, Groovy, ERB, Swift, Scala, Dart, Elixir, Lua, Bash, SQL, HCL (plus `rgctl-lang-markdown` for the documentation context graph, totaling 24 `*-ast-coverage.json` plugins). **Tier-2 declarative query plugins** (`handler = "queries"`, with `queries/tags.scm`) cover 37 additional languages (Fortran, Zig, Nix, Proto, Solidity, Julia, R, Haskell, GDScript, Verilog, Objective-C, Clojure, OCaml, HTML, CSS, Svelte, GraphQL, Prisma, Elm, Erlang, Gleam, F#, Racket, Scheme, D, Odin, CUDA, GLSL, VHDL, CMake, Make, Starlark, PowerShell, TOML, YAML, JSON, Emacs Lisp) — see [tier-2-language-support.md](tier-2-language-support.md) and [`languages.toml`](../languages.toml).
 
 **Single-pass extraction (required hot path):** Tier-1 `extract_all` uses `ScopeStack` + `KindDispatchTable` (O(1) `kind_id` dispatch) + thread-local `parse_with_pool` / `with_thread_local_parser` — no per-file `Parser::new()` on the ingest path. Grammar coverage is gated by `*-ast-coverage.json`; `cargo check -p rgctl-languages` warns on drift, and `RGCTL_AST_COVERAGE_STRICT=1` fails the build. Runtime hit tracking: `RGCTL_AST_COVERAGE_TRACK=1`.
 
 **Cross-language MRO / DI:** Tier-1 OOP languages should emit inheritance / mixin edges that `MroIndex` can linearize into `Overrides`, and framework DI/route edges (`Injects`, `ExposesRoute`, …) where applicable — see [Dependency Injection and Frameworks](https://rgctl.io/docs/guides/dependency-injection-and-frameworks/).
 
 **Markdown** is a separate **custom markup plugin** (`rgctl-lang-markdown`): documentation context graph only — not Tier 1 and not generic Tier 2. See [markdown-context.md](markdown-context.md).
+
+<a id="mainframe-triad"></a>
+**Mainframe triad (structural custom plugins, not Layer A–F Tier 1):** `cobol`, `pli`, and `jcl` ship as line/card extractors that emit modules, paragraphs/procs/steps, copybook/`%INCLUDE`/`INCLUDE MEMBER` imports, `PERFORM`/`CALL`/`EXEC CICS`/`EXEC PGM`/`RUN PROGRAM` calls, and JCL `DD DSN` dataset `References`. They are migration-oriented (batch coupling for `blast-radius` / communities / roadmap) and do **not** claim CFG/PDG/taint Layer F parity.
 
 **Fully supported** means the language passes **all** of [Layers A–F](#2-capability-checklist--fully-supported) with automated tests. Layer F (hybrid CPG: fields, constructors, typed params, field-write mutations) is **not optional** for Tier 1 — Java is the reference implementation, not a special case.
 

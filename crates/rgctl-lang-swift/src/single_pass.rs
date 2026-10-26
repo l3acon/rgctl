@@ -298,11 +298,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("swift", swift_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("swift", swift_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = swift_dispatch();
@@ -386,12 +387,11 @@ pub fn extract_all_single_pass(
                                     let mut c = node.walk();
                                     node.children(&mut c)
                                         .find(|ch| {
-                                            matches!(
-                                                ch.kind(),
-                                                "simple_identifier" | "identifier"
-                                            )
+                                            matches!(ch.kind(), "simple_identifier" | "identifier")
                                         })
-                                        .and_then(|ch| ch.utf8_text(source).ok().map(str::to_string))
+                                        .and_then(|ch| {
+                                            ch.utf8_text(source).ok().map(str::to_string)
+                                        })
                                         .or_else(|| {
                                             extract_name_from_node(node, source).ok().flatten()
                                         })
@@ -408,8 +408,8 @@ pub fn extract_all_single_pass(
                             Some(o) => format!("{o}.{name}"),
                             None => name.clone(),
                         };
-                        let loc =
-                            ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         ctx.symbols.push(Symbol {
                             name: name.clone(),
                             symbol_type: SymbolType::Function,
@@ -483,9 +483,7 @@ pub fn extract_all_single_pass(
                         );
                     }
                     "import_declaration" => {
-                        if let Some(name) =
-                            extract_name_from_node(node, source).ok().flatten()
-                        {
+                        if let Some(name) = extract_name_from_node(node, source).ok().flatten() {
                             ctx.symbols.push(Symbol {
                                 name: name.clone(),
                                 symbol_type: SymbolType::Import,

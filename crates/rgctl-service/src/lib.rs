@@ -1,5 +1,12 @@
 //! Shared command execution for CLI JSON, HTTP, and MCP.
 #![allow(missing_docs)]
+// Service surface is shared by CLI/HTTP/MCP; tighten docs/`expect` gradually.
+#![allow(
+    clippy::expect_used,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::too_many_arguments
+)]
 
 pub mod blast_json;
 pub mod check;

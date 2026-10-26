@@ -1,11 +1,11 @@
 //! `rgctl rules run` — post-index Kantra evaluation against the session snapshot.
 
+use super::OutputFormat;
 use super::context::CliContext;
 use super::kantra_discover::{
     preload_discovered_sources, resolve_kantra_catalog, run_kantra_index, run_kantra_violates,
 };
 use super::stage_profile::DiscoverStageReport;
-use super::OutputFormat;
 use anyhow::{Context, Result, bail};
 use rgctl_graph::schema::{EdgeType, NodeType};
 use rgctl_graph::snapshot::SNAPSHOT_FILE;
@@ -97,7 +97,11 @@ pub fn run_rules(
 
 fn collect_source_files(repo: &Path) -> Result<Vec<PathBuf>> {
     let mut out = Vec::new();
-    for entry in ignore::WalkBuilder::new(repo).git_ignore(true).build().flatten() {
+    for entry in ignore::WalkBuilder::new(repo)
+        .git_ignore(true)
+        .build()
+        .flatten()
+    {
         let path = entry.path();
         if path.is_file() {
             out.push(path.to_path_buf());

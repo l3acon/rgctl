@@ -1,11 +1,12 @@
 //! Single-pass AST extraction for JavaScript (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{source_location, JavaScriptPlugin};
+use crate::plugin::{JavaScriptPlugin, source_location};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use rgctl_plugin_helpers::{
     extract_cjs_require_symbols, extract_class_extends_relations, extract_import_symbols,
-    is_ecmascript_function_node, is_function_expression_kind, simple_type_name, type_name_from_node,
+    is_ecmascript_function_node, is_function_expression_kind, simple_type_name,
+    type_name_from_node,
 };
 use std::path::Path;
 use std::sync::OnceLock;
@@ -71,24 +72,20 @@ fn js_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn javascript_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&js_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&js_grammar(), HANDLED_KINDS))
 }
 
 fn js_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&js_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&js_grammar(), MANIFEST_JSON))
 }
-
 
 fn function_scope_kind(node: Node) -> ScopeKind {
     match node.kind() {
         "method_definition" => ScopeKind::Method,
         k if is_function_expression_kind(k)
-            || (k == "function" && node.is_named() && node.child_by_field_name("name").is_none()) =>
+            || (k == "function"
+                && node.is_named()
+                && node.child_by_field_name("name").is_none()) =>
         {
             ScopeKind::Lambda
         }
@@ -113,11 +110,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("javascript", js_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("javascript", js_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = js_dispatch();
@@ -152,34 +150,20 @@ pub fn extract_all_single_pass(
                 if is_ecmascript_function_node(node) {
                     let sym = plugin.extract_function(node, source, &file_path_str)?;
                     let params = sym.parameters.len() as u32;
-                    let loc = ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                    let loc =
+                        ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
                     let name = sym.name.clone();
-                    let qn = sym
-                        .qualified_name
-                        .clone()
-                        .unwrap_or_else(|| name.clone());
+                    let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                     let sk = function_scope_kind(node);
                     ctx.symbols.push(sym);
-                    ctx.enter_scope(
-                        sk,
-                        Some(name),
-                        qn,
-                        node.start_byte(),
-                        node.end_byte(),
-                        true,
-                    );
+                    ctx.enter_scope(sk, Some(name), qn, node.start_byte(), node.end_byte(), true);
                     if let Some(f) = ctx.scopes.current_function_mut() {
                         f.complexity.cyclomatic = 1;
                         f.complexity.param_count = params;
                         f.complexity.loc = loc;
                     }
                     pushed_scope = true;
-                    plugin.emit_decorators_for_node(
-                        node,
-                        source,
-                        file_path,
-                        &mut relations,
-                    );
+                    plugin.emit_decorators_for_node(node, source, file_path, &mut relations);
                 }
 
                 match kind {
@@ -204,12 +188,7 @@ pub fn extract_all_single_pass(
                             "javascript",
                             &mut relations,
                         );
-                        plugin.emit_decorators_for_node(
-                            node,
-                            source,
-                            file_path,
-                            &mut relations,
-                        );
+                        plugin.emit_decorators_for_node(node, source, file_path, &mut relations);
                     }
                     "import_statement" => {
                         ctx.symbols.extend(extract_import_symbols(
@@ -220,7 +199,8 @@ pub fn extract_all_single_pass(
                         ));
                     }
                     "export_statement" => {
-                        if let Some(sym) = plugin.extract_export_symbol(node, source, &file_path_str)
+                        if let Some(sym) =
+                            plugin.extract_export_symbol(node, source, &file_path_str)
                         {
                             ctx.symbols.push(sym);
                         }
@@ -272,12 +252,8 @@ pub fn extract_all_single_pass(
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "switch_statement"
-                        | "while_statement"
-                        | "for_statement"
-                        | "for_in_statement"
-                        | "catch_clause"
+                        "if_statement" | "switch_statement" | "while_statement"
+                        | "for_statement" | "for_in_statement" | "catch_clause"
                         | "ternary_expression" => {
                             let delta = 1 + ctx
                                 .scopes

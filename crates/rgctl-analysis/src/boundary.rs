@@ -117,7 +117,12 @@ pub fn classify_boundaries(
         .unwrap_or(&[])
         .iter()
         .map(|s| s.trim().to_ascii_uppercase())
-        .filter(|s| matches!(s.as_str(), "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD"))
+        .filter(|s| {
+            matches!(
+                s.as_str(),
+                "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD"
+            )
+        })
         .collect();
 
     let mut out = Vec::new();
@@ -127,10 +132,9 @@ pub fn classify_boundaries(
         for cat in catalogs {
             if !cat.languages.is_empty()
                 && !lang.is_empty()
-                && !cat
-                    .languages
-                    .iter()
-                    .any(|l| l.eq_ignore_ascii_case(lang) || (lang == "typescript" && l == "javascript"))
+                && !cat.languages.iter().any(|l| {
+                    l.eq_ignore_ascii_case(lang) || (lang == "typescript" && l == "javascript")
+                })
             {
                 continue;
             }
@@ -148,10 +152,10 @@ pub fn classify_boundaries(
             Some((k, id, r)) => (k, id, Some(r)),
             None => (BoundaryKind::Internal, "default-internal".into(), None),
         };
-        if let Some(ref f) = filters {
-            if !f.contains(&kind) {
-                continue;
-            }
+        if let Some(ref f) = filters
+            && !f.contains(&kind)
+        {
+            continue;
         }
         if !method_tokens.is_empty() {
             let mut node_methods = HashSet::new();

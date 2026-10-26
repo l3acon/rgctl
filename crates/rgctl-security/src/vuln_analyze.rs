@@ -1,8 +1,8 @@
 //! `vuln analyze` orchestrator: triage → deps → package queries → blast/taint → OpenVEX.
 
-use crate::deps_check::{deps_check, DepsCheckOpts, DepsCheckResult, DepsVerdict};
-use crate::osv::{triage_osv_path, OsvTriage};
-use crate::package_resolve::{resolve_package, PackageResolution};
+use crate::deps_check::{DepsCheckOpts, DepsCheckResult, DepsVerdict, deps_check};
+use crate::osv::{OsvTriage, triage_osv_path};
+use crate::package_resolve::{PackageResolution, resolve_package};
 use crate::sink_taint::{SinkFirstTaintResult, SinkResolution};
 use openvex::{Justification, Metadata, OpenVex, Statement, Status};
 use serde::{Deserialize, Serialize};
@@ -268,7 +268,10 @@ fn decide_verdict(
         Status::UnderInvestigation,
         None,
         None,
-        Some("Affected methods have callers; run sink-first taint with CFG for a firm verdict".into()),
+        Some(
+            "Affected methods have callers; run sink-first taint with CFG for a firm verdict"
+                .into(),
+        ),
     )
 }
 
@@ -347,7 +350,7 @@ pub fn affected_methods_from_osv_json(bytes: &[u8]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sink_taint::{build_sink_first_result, SinkResolution};
+    use crate::sink_taint::{SinkResolution, build_sink_first_result};
     use std::io::Write;
 
     #[test]

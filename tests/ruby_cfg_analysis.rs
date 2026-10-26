@@ -11,9 +11,7 @@ fn discover_with_cfg_indexes_ruby() {
     }
     let bin = std::env::var("CARGO_BIN_EXE_rgctl")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl")
-        });
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl"));
     let _ = std::fs::remove_dir_all(repo.join(".rgctl"));
     let out = Command::new(&bin)
         .args(["discover", ".", "-l", "ruby", "--with-cfg"])

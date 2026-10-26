@@ -1,11 +1,11 @@
 //! Structured blast-radius CLI response (JSON and text).
 
+use anyhow::Result;
 use rgctl_analysis::{
     BlastRadiusResult, CentralityAnalyzer, MacroIndexEntry, PetGraphView, PolicyRegistry,
     PolicyViolation, SliceHandoffSeed, canonical_fqn_from_node, check_policies,
     inferred_target_metadata, language_from_node,
 };
-use anyhow::Result;
 use rgctl_graph::SnapshotNodeStore;
 use rgctl_graph::backend::{GraphBackend, MemoryBackend};
 use rgctl_graph::schema::Node;

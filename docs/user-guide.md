@@ -55,7 +55,7 @@ Downloads the latest GitHub Release tarball for your OS/arch into `${RGCTL_INSTA
 
 Pre-built binaries are published on the project **Releases** page:
 
-**https://github.com/sshaaf/rgctl/releases**
+**https://github.com/rgctl/rgctl/releases**
 
 1. Open the latest release.
 2. Download the archive for your platform:
@@ -88,7 +88,7 @@ If no release is published yet for your platform, use [Option C](#option-c--buil
 Requires **Rust 1.99+** (Edition 2024; [rustup.rs](https://rustup.rs/)).
 
 ```bash
-git clone https://github.com/sshaaf/rgctl.git
+git clone https://github.com/rgctl/rgctl.git
 cd rgctl
 # Optional: code-daemon ONNX weights (~206 MB via Git LFS) if you use
 # `semantic index --embedder code-daemon`. Skip for the default vocab embedder.

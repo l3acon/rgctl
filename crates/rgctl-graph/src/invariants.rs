@@ -1,7 +1,7 @@
 //! Universal structural invariants for [`ColumnarGraphMmap`] snapshots.
 
 use crate::columnar_snapshot::{
-    append_node_columnar, edge_digest_bytes, ColumnarGraphMmap, StringPool,
+    ColumnarGraphMmap, StringPool, append_node_columnar, edge_digest_bytes,
 };
 use crate::csr::edge_type_to_u8;
 use crate::schema::{Edge, EdgeType, Node, NodeType};
@@ -29,12 +29,12 @@ fn inv_err(msg: impl Into<String>) -> Error {
 fn check_inv1_sorted_unique_nodes(col: &ColumnarGraphMmap) -> Result<()> {
     let mut prev: Option<Uuid> = None;
     for (idx, id) in col.node_ids_by_index() {
-        if let Some(p) = prev {
-            if id <= p {
-                return Err(inv_err(format!(
-                    "INV-1: node_rows not strictly sorted/unique at index {idx}: {id} <= {p}"
-                )));
-            }
+        if let Some(p) = prev
+            && id <= p
+        {
+            return Err(inv_err(format!(
+                "INV-1: node_rows not strictly sorted/unique at index {idx}: {id} <= {p}"
+            )));
         }
         prev = Some(id);
     }
@@ -61,13 +61,13 @@ fn check_inv2_sorted_unique_edges(col: &ColumnarGraphMmap) -> Result<()> {
                 "INV-2: dangling edge to={to} at index {idx}"
             )));
         }
-        if let Some(p) = prev {
-            if key <= p {
-                return Err(inv_err(format!(
-                    "INV-2: edge_rows not strictly sorted/unique at index {idx}: {:?} <= {:?}",
-                    key, p
-                )));
-            }
+        if let Some(p) = prev
+            && key <= p
+        {
+            return Err(inv_err(format!(
+                "INV-2: edge_rows not strictly sorted/unique at index {idx}: {:?} <= {:?}",
+                key, p
+            )));
         }
         prev = Some(key);
     }
@@ -124,9 +124,9 @@ fn is_container(nt: NodeType) -> bool {
 fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
     for idx in 0..col.edge_count() {
         let (from, to, edge_type) = col.edge_at(idx)?;
-        let from_idx = col.find_node_index(from).ok_or_else(|| {
-            inv_err(format!("INV-3: missing from node {from}"))
-        })?;
+        let from_idx = col
+            .find_node_index(from)
+            .ok_or_else(|| inv_err(format!("INV-3: missing from node {from}")))?;
         let to_idx = col
             .find_node_index(to)
             .ok_or_else(|| inv_err(format!("INV-3: missing to node {to}")))?;
@@ -170,12 +170,10 @@ fn check_inv3_endpoint_legality(col: &ColumnarGraphMmap) -> Result<()> {
                     )));
                 }
             }
-            EdgeType::Contains => {
-                if !is_container(from_type) {
-                    return Err(inv_err(format!(
-                        "INV-3: Contains source must be a container, got {from_type:?} ({from})"
-                    )));
-                }
+            EdgeType::Contains if !is_container(from_type) => {
+                return Err(inv_err(format!(
+                    "INV-3: Contains source must be a container, got {from_type:?} ({from})"
+                )));
             }
             _ => {}
         }
@@ -205,10 +203,7 @@ fn check_inv5_index_bijection(col: &ColumnarGraphMmap) -> Result<()> {
         let id = Uuid::from_bytes(col.node_row_at(idx)?.id);
         let name = col.node_name_str(idx)?;
         let node_type = col.node_type_at(idx)?;
-        expected_name
-            .entry(name.to_string())
-            .or_default()
-            .push(id);
+        expected_name.entry(name.to_string()).or_default().push(id);
         expected_type.entry(node_type).or_default().push(id);
     }
     for ids in expected_name.values_mut() {

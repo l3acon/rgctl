@@ -85,10 +85,10 @@ impl RuleMatcher {
             },
             MatchLeaf::CallsAny { symbols } => {
                 for target_id in &ctx.outgoing_calls {
-                    if let Ok(Some(target)) = backend.get_node(*target_id) {
-                        if symbols.iter().any(|s| target.name.contains(s)) {
-                            return Ok(true);
-                        }
+                    if let Ok(Some(target)) = backend.get_node(*target_id)
+                        && symbols.iter().any(|s| target.name.contains(s))
+                    {
+                        return Ok(true);
                     }
                 }
                 Ok(false)
@@ -102,9 +102,7 @@ impl RuleMatcher {
                 }
                 if let Some(pattern) = name_pattern {
                     let re = Regex::new(pattern).map_err(|e| {
-                        rgctl_error::Error::ConfigError(format!(
-                            "Invalid regex '{pattern}': {e}"
-                        ))
+                        rgctl_error::Error::ConfigError(format!("Invalid regex '{pattern}': {e}"))
                     })?;
                     Ok(re.is_match(&node.name))
                 } else {

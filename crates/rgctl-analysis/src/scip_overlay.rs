@@ -28,16 +28,18 @@ pub struct ScipOverlayStats {
 }
 
 /// Load a SCIP protobuf index from `path` and merge compiler-exact Calls onto `backend`.
-pub fn apply_scip_overlay(backend: &mut MemoryBackend, scip_path: &Path) -> Result<ScipOverlayStats> {
+pub fn apply_scip_overlay(
+    backend: &mut MemoryBackend,
+    scip_path: &Path,
+) -> Result<ScipOverlayStats> {
     let index = load_scip_index(scip_path)?;
     apply_scip_index(backend, &index)
 }
 
 /// Parse a `.scip` protobuf payload.
 pub fn load_scip_index(path: &Path) -> Result<Index> {
-    let bytes = std::fs::read(path).map_err(|e| {
-        Error::Other(format!("failed to read SCIP index {}: {e}", path.display()))
-    })?;
+    let bytes = std::fs::read(path)
+        .map_err(|e| Error::Other(format!("failed to read SCIP index {}: {e}", path.display())))?;
     Index::parse_from_bytes(&bytes).map_err(|e| {
         Error::SerdeError(format!(
             "failed to parse SCIP index {}: {e}",
@@ -112,7 +114,8 @@ pub fn apply_scip_index(backend: &mut MemoryBackend, index: &Index) -> Result<Sc
             let Some((start, _)) = occ_line_span(occ) else {
                 continue;
             };
-            let Some(from) = enclosing_callable(&locator, &path, start, &def_spans, &symbol_to_node)
+            let Some(from) =
+                enclosing_callable(&locator, &path, start, &def_spans, &symbol_to_node)
             else {
                 continue;
             };

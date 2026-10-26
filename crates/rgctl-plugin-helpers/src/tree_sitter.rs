@@ -64,16 +64,18 @@ pub fn extract_name_from_node(node: Node, source: &[u8]) -> Result<Option<String
             return Ok(Some(name.utf8_text(source)?.to_string()));
         }
         if let Some(decl) = node.child_by_field_name("declarator")
-            && let Some(name) = extract_c_function_name(decl, source) {
-                return Ok(Some(name));
-            }
+            && let Some(name) = extract_c_function_name(decl, source)
+        {
+            return Ok(Some(name));
+        }
     }
 
     for field in ["name", "lhs", "pattern"] {
         if let Some(field_node) = node.child_by_field_name(field)
-            && let Some(name) = extract_name_from_node(field_node, source)? {
-                return Ok(Some(name));
-            }
+            && let Some(name) = extract_name_from_node(field_node, source)?
+        {
+            return Ok(Some(name));
+        }
     }
 
     let name_kinds = [
@@ -131,9 +133,10 @@ fn extract_c_function_name(node: Node, source: &[u8]) -> Option<String> {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if child.is_named()
-                    && let Some(name) = extract_c_function_name(child, source) {
-                        return Some(name);
-                    }
+                    && let Some(name) = extract_c_function_name(child, source)
+                {
+                    return Some(name);
+                }
             }
             None
         }
@@ -215,39 +218,40 @@ fn walk_extract(
 ) -> Result<()> {
     let kind = node.kind();
     if let Some(symbol_type) = symbol_type_for_kind(kind, function_kinds, class_kinds)
-        && let Some(name) = extract_name_from_node(node, source)? {
-            let mut parameters = Vec::new();
-            if symbol_type == SymbolType::Function {
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.kind().contains("parameter") {
-                        parameters = extract_parameters_generic(child, source)?;
-                        break;
-                    }
+        && let Some(name) = extract_name_from_node(node, source)?
+    {
+        let mut parameters = Vec::new();
+        if symbol_type == SymbolType::Function {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind().contains("parameter") {
+                    parameters = extract_parameters_generic(child, source)?;
+                    break;
                 }
             }
-
-            symbols.push(Symbol {
-                name,
-                symbol_type,
-                qualified_name: None,
-                location: node_to_location(node, file),
-                signature: Some(
-                    node.utf8_text(source)?
-                        .lines()
-                        .next()
-                        .unwrap_or("")
-                        .trim()
-                        .to_string(),
-                ),
-                return_type: None,
-                parameters,
-                fields: vec![],
-                modifiers: vec![],
-                documentation: None,
-                metadata: serde_json::json!({ "extractor": "generic" }),
-            });
         }
+
+        symbols.push(Symbol {
+            name,
+            symbol_type,
+            qualified_name: None,
+            location: node_to_location(node, file),
+            signature: Some(
+                node.utf8_text(source)?
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+            ),
+            return_type: None,
+            parameters,
+            fields: vec![],
+            modifiers: vec![],
+            documentation: None,
+            metadata: serde_json::json!({ "extractor": "generic" }),
+        });
+    }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -264,7 +268,7 @@ pub fn parse_source(
     file_path: &Path,
     grammar: tree_sitter::Language,
 ) -> Result<Tree> {
-    use rgctl_plugin_api::{parse_with_pool, Error};
+    use rgctl_plugin_api::{Error, parse_with_pool};
 
     // Lang id is best-effort for pooling; grammar identity still drives set_language.
     let lang_id = file_path

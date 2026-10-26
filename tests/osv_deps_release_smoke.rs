@@ -29,10 +29,7 @@ fn run_json(args: &[&str]) -> Value {
         "missing {}; run cargo build --release --bin rgctl",
         bin.display()
     );
-    let out = Command::new(&bin)
-        .args(args)
-        .output()
-        .expect("spawn rgctl");
+    let out = Command::new(&bin).args(args).output().expect("spawn rgctl");
     assert!(
         out.status.success(),
         "rgctl failed {:?}: {}",
@@ -41,9 +38,7 @@ fn run_json(args: &[&str]) -> Value {
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     // progress lines may interleave on stderr only; stdout should be JSON
-    serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-        panic!("json parse {e}: {stdout}")
-    })
+    serde_json::from_str(stdout.trim()).unwrap_or_else(|e| panic!("json parse {e}: {stdout}"))
 }
 
 #[test]
@@ -60,11 +55,13 @@ fn release_vuln_triage_jackson() {
     ]);
     assert_eq!(v["schema_version"], 1);
     assert_eq!(v["command"], "vuln triage");
-    assert!(v["packages"][0]["affected_methods"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|m| m.as_str().unwrap().contains("readValue")));
+    assert!(
+        v["packages"][0]["affected_methods"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m.as_str().unwrap().contains("readValue"))
+    );
 }
 
 #[test]
@@ -100,11 +97,13 @@ fn release_deps_coolstore_scenarios() {
         "lib",
     ]);
     assert_eq!(b["verdict"], "affected_candidate");
-    assert!(b["matched"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|m| m["in_range"] == true));
+    assert!(
+        b["matched"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["in_range"] == true)
+    );
 }
 
 #[test]

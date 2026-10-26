@@ -100,7 +100,10 @@ fn main() {
         }
         let rev = rulesets_git_sha(&rulesets_root);
         if let Some(ref sha) = rev {
-            println!("cargo:rerun-if-changed={}", rulesets_root.join(".git").display());
+            println!(
+                "cargo:rerun-if-changed={}",
+                rulesets_root.join(".git").display()
+            );
             write_rulesets_source(&out_dir, sha);
         }
         ("stable-java", dirs, rev)
@@ -241,10 +244,10 @@ fn load_ruleset_dir(
     duplicates_skipped: &mut usize,
 ) -> Result<(RulesetMeta, Vec<BuildRule>), String> {
     let meta_path = dir.join("ruleset.yaml");
-    let meta_text = fs::read_to_string(&meta_path)
-        .map_err(|e| format!("{}: {e}", meta_path.display()))?;
-    let meta: RulesetMeta = serde_yaml::from_str(&meta_text)
-        .map_err(|e| format!("{}: {e}", meta_path.display()))?;
+    let meta_text =
+        fs::read_to_string(&meta_path).map_err(|e| format!("{}: {e}", meta_path.display()))?;
+    let meta: RulesetMeta =
+        serde_yaml::from_str(&meta_text).map_err(|e| format!("{}: {e}", meta_path.display()))?;
 
     let mut rules = Vec::new();
     for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
@@ -256,10 +259,9 @@ fn load_ruleset_dir(
         if path.file_name() == Some(std::ffi::OsStr::new("ruleset.yaml")) {
             continue;
         }
-        let text = fs::read_to_string(&path)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut batch: Vec<BuildRule> = serde_yaml::from_str(&text)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut batch: Vec<BuildRule> =
+            serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         for rule in &mut batch {
             merge_ruleset_labels(&meta.labels, rule);
             if !seen_ids.insert(rule.rule_id.clone()) {

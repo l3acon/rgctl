@@ -66,7 +66,7 @@ impl TokenSpaceAccumulator {
         }
         let n_tokens = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
         let dimensions = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-        if dimensions == 0 || dimensions % 8 != 0 {
+        if dimensions == 0 || !dimensions.is_multiple_of(8) {
             return Err(Error::ConfigError(format!(
                 "vocab matrix: invalid dimensions {dimensions}"
             )));
@@ -174,10 +174,42 @@ impl TokenSpaceAccumulator {
 }
 
 const QUERY_FILLER: &[&str] = &[
-    "hey", "give", "please", "show", "find", "list", "tell", "get", "all", "the", "what",
-    "where", "which", "who", "are", "our", "for", "with", "that", "this", "have", "has",
-    "from", "into", "classes", "class", "functions", "function", "methods", "method",
-    "files", "file", "symbols", "symbol", "types", "type",
+    "hey",
+    "give",
+    "please",
+    "show",
+    "find",
+    "list",
+    "tell",
+    "get",
+    "all",
+    "the",
+    "what",
+    "where",
+    "which",
+    "who",
+    "are",
+    "our",
+    "for",
+    "with",
+    "that",
+    "this",
+    "have",
+    "has",
+    "from",
+    "into",
+    "classes",
+    "class",
+    "functions",
+    "function",
+    "methods",
+    "method",
+    "files",
+    "file",
+    "symbols",
+    "symbol",
+    "types",
+    "type",
 ];
 
 /// Normalize a natural-language semantic query into domain tokens.
@@ -271,7 +303,15 @@ pub fn canonicalize_query_keywords(tokens: HashSet<String>) -> Vec<String> {
         &["repository", "repositories"],
         &["provider", "providers"],
         &["reflection", "reflections", "reflective", "reflect"],
-        &["inject", "injected", "injection", "injections", "injectable", "di", "dependency"],
+        &[
+            "inject",
+            "injected",
+            "injection",
+            "injections",
+            "injectable",
+            "di",
+            "dependency",
+        ],
     ];
     let mut out = tokens;
     for group in GROUPS {
@@ -434,7 +474,7 @@ pub struct VocabAccumulateEmbedder {
 impl VocabAccumulateEmbedder {
     /// Create an embedder that outputs `dimensions` floats (prefer 256).
     pub fn new(dimensions: usize) -> Result<Self> {
-        if dimensions == 0 || dimensions % 8 != 0 {
+        if dimensions == 0 || !dimensions.is_multiple_of(8) {
             return Err(Error::ConfigError(
                 "vocab embedder dimensions must be a positive multiple of 8".into(),
             ));

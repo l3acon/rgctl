@@ -11,7 +11,10 @@ use std::path::Path;
 use uuid::Uuid;
 
 /// Append `VIOLATES` edges for resolved violations; replaces prior violation edges.
-pub fn materialize_violates_edges(backend: &mut MemoryBackend, findings: &KantraFindings) -> Result<usize> {
+pub fn materialize_violates_edges(
+    backend: &mut MemoryBackend,
+    findings: &KantraFindings,
+) -> Result<usize> {
     strip_violates_edges(backend)?;
     let mut count = 0usize;
     for violation in &findings.violations {

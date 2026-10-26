@@ -20,7 +20,7 @@ fn kotlin_discover_with_cfg() {
         "discover failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let cfg_index = repo.join(".rgctl/dashboard/cfg_index.json");
+    let _cfg_index = repo.join(".rgctl/dashboard/cfg_index.json");
     // dashboard may or may not write cfg_index without --with-security; check analysis artifacts
     let analysis = repo.join(".rgctl");
     assert!(analysis.is_dir(), "expected .rgctl after discover");

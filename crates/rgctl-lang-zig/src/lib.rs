@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register the Zig query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_zig::LANGUAGE.into())
         .expect("compile Zig tags.scm");
@@ -30,9 +31,8 @@ mod tests {
 
     #[test]
     fn extract_functions_calls_and_imports() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_zig::LANGUAGE.into())
-                .expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_zig::LANGUAGE.into())
+            .expect("compile");
         let source = br#"
 const std = @import("std");
 pub fn helper(x: i32) i32 { return x + 1; }

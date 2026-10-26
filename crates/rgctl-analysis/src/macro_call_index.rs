@@ -76,11 +76,11 @@ impl GraphFingerprint {
         let snapshot_path = repo_root
             .join(rgctl_graph::code_graph::GRAPH_DIR)
             .join(rgctl_graph::snapshot::SNAPSHOT_FILE);
-        if let Some(ref digest) = self.graph_digest {
-            if snapshot_path.exists() {
-                let mmap = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)?;
-                return Ok(mmap.content_digest()? == digest);
-            }
+        if let Some(ref digest) = self.graph_digest
+            && snapshot_path.exists()
+        {
+            let mmap = rgctl_graph::snapshot::MmappedGraphSnapshot::open(&snapshot_path)?;
+            return Ok(mmap.content_digest()? == digest);
         }
         let graph_db = repo_root
             .join(rgctl_graph::code_graph::GRAPH_DIR)
@@ -500,9 +500,7 @@ impl MacroCallIndex {
         }
         let file = std::fs::File::open(path)?;
         let index = bincode::deserialize_from(file).map_err(|e| {
-            rgctl_error::Error::SerdeError(format!(
-                "Failed to deserialize macro_call_index: {e}"
-            ))
+            rgctl_error::Error::SerdeError(format!("Failed to deserialize macro_call_index: {e}"))
         })?;
         Ok(Some(index))
     }
@@ -637,7 +635,10 @@ mod tests {
         };
 
         let d2 = write_columnar_from_nodes_edges(vec![mk_node()], vec![], &snap_path).unwrap();
-        assert_eq!(d1, d2, "rebuilt snapshot digest must be stable with properties");
+        assert_eq!(
+            d1, d2,
+            "rebuilt snapshot digest must be stable with properties"
+        );
 
         assert!(
             fingerprint.matches_repo(repo_dir).unwrap(),

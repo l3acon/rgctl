@@ -352,9 +352,7 @@ fn hyperball_exact(index: &FlatGraphIndex, max_rounds: usize) -> Vec<f64> {
             b
         })
         .collect();
-    let mut next: Vec<BitSet> = (0..n)
-        .map(|_| BitSet::with_capacity(n))
-        .collect();
+    let mut next: Vec<BitSet> = (0..n).map(|_| BitSet::with_capacity(n)).collect();
     let mut harmonic = vec![0.0f64; n];
     let mut prev_count: Vec<usize> = vec![1; n];
 
@@ -605,7 +603,8 @@ impl BrandesScratch {
         while let Some(w) = self.stack.pop() {
             for &v in &self.pred[w] {
                 if self.sigma[w] > 0.0 {
-                    self.dependency[v] += (self.sigma[v] / self.sigma[w]) * (1.0 + self.dependency[w]);
+                    self.dependency[v] +=
+                        (self.sigma[v] / self.sigma[w]) * (1.0 + self.dependency[w]);
                 }
             }
             if w != source {

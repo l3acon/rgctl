@@ -233,7 +233,12 @@ pub fn run(ctx: &CliContext, args: DiscoverArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_files_update(ctx: &CliContext, path: &str, files: Vec<String>, args: &DiscoverArgs) -> Result<()> {
+fn run_files_update(
+    ctx: &CliContext,
+    path: &str,
+    files: Vec<String>,
+    args: &DiscoverArgs,
+) -> Result<()> {
     // Compatible alias for `rgctl update --files` (incremental structural patch only).
     super::update::run(
         ctx,
@@ -271,10 +276,7 @@ fn run_find_roots(ctx: &CliContext, root: &str, pattern: &str) -> Result<()> {
         if !path.is_dir() {
             continue;
         }
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
         let rel = path
             .strip_prefix(root_path)
             .unwrap_or(path)
@@ -289,11 +291,7 @@ fn run_find_roots(ctx: &CliContext, root: &str, pattern: &str) -> Result<()> {
             || path.join("src").is_dir()
             || path.join("pom.xml").is_file();
         if looks_like_project || name_ok {
-            hits.push(if rel.is_empty() {
-                ".".into()
-            } else {
-                rel
-            });
+            hits.push(if rel.is_empty() { ".".into() } else { rel });
         }
     }
     hits.sort();

@@ -222,10 +222,10 @@ pub fn load_source_files(backend: &MemoryBackend, repo_root: &Path) -> HashMap<S
     let mut files = HashMap::new();
     let mut paths = HashSet::new();
     let _ = backend.for_each_node(|node| {
-        if node.node_type == rgctl_graph::schema::NodeType::Function {
-            if let Some(path) = &node.file_path {
-                paths.insert(path.clone());
-            }
+        if node.node_type == rgctl_graph::schema::NodeType::Function
+            && let Some(path) = &node.file_path
+        {
+            paths.insert(path.clone());
         }
     });
     for path in paths {
@@ -235,10 +235,10 @@ pub fn load_source_files(backend: &MemoryBackend, repo_root: &Path) -> HashMap<S
         } else {
             PathBuf::from(&path)
         };
-        if read_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&read_path) {
-                files.insert(path.to_string(), content);
-            }
+        if read_path.exists()
+            && let Ok(content) = std::fs::read_to_string(&read_path)
+        {
+            files.insert(path.to_string(), content);
         }
     }
     files

@@ -242,9 +242,7 @@ fn shadow_test(input: i32) -> i32 {
     let outer_x_line = pdg
         .nodes
         .values()
-        .find(|n| {
-            n.defined_vars.iter().any(|d| d == "x") && n.statement.text.contains("input + 1")
-        })
+        .find(|n| n.defined_vars.iter().any(|d| d == "x") && n.statement.text.contains("input + 1"))
         .map(|n| n.statement.line)
         .expect("outer x");
     let inner_x_line = pdg
@@ -309,9 +307,7 @@ fn rebind() {
         .values()
         .find(|n| {
             n.statement.text.contains("x + 1")
-                && n.used_vars
-                    .iter()
-                    .any(|u| u == "x" || u.starts_with("x#"))
+                && n.used_vars.iter().any(|u| u == "x" || u.starts_with("x#"))
         })
         .expect("let x = x + 1");
 

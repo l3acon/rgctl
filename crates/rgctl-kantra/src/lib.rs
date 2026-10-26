@@ -15,7 +15,9 @@ pub mod schema;
 pub mod violates;
 
 pub use cache::{KantraFileCache, cache_dir, hash_file_content, ruleset_hash};
-pub use catalog::{KantraCatalog, merge_ruleset_labels, rule_konveyor_targets, rule_matches_target};
+pub use catalog::{
+    KantraCatalog, merge_ruleset_labels, rule_konveyor_targets, rule_matches_target,
+};
 pub use engine::{EvalContext, EvalEdge, EvalGraph, EvalNode, EvalStageTimings, KantraEngine};
 pub use enrich::{NodeMetrics, enrich_findings};
 pub use error::KantraError;

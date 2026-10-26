@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub use config::{CONFIG, TAGS_SCM};
 
 /// Register this Tier-2 query plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_nix::LANGUAGE.into())
         .expect("compile Nix tags.scm");
@@ -29,9 +30,8 @@ mod tests {
 
     #[test]
     fn extract_nix_functions_and_applies() {
-        let plugin =
-            QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_nix::LANGUAGE.into())
-                .expect("compile");
+        let plugin = QueryLanguagePlugin::from_config(&CONFIG, || tree_sitter_nix::LANGUAGE.into())
+            .expect("compile");
         let source = b"let foo = x: x + 1; in foo 2\n";
         let result = plugin
             .extract_all(Path::new("default.nix"), source)
@@ -45,9 +45,10 @@ mod tests {
             result.symbols
         );
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to == "foo"
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to == "foo" }),
             "{:?}",
             result.relations
         );

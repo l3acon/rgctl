@@ -193,11 +193,7 @@ impl FactsCache {
 
     /// Look up a cached extraction (JSON-decodes **only** this entry on hit).
     pub fn get(&self, key: &FactsKey) -> Option<ExtractAllResult> {
-        let bytes = self
-            .entries
-            .read()
-            .ok()
-            .and_then(|m| m.get(key).cloned());
+        let bytes = self.entries.read().ok().and_then(|m| m.get(key).cloned());
         match bytes {
             Some(raw) => match serde_json::from_slice::<ExtractAllResult>(&raw) {
                 Ok(value) => {
@@ -272,13 +268,14 @@ pub fn facts_key_for_hash(plugin: &dyn LanguagePlugin, content_hash: [u8; 32]) -
 
 /// Process-wide memo of `(grammar_abi, manifest_hash)` per language id.
 fn plugin_cache_version(plugin: &dyn LanguagePlugin) -> (u64, [u8; 32]) {
+    #[allow(clippy::type_complexity)]
     static TABLE: OnceLock<Mutex<HashMap<String, (u64, [u8; 32])>>> = OnceLock::new();
     let table = TABLE.get_or_init(|| Mutex::new(HashMap::new()));
     let id = plugin.language_id();
-    if let Ok(guard) = table.lock() {
-        if let Some(v) = guard.get(id) {
-            return *v;
-        }
+    if let Ok(guard) = table.lock()
+        && let Some(v) = guard.get(id)
+    {
+        return *v;
     }
     let grammar_version = plugin
         .grammar()

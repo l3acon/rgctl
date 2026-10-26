@@ -2,7 +2,7 @@
 //!
 //! Run: `cargo bench -p rgctl-lang-rust --bench single_pass_extract`
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rgctl_lang_rust::RustPlugin;
 use rgctl_plugin_api::LanguagePlugin;
 use std::path::Path;
@@ -71,11 +71,7 @@ fn bench_extract_all(c: &mut Criterion) {
     let source = SAMPLE.as_bytes();
 
     c.bench_function("rust_extract_all_single_pass", |b| {
-        b.iter(|| {
-            plugin
-                .extract_all(path, source)
-                .expect("extract_all")
-        });
+        b.iter(|| plugin.extract_all(path, source).expect("extract_all"));
     });
 }
 

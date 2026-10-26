@@ -285,7 +285,10 @@ pub(crate) fn inferred_index_scope(index: &SemanticIndex) -> &'static str {
     }
 }
 
-pub(crate) fn validate_index_scope(index: &SemanticIndex, requested: CliSemanticScope) -> Result<()> {
+pub(crate) fn validate_index_scope(
+    index: &SemanticIndex,
+    requested: CliSemanticScope,
+) -> Result<()> {
     let has_functions = index
         .entries
         .iter()

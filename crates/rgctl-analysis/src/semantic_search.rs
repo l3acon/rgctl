@@ -235,19 +235,19 @@ pub fn build_index(
             && existing.dimensions == options.dimensions
             && existing.model_id == stored_model_id
     });
-    if options.incremental {
-        if let Some(existing) = &options.existing {
-            if existing.dimensions != options.dimensions || existing.model_id != stored_model_id {
-                // Dimension/model/embed-bodies mismatch — full rebuild.
-            } else {
-                let stride = existing.bytes_per_vector();
-                for (row, entry) in existing.entries.iter().enumerate() {
-                    if let Some(slice) = existing
-                        .binary_embeddings
-                        .get(row * stride..row * stride + stride)
-                    {
-                        reuse_by_id.insert(entry.node_id, (entry.clone(), slice.to_vec()));
-                    }
+    if options.incremental
+        && let Some(existing) = &options.existing
+    {
+        if existing.dimensions != options.dimensions || existing.model_id != stored_model_id {
+            // Dimension/model/embed-bodies mismatch — full rebuild.
+        } else {
+            let stride = existing.bytes_per_vector();
+            for (row, entry) in existing.entries.iter().enumerate() {
+                if let Some(slice) = existing
+                    .binary_embeddings
+                    .get(row * stride..row * stride + stride)
+                {
+                    reuse_by_id.insert(entry.node_id, (entry.clone(), slice.to_vec()));
                 }
             }
         }
@@ -333,14 +333,14 @@ pub fn build_index(
             binary_embeddings.extend_from_slice(&quantize_binary(&floats));
         }
 
-        if options.incremental {
-            if let Some(existing) = &options.existing {
-                stats.removed = existing
-                    .entries
-                    .iter()
-                    .filter(|entry| !seen.contains(&entry.node_id))
-                    .count();
-            }
+        if options.incremental
+            && let Some(existing) = &options.existing
+        {
+            stats.removed = existing
+                .entries
+                .iter()
+                .filter(|entry| !seen.contains(&entry.node_id))
+                .count();
         }
     } else {
         let mut seen = HashSet::new();
@@ -349,15 +349,14 @@ pub fn build_index(
             seen.insert(fresh_entry.node_id);
             stats.total += 1;
 
-            if options.incremental {
-                if let Some((old_entry, old_bits)) = reuse_by_id.get(&fresh_entry.node_id) {
-                    if old_entry.code_hash == fresh_entry.code_hash {
-                        entries.push(old_entry.clone());
-                        binary_embeddings.extend_from_slice(old_bits);
-                        stats.reused += 1;
-                        continue;
-                    }
-                }
+            if options.incremental
+                && let Some((old_entry, old_bits)) = reuse_by_id.get(&fresh_entry.node_id)
+                && old_entry.code_hash == fresh_entry.code_hash
+            {
+                entries.push(old_entry.clone());
+                binary_embeddings.extend_from_slice(old_bits);
+                stats.reused += 1;
+                continue;
             }
             embed_jobs.push((fresh_entry, text));
         }
@@ -369,14 +368,14 @@ pub fn build_index(
             Ok(())
         })?;
 
-        if options.incremental {
-            if let Some(existing) = &options.existing {
-                stats.removed = existing
-                    .entries
-                    .iter()
-                    .filter(|entry| !seen.contains(&entry.node_id))
-                    .count();
-            }
+        if options.incremental
+            && let Some(existing) = &options.existing
+        {
+            stats.removed = existing
+                .entries
+                .iter()
+                .filter(|entry| !seen.contains(&entry.node_id))
+                .count();
         }
     }
 
@@ -562,19 +561,18 @@ fn collect_index_candidates(
     })?;
     if pending.iter().any(PendingCandidate::needs_io) {
         pending.par_iter_mut().for_each(|item| {
-            if let (Some(root), Some((path, start, end))) = (body_root, item.body_slice.take()) {
-                if let Ok(tokens) = extract_body_tokens_from_slice(root, &path, start, end) {
-                    let mut token_list: Vec<String> = tokens.into_iter().collect();
-                    token_list.sort_unstable();
-                    item.parts.extend(token_list);
-                }
+            if let (Some(root), Some((path, start, end))) = (body_root, item.body_slice.take())
+                && let Ok(tokens) = extract_body_tokens_from_slice(root, &path, start, end)
+            {
+                let mut token_list: Vec<String> = tokens.into_iter().collect();
+                token_list.sort_unstable();
+                item.parts.extend(token_list);
             }
-            if let Some(key) = item.body_ref.take() {
-                if let Some(store) = content_store {
-                    if let Some(body) = store.get_str(&key) {
-                        item.parts.push(body.to_string());
-                    }
-                }
+            if let Some(key) = item.body_ref.take()
+                && let Some(store) = content_store
+                && let Some(body) = store.get_str(&key)
+            {
+                item.parts.push(body.to_string());
             }
         });
     }
@@ -643,14 +641,13 @@ pub fn embed_text_for_function(node: &Node, repo_root: Option<&Path>) -> Option<
         parts.push(ftags.to_string());
     }
 
-    if let Some(root) = repo_root {
-        if node.node_type == NodeType::Function {
-            if let Ok(body_tokens) = extract_body_tokens_for_node(root, node) {
-                let mut token_list: Vec<String> = body_tokens.into_iter().collect();
-                token_list.sort_unstable();
-                parts.extend(token_list);
-            }
-        }
+    if let Some(root) = repo_root
+        && node.node_type == NodeType::Function
+        && let Ok(body_tokens) = extract_body_tokens_for_node(root, node)
+    {
+        let mut token_list: Vec<String> = body_tokens.into_iter().collect();
+        token_list.sort_unstable();
+        parts.extend(token_list);
     }
 
     Some(parts.join(" "))
@@ -675,12 +672,11 @@ pub fn embed_text_for_doc_node(
     parts.push(node.name.to_string());
     if let Some(text) = node.get_property("body_text") {
         parts.push(text.to_string());
-    } else if let Some(ref_key) = node.get_property("body_ref") {
-        if let Some(store) = content_store {
-            if let Some(body) = store.get_str(ref_key) {
-                parts.push(body.to_string());
-            }
-        }
+    } else if let Some(ref_key) = node.get_property("body_ref")
+        && let Some(store) = content_store
+        && let Some(body) = store.get_str(ref_key)
+    {
+        parts.push(body.to_string());
     }
     Some(parts.join(" "))
 }
@@ -739,11 +735,13 @@ pub fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
     let mut total = 0u32;
 
     for (chunk_a, chunk_b) in a[..word_bytes]
-        .chunks_exact(8)
-        .zip(b[..word_bytes].chunks_exact(8))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .zip(b[..word_bytes].as_chunks::<8>().0.iter())
     {
-        let word_a = u64::from_ne_bytes(chunk_a.try_into().expect("8-byte chunk"));
-        let word_b = u64::from_ne_bytes(chunk_b.try_into().expect("8-byte chunk"));
+        let word_a = u64::from_ne_bytes(*chunk_a);
+        let word_b = u64::from_ne_bytes(*chunk_b);
         total += (word_a ^ word_b).count_ones();
     }
 
@@ -775,11 +773,11 @@ pub fn hamming_top_k(index: &SemanticIndex, query: &[u8], k: usize) -> Vec<(usiz
                 let dist = hamming_distance(query, chunk);
                 if heap.len() < k {
                     heap.push((dist, row));
-                } else if let Some(&(worst, _)) = heap.peek() {
-                    if dist < worst {
-                        heap.pop();
-                        heap.push((dist, row));
-                    }
+                } else if let Some(&(worst, _)) = heap.peek()
+                    && dist < worst
+                {
+                    heap.pop();
+                    heap.push((dist, row));
                 }
                 heap
             },
@@ -788,11 +786,11 @@ pub fn hamming_top_k(index: &SemanticIndex, query: &[u8], k: usize) -> Vec<(usiz
             for item in right {
                 if left.len() < k {
                     left.push(item);
-                } else if let Some(&(worst, _)) = left.peek() {
-                    if item.0 < worst {
-                        left.pop();
-                        left.push(item);
-                    }
+                } else if let Some(&(worst, _)) = left.peek()
+                    && item.0 < worst
+                {
+                    left.pop();
+                    left.push(item);
                 }
             }
             left
@@ -1471,7 +1469,7 @@ mod tests {
 
     #[test]
     fn framework_tagged_nodes_rank_natural_language_queries() {
-        use crate::semantic_fusion::{query_index_with_fusion, SemanticFusionConfig};
+        use crate::semantic_fusion::{SemanticFusionConfig, query_index_with_fusion};
         use crate::semantic_vocab::VocabAccumulateEmbedder;
 
         let mut backend = MemoryBackend::new();
@@ -1511,12 +1509,8 @@ mod tests {
 
         let dims = 64;
         let embedder = VocabAccumulateEmbedder::new(dims).unwrap();
-        let (index, _stats) = build_index(
-            &backend,
-            &embedder,
-            SemanticBuildOptions::fresh(dims, None),
-        )
-        .unwrap();
+        let (index, _stats) =
+            build_index(&backend, &embedder, SemanticBuildOptions::fresh(dims, None)).unwrap();
         assert!(
             index.len() >= 3,
             "tagged classes + endpoint should be indexed, got {}",
@@ -1559,7 +1553,10 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(hits[0].entry.node_id, ctrl_id, "controllers → OrderController");
+        assert_eq!(
+            hits[0].entry.node_id, ctrl_id,
+            "controllers → OrderController"
+        );
 
         let hits = query_index_with_fusion(
             &index,

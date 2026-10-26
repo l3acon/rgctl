@@ -51,13 +51,10 @@ pub fn rust_type_name(node: Node, source: &[u8]) -> Option<String> {
                     .and_then(|n| n.utf8_text(source).ok())
                     .map(str::to_string)
                     .or_else(|| {
-                        current.utf8_text(source).ok().map(|s| {
-                            s.rsplit("::")
-                                .next()
-                                .unwrap_or(s)
-                                .trim()
-                                .to_string()
-                        })
+                        current
+                            .utf8_text(source)
+                            .ok()
+                            .map(|s| s.rsplit("::").next().unwrap_or(s).trim().to_string())
                     });
             }
             "generic_type" | "reference_type" | "pointer_type" | "tuple_type" => {
@@ -121,13 +118,7 @@ pub fn extract_use_symbols(node: Node, source: &[u8], file_path: &str) -> Vec<Sy
                             .unwrap_or(&module_path)
                             .to_string()
                     });
-                    out.push(import_symbol(
-                        &binding,
-                        &module_path,
-                        alias,
-                        n,
-                        file_path,
-                    ));
+                    out.push(import_symbol(&binding, &module_path, alias, n, file_path));
                 }
             }
             "use_wildcard" => {
@@ -150,12 +141,9 @@ pub fn extract_use_symbols(node: Node, source: &[u8], file_path: &str) -> Vec<Sy
                 });
             }
             "identifier" | "type_identifier" | "scoped_identifier" | "scoped_type_identifier"
-            if n.parent().is_some_and(|p| {
-                matches!(
-                    p.kind(),
-                    "use_list" | "scoped_use_list" | "use_declaration"
-                )
-            }) =>
+                if n.parent().is_some_and(|p| {
+                    matches!(p.kind(), "use_list" | "scoped_use_list" | "use_declaration")
+                }) =>
             {
                 if let Some(module_path) = use_path_text(n, source) {
                     let binding = module_path
@@ -163,13 +151,7 @@ pub fn extract_use_symbols(node: Node, source: &[u8], file_path: &str) -> Vec<Sy
                         .next()
                         .unwrap_or(&module_path)
                         .to_string();
-                    out.push(import_symbol(
-                        &binding,
-                        &module_path,
-                        None,
-                        n,
-                        file_path,
-                    ));
+                    out.push(import_symbol(&binding, &module_path, None, n, file_path));
                 }
             }
             _ => {}
@@ -253,7 +235,8 @@ pub fn extract_trait_symbols(
         .filter(|c| c.kind() == "type_identifier")
         .or_else(|| {
             let mut c = node.walk();
-            node.children(&mut c).find(|ch| ch.kind() == "type_identifier")
+            node.children(&mut c)
+                .find(|ch| ch.kind() == "type_identifier")
         })
         .and_then(|n| n.utf8_text(source).ok())
         .map(str::to_string);
@@ -474,8 +457,7 @@ fn extract_trait_method(
         .child_by_field_name("name")
         .or_else(|| {
             let mut c = node.walk();
-            node.children(&mut c)
-                .find(|ch| ch.kind() == "identifier")
+            node.children(&mut c).find(|ch| ch.kind() == "identifier")
         })
         .and_then(|n| n.utf8_text(source).ok())
         .map(str::to_string)?;
@@ -526,8 +508,7 @@ pub fn emit_impl_relations(
     let from = symbols
         .iter()
         .find(|s| {
-            matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum)
-                && s.name == type_name
+            matches!(s.symbol_type, SymbolType::Struct | SymbolType::Enum) && s.name == type_name
         })
         .and_then(|s| s.qualified_name.clone())
         .unwrap_or(type_name);
@@ -654,7 +635,10 @@ fn attribute_path_text(node: Node, source: &[u8]) -> String {
 
 fn attribute_args_text(attr_item: Node, source: &[u8]) -> Option<String> {
     let text = attr_item.utf8_text(source).ok()?;
-    let inner = text.trim_start_matches('#').trim_start_matches('[').trim_end_matches(']');
+    let inner = text
+        .trim_start_matches('#')
+        .trim_start_matches('[')
+        .trim_end_matches(']');
     Some(inner.to_string())
 }
 
@@ -677,10 +661,9 @@ pub fn visit_depth_relation_node(
     if matches!(
         node.kind(),
         "struct_item" | "enum_item" | "function_item" | "impl_item" | "trait_item"
-    ) {
-        if let Some(owner) = item_owner_name(node, source, symbols) {
-            emit_item_attributes(node, &owner, source, file, relations);
-        }
+    ) && let Some(owner) = item_owner_name(node, source, symbols)
+    {
+        emit_item_attributes(node, &owner, source, file, relations);
     }
 
     let from = from_fn
@@ -689,53 +672,50 @@ pub fn visit_depth_relation_node(
 
     match node.kind() {
         "struct_expression" => {
-            if let Some(ref from) = from {
-                if let Some(ty) = node
+            if let Some(ref from) = from
+                && let Some(ty) = node
                     .child_by_field_name("name")
                     .and_then(|n| rust_type_name(n, source))
-                {
-                    push_relation(
-                        relations,
-                        from,
-                        &ty,
-                        RelationType::Instantiates,
-                        loc(node, file),
-                        serde_json::json!({ "language": "rust" }),
-                    );
-                }
+            {
+                push_relation(
+                    relations,
+                    from,
+                    &ty,
+                    RelationType::Instantiates,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         "call_expression" | "macro_invocation" => {
-            if let Some(ref from) = from {
-                if let Some(ty) = instantiates_from_call(node, source) {
-                    push_relation(
-                        relations,
-                        from,
-                        &ty,
-                        RelationType::Instantiates,
-                        loc(node, file),
-                        serde_json::json!({ "language": "rust" }),
-                    );
-                }
+            if let Some(ref from) = from
+                && let Some(ty) = instantiates_from_call(node, source)
+            {
+                push_relation(
+                    relations,
+                    from,
+                    &ty,
+                    RelationType::Instantiates,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         "field_expression" => {
-            if !is_assignment_lhs(node) {
-                if let Some(ref from) = from {
-                    if let Some(field) = node
-                        .child_by_field_name("field")
-                        .and_then(|n| n.utf8_text(source).ok())
-                    {
-                        push_relation(
-                            relations,
-                            from,
-                            field,
-                            RelationType::References,
-                            loc(node, file),
-                            serde_json::json!({ "language": "rust" }),
-                        );
-                    }
-                }
+            if !is_assignment_lhs(node)
+                && let Some(ref from) = from
+                && let Some(field) = node
+                    .child_by_field_name("field")
+                    .and_then(|n| n.utf8_text(source).ok())
+            {
+                push_relation(
+                    relations,
+                    from,
+                    field,
+                    RelationType::References,
+                    loc(node, file),
+                    serde_json::json!({ "language": "rust" }),
+                );
             }
         }
         _ => {}
@@ -825,11 +805,7 @@ fn enclosing_function_name(node: Node, symbols: &[Symbol]) -> Option<String> {
         .filter(|s| s.symbol_type == SymbolType::Function)
         .filter(|s| line >= s.location.start_line && line <= s.location.end_line)
         .min_by_key(|s| s.location.end_line - s.location.start_line)
-        .map(|s| {
-            s.qualified_name
-                .clone()
-                .unwrap_or_else(|| s.name.clone())
-        })
+        .map(|s| s.qualified_name.clone().unwrap_or_else(|| s.name.clone()))
 }
 
 fn instantiates_from_call(node: Node, source: &[u8]) -> Option<String> {
@@ -961,8 +937,7 @@ mod tests {
         );
         assert!(
             rels.iter()
-                .any(|r| r.relation_type == RelationType::AnnotatedWith
-                    && r.to.contains("derive")),
+                .any(|r| r.relation_type == RelationType::AnnotatedWith && r.to.contains("derive")),
             "{rels:?}"
         );
     }

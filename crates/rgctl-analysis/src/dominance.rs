@@ -335,7 +335,11 @@ fn intersect_post_dom_sets(
     }
     smallest
         .iter()
-        .filter(|b| succs.iter().all(|s| post_dom.get(s).map_or(false, |set| set.contains(*b))))
+        .filter(|b| {
+            succs
+                .iter()
+                .all(|s| post_dom.get(s).is_some_and(|set| set.contains(*b)))
+        })
         .copied()
         .collect()
 }
@@ -344,7 +348,9 @@ fn post_dom_sets_equal(
     current: Option<&Arc<HashSet<BlockId>>>,
     next: &Arc<HashSet<BlockId>>,
 ) -> bool {
-    current.map(|c| c.as_ref() == next.as_ref()).unwrap_or(false)
+    current
+        .map(|c| c.as_ref() == next.as_ref())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

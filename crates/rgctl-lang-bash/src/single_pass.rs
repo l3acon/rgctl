@@ -160,16 +160,17 @@ pub fn extract_all_single_pass(
                 let mut pushed_scope = false;
 
                 if kind == "function_definition" {
-                    if let Some(name) = extract_name_from_node(node, source)
-                        .ok()
-                        .flatten()
-                        .or_else(|| {
-                            node.child_by_field_name("name")
-                                .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string()))
-                        })
+                    if let Some(name) =
+                        extract_name_from_node(node, source)
+                            .ok()
+                            .flatten()
+                            .or_else(|| {
+                                node.child_by_field_name("name")
+                                    .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string()))
+                            })
                     {
-                        let loc =
-                            ((node.end_position().row - node.start_position().row) + 1).max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let qn = name.clone();
                         ctx.symbols.push(Symbol {
                             name: name.clone(),
@@ -220,10 +221,7 @@ pub fn extract_all_single_pass(
 
                 if ctx.scopes.current_function().is_some() {
                     match kind {
-                        "if_statement"
-                        | "while_statement"
-                        | "for_statement"
-                        | "case_statement"
+                        "if_statement" | "while_statement" | "for_statement" | "case_statement"
                         | "pipeline" => {
                             let delta = 1 + ctx
                                 .scopes
@@ -292,9 +290,10 @@ foo() {
             "expected function foo"
         );
         assert!(
-            result.relations.iter().any(|r| {
-                r.relation_type == RelationType::Calls && r.to == "bar"
-            }),
+            result
+                .relations
+                .iter()
+                .any(|r| { r.relation_type == RelationType::Calls && r.to == "bar" }),
             "expected Calls to bar, got {:?}",
             result.relations
         );

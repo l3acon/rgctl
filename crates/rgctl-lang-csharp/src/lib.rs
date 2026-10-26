@@ -4,7 +4,7 @@
 //!
 //! - **DI ambiguity:** Constructor injection (`IServiceCollection`, `IHostApplicationBuilder`)
 //!   is not resolved at discover time — field/property type hints are best-effort from
-//!   declarations in the same compilation unit. See [issue #75](https://github.com/sshaaf/rgctl/issues/75).
+//!   declarations in the same compilation unit. See [issue #75](https://github.com/rgctl/rgctl/issues/75).
 //! - **`global using`:** Project-wide usings are invisible when indexing a single file.
 //! - **Source generators / partial types:** Cross-file partial class merge is out of scope.
 
@@ -18,6 +18,7 @@ mod single_pass;
 pub use plugin::CSharpPlugin;
 
 /// Register this language plugin.
+#[allow(clippy::expect_used, clippy::missing_panics_doc)]
 pub fn register(registry: &mut LanguageRegistry) {
     registry.register_language_plugin(Arc::new(CSharpPlugin::new().expect("init CSharpPlugin")));
 }

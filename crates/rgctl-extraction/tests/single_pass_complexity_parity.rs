@@ -1,6 +1,6 @@
 //! Folded `extract_all` complexity must match standalone `calculate_complexity`.
 
-use rgctl_plugin_api::{complexity_from_metadata, LanguagePlugin, SymbolType};
+use rgctl_plugin_api::{LanguagePlugin, SymbolType, complexity_from_metadata};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -403,7 +403,10 @@ fn assert_parity(plugin: Arc<dyn LanguagePlugin>, fixture: &LangFixture) {
 
     let mut checked = 0usize;
     for symbol in &result.symbols {
-        if !matches!(symbol.symbol_type, SymbolType::Function | SymbolType::Method) {
+        if !matches!(
+            symbol.symbol_type,
+            SymbolType::Function | SymbolType::Method
+        ) {
             continue;
         }
         let Some(from_meta) = complexity_from_metadata(symbol) else {
@@ -450,10 +453,7 @@ fn single_pass_complexity_matches_calculate_complexity() {
         };
         if !plugin.capabilities().calculates_complexity {
             // Plugin does not advertise complexity (e.g. stub / query-only).
-            eprintln!(
-                "skip {}: calculates_complexity=false",
-                fixture.language_id
-            );
+            eprintln!("skip {}: calculates_complexity=false", fixture.language_id);
             continue;
         }
         assert_parity(plugin, fixture);

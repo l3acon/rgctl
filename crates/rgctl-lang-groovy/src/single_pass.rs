@@ -1,6 +1,6 @@
 //! Single-pass AST extraction for Groovy (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{GroovyPlugin, GROOVY_BRANCH_KINDS, GROOVY_CALL_KINDS};
+use crate::plugin::{GROOVY_BRANCH_KINDS, GROOVY_CALL_KINDS, GroovyPlugin};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
@@ -77,18 +77,12 @@ fn groovy_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn groovy_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&groovy_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&groovy_grammar(), HANDLED_KINDS))
 }
 
 fn groovy_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&groovy_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&groovy_grammar(), MANIFEST_JSON))
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -107,11 +101,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("groovy", groovy_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 1,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("groovy", groovy_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 1,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file = file_path.to_string_lossy();
     let package = GroovyPlugin::package_name(root, source);
@@ -154,7 +149,9 @@ pub fn extract_all_single_pass(
                 let mut pushed_scope = false;
 
                 match kind {
-                    "class_declaration" | "interface_declaration" | "enum_declaration"
+                    "class_declaration"
+                    | "interface_declaration"
+                    | "enum_declaration"
                     | "annotation_type_declaration" => {
                         if let Some(simple) = GroovyPlugin::type_name(node, source) {
                             let symbol_type = match kind {
@@ -204,10 +201,7 @@ pub fn extract_all_single_pass(
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Method,
@@ -226,17 +220,17 @@ pub fn extract_all_single_pass(
                         }
                     }
                     "constructor_declaration" | "compact_constructor_declaration" => {
-                        if let Some(sym) = plugin
-                            .extract_constructor_symbol(node, source, &file, package.as_deref())
-                        {
+                        if let Some(sym) = plugin.extract_constructor_symbol(
+                            node,
+                            source,
+                            &file,
+                            package.as_deref(),
+                        ) {
                             let params = sym.parameters.len() as u32;
                             let loc = ((node.end_position().row - node.start_position().row) + 1)
                                 .max(1) as u32;
                             let name = sym.name.clone();
-                            let qn = sym
-                                .qualified_name
-                                .clone()
-                                .unwrap_or_else(|| name.clone());
+                            let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                             ctx.symbols.push(sym);
                             ctx.enter_scope(
                                 ScopeKind::Method,
@@ -277,12 +271,12 @@ pub fn extract_all_single_pass(
                 if ctx.scopes.current_function().is_some() {
                     if GROOVY_BRANCH_KINDS.contains(&kind) {
                         let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
                         let d = ctx.scopes.depth();
                         ctx.scopes.push(ScopeFrame::new(
                             ScopeKind::GuardBlock,

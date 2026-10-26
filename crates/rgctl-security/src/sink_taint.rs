@@ -107,10 +107,10 @@ pub fn rules_with_osv_overlays(
     let mut needles = Vec::new();
     for m in affected_methods {
         needles.push(m.clone());
-        if let Some(short) = m.rsplit('.').next() {
-            if short != m.as_str() {
-                needles.push(short.to_string());
-            }
+        if let Some(short) = m.rsplit('.').next()
+            && short != m.as_str()
+        {
+            needles.push(short.to_string());
         }
     }
     Ok(set.with_overlays(&needles))

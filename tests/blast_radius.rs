@@ -1,11 +1,10 @@
 //! Phase 12.2 — blast radius integration tests
 
-use rgctl::analysis::cfg::{Statement, StatementKind};
+use rgctl::analysis::cfg::{BlockId, Statement, StatementKind};
 use rgctl::analysis::pdg::{DataDepType, DataDependency, PdgNode};
 use rgctl::analysis::{BlastRadiusAnalyzer, FlowCache, ProgramDependenceGraph};
 use rgctl::graph::backend::{GraphBackend, MemoryBackend};
 use rgctl::graph::schema::{Edge, EdgeType, Node, NodeType};
-use std::collections::HashSet;
 
 fn build_call_chain() -> (MemoryBackend, uuid::Uuid, uuid::Uuid, uuid::Uuid) {
     let mut backend = MemoryBackend::new();
@@ -59,7 +58,7 @@ fn test_blast_radius_pdg_enriches_data_flow_depth() {
     let (backend, _, id_b, _) = build_call_chain();
     let mut cache = FlowCache::new();
 
-    let block = uuid::Uuid::new_v4();
+    let block = BlockId::new(0);
     let n1 = uuid::Uuid::new_v4();
     let n2 = uuid::Uuid::new_v4();
     let mut pdg = ProgramDependenceGraph::default();
@@ -71,8 +70,8 @@ fn test_blast_radius_pdg_enriches_data_flow_depth() {
                 kind: StatementKind::Expression,
                 line: 1,
                 text: "let tmp = c()".into(),
-                defined_vars: HashSet::new(),
-                used_vars: HashSet::new(),
+                defined_vars: Default::default(),
+                used_vars: Default::default(),
             },
             block,
             defined_vars: ["tmp"].into_iter().map(String::from).collect(),
@@ -87,8 +86,8 @@ fn test_blast_radius_pdg_enriches_data_flow_depth() {
                 kind: StatementKind::Return,
                 line: 2,
                 text: "return tmp".into(),
-                defined_vars: HashSet::new(),
-                used_vars: HashSet::new(),
+                defined_vars: Default::default(),
+                used_vars: Default::default(),
             },
             block,
             defined_vars: std::collections::HashSet::new(),

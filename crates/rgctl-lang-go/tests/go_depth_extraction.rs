@@ -20,16 +20,14 @@ type ID = string
 
     assert!(
         out.symbols.iter().any(|s| {
-            s.name == "Max"
-                && s.metadata.get("is_const").and_then(|v| v.as_bool()) == Some(true)
+            s.name == "Max" && s.metadata.get("is_const").and_then(|v| v.as_bool()) == Some(true)
         }),
         "const Max missing: {:?}",
         out.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
     );
     assert!(
         out.symbols.iter().any(|s| {
-            s.name == "Count"
-                && s.metadata.get("kind").and_then(|v| v.as_str()) == Some("var_spec")
+            s.name == "Count" && s.metadata.get("kind").and_then(|v| v.as_str()) == Some("var_spec")
         }),
         "var Count missing"
     );
@@ -48,12 +46,8 @@ fn ast_coverage_all_declared_handlers_exercised() {
     }
     const MANIFEST: &str = include_str!("../go-ast-coverage.json");
     let lang: tree_sitter::Language = tree_sitter_go::LANGUAGE.into();
-    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json(
-        "go",
-        MANIFEST,
-        &lang,
-    )
-    .expect("tracker from manifest");
+    let tracker = rgctl_ast_coverage::AstCoverageTracker::from_manifest_json("go", MANIFEST, &lang)
+        .expect("tracker from manifest");
     assert!(
         tracker.expected_len() > 0,
         "manifest should declare active handlers"

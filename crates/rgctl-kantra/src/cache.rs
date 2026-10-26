@@ -64,7 +64,12 @@ impl KantraFileCache {
     }
 
     /// Store violations for a file and mark manifest dirty.
-    pub fn put(&mut self, rel_path: String, content_hash: String, violations: Vec<KantraViolation>) {
+    pub fn put(
+        &mut self,
+        rel_path: String,
+        content_hash: String,
+        violations: Vec<KantraViolation>,
+    ) {
         self.manifest.files.insert(
             rel_path,
             CachedFileEntry {

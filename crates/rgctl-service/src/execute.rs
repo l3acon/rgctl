@@ -108,12 +108,7 @@ pub fn execute_with_registry(
 fn needs_cfg(op: CpgOp) -> bool {
     matches!(
         op,
-        CpgOp::Mutations
-            | CpgOp::Flows
-            | CpgOp::Slice
-            | CpgOp::Inspect
-            | CpgOp::Pdg
-            | CpgOp::Ast
+        CpgOp::Mutations | CpgOp::Flows | CpgOp::Slice | CpgOp::Inspect | CpgOp::Pdg | CpgOp::Ast
     )
 }
 

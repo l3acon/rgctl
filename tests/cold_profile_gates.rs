@@ -103,9 +103,7 @@ pub fn kafka_repo_path() -> PathBuf {
 pub fn rgctl_graph_repo_path() -> PathBuf {
     std::env::var("RGCTL_GRAPH_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("crates/rgctl-graph")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("crates/rgctl-graph"))
 }
 
 pub fn k8s_website_repo_path() -> PathBuf {
@@ -139,17 +137,13 @@ pub fn llvm_cpp_repo_path() -> PathBuf {
 pub fn roslyn_csharp_repo_path() -> PathBuf {
     std::env::var("RGCTL_ROSLYN_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/roslyn/src")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/roslyn/src"))
 }
 
 pub fn vscode_typescript_repo_path() -> PathBuf {
     std::env::var("RGCTL_VSCODE_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/vscode/src")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/vscode/src"))
 }
 
 pub fn home_assistant_python_repo_path() -> PathBuf {
@@ -163,9 +157,7 @@ pub fn home_assistant_python_repo_path() -> PathBuf {
 pub fn discourse_ruby_repo_path() -> PathBuf {
     std::env::var("RGCTL_DISCOURSE_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/discourse")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/discourse"))
 }
 
 pub fn kotlin_repo_path() -> PathBuf {
@@ -183,9 +175,7 @@ pub fn groovy_repo_path() -> PathBuf {
 pub fn node_javascript_repo_path() -> PathBuf {
     std::env::var("RGCTL_NODE_REPO")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/node/test")
-        })
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example/node/test"))
 }
 
 pub fn parse_profile_summary(log: &str) -> Option<ProfileSummary> {
@@ -682,8 +672,7 @@ fn node_javascript_cold_discover_with_cfg_within_baseline() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(NODE_JAVASCRIPT_COLD_WITH_CFG_WALL_BASELINE_SECS);
 
-    let (output, elapsed) =
-        run_cold_discover_timed(&repo, &["-l", "javascript", "--with-cfg"]);
+    let (output, elapsed) = run_cold_discover_timed(&repo, &["-l", "javascript", "--with-cfg"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -829,7 +818,10 @@ fn ecommerce_java_kantra_cold_discover_within_baseline() {
     let profile = resolve_profile_summary(&stdout, &stderr, elapsed);
     eprintln!(
         "ecommerce-java kantra cold: wall={:.3}s kantra_eval={:?} kantra_enrich={:?} peak_rss_mb={:.1}",
-        profile.wall_secs, profile.kantra_eval_secs, profile.kantra_enrich_secs, profile.peak_rss_mb
+        profile.wall_secs,
+        profile.kantra_eval_secs,
+        profile.kantra_enrich_secs,
+        profile.peak_rss_mb
     );
     assert_within_baseline(
         "ecommerce-java kantra cold discover",
@@ -1257,12 +1249,18 @@ fn parse_diff_json(stdout: &str) -> Option<DiffProfileSummary> {
     let timings = value.get("timings")?;
     Some(DiffProfileSummary {
         wall_secs: timings.get("wall_secs")?.as_f64()?,
-        open_secs: timings.get("open_secs").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        open_secs: timings
+            .get("open_secs")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
         digest_secs: timings
             .get("digest_secs")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0),
-        diff_secs: timings.get("diff_secs").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        diff_secs: timings
+            .get("diff_secs")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
         nodes_added: value.get("nodes_added")?.as_u64()?,
         nodes_removed: value.get("nodes_removed")?.as_u64()?,
         nodes_changed: value.get("nodes_changed")?.as_u64()?,
@@ -1345,4 +1343,3 @@ fn linux_cold_diff_within_baseline() {
     );
     assert_within_baseline("linux cold diff", elapsed, baseline);
 }
-

@@ -25,11 +25,7 @@ fn sample_graph() -> CodeGraph {
     backend.insert_node(f2).unwrap();
     backend.insert_node(cfg).unwrap();
     backend
-        .insert_edge(Edge::new(
-            id1,
-            id2,
-            rgctl::graph::schema::EdgeType::Calls,
-        ))
+        .insert_edge(Edge::new(id1, id2, rgctl::graph::schema::EdgeType::Calls))
         .unwrap();
     graph
 }
@@ -57,18 +53,10 @@ fn test_circular_dependency_via_analyzer() {
     backend.insert_node(a).unwrap();
     backend.insert_node(b).unwrap();
     backend
-        .insert_edge(Edge::new(
-            id_a,
-            id_b,
-            rgctl::graph::schema::EdgeType::Calls,
-        ))
+        .insert_edge(Edge::new(id_a, id_b, rgctl::graph::schema::EdgeType::Calls))
         .unwrap();
     backend
-        .insert_edge(Edge::new(
-            id_b,
-            id_a,
-            rgctl::graph::schema::EdgeType::Calls,
-        ))
+        .insert_edge(Edge::new(id_b, id_a, rgctl::graph::schema::EdgeType::Calls))
         .unwrap();
 
     let cycles = DependencyAnalyzer::find_circular_dependencies(backend).unwrap();

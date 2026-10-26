@@ -1,6 +1,6 @@
 //! Single-pass AST extraction for Ruby (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{RubyPlugin, RUBY_COMPLEXITY_BRANCH_KINDS, RUBY_FUNCTION_KINDS};
+use crate::plugin::{RUBY_COMPLEXITY_BRANCH_KINDS, RUBY_FUNCTION_KINDS, RubyPlugin};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
@@ -66,18 +66,12 @@ fn ruby_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn ruby_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&ruby_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&ruby_grammar(), HANDLED_KINDS))
 }
 
 fn ruby_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&ruby_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&ruby_grammar(), MANIFEST_JSON))
 }
-
 
 struct PendingCall<'a> {
     node: Node<'a>,
@@ -164,8 +158,8 @@ pub fn extract_all_single_pass(
                         )?;
                         let name = sym.name.clone();
                         if let Some(sc) = node.child_by_field_name("superclass") {
-                            if let Some(base) = RubyPlugin::constant_text(sc, source)
-                                .or_else(|| {
+                            if let Some(base) =
+                                RubyPlugin::constant_text(sc, source).or_else(|| {
                                     let mut c = sc.walk();
                                     sc.children(&mut c)
                                         .find_map(|ch| RubyPlugin::constant_text(ch, source))
@@ -245,13 +239,10 @@ pub fn extract_all_single_pass(
                             singleton,
                         )?;
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         ctx.symbols.push(sym);
                         ctx.enter_scope(
                             ScopeKind::Method,
@@ -316,8 +307,8 @@ pub fn extract_all_single_pass(
                             }),
                         });
                         let params = 0u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         ctx.enter_scope(
                             ScopeKind::Lambda,
                             None,
@@ -350,12 +341,12 @@ pub fn extract_all_single_pass(
                 if ctx.scopes.current_function().is_some() {
                     if RUBY_COMPLEXITY_BRANCH_KINDS.contains(&kind) {
                         let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
                         let d = ctx.scopes.depth();
                         ctx.scopes.push(ScopeFrame::new(
                             ScopeKind::GuardBlock,

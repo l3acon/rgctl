@@ -64,16 +64,16 @@ impl ConfigAnalyzer {
     ) -> Result<Vec<MissingEnvVar>> {
         let mut defined = HashSet::new();
         for path in env_files {
-            if path.exists() {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    for line in content.lines() {
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() || trimmed.starts_with('#') {
-                            continue;
-                        }
-                        if let Some((key, _)) = trimmed.split_once('=') {
-                            defined.insert(key.trim().to_string());
-                        }
+            if path.exists()
+                && let Ok(content) = std::fs::read_to_string(path)
+            {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                        continue;
+                    }
+                    if let Some((key, _)) = trimmed.split_once('=') {
+                        defined.insert(key.trim().to_string());
                     }
                 }
             }

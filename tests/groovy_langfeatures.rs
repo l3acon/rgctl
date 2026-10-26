@@ -63,15 +63,18 @@ fn gql_json(query: &str) -> Value {
 fn row_count(v: &Value) -> usize {
     v.get("count")
         .and_then(|c| c.as_u64())
-        .or_else(|| v.get("rows").and_then(|r| r.as_array()).map(|a| a.len() as u64))
+        .or_else(|| {
+            v.get("rows")
+                .and_then(|r| r.as_array())
+                .map(|a| a.len() as u64)
+        })
         .unwrap_or(0) as usize
 }
 
 #[test]
 fn groovy_class_and_method_indexed() {
-    let v = gql_json(
-        "MATCH (n:Class) WHERE n.qualified_name = 'demo.OrderService' RETURN n LIMIT 5",
-    );
+    let v =
+        gql_json("MATCH (n:Class) WHERE n.qualified_name = 'demo.OrderService' RETURN n LIMIT 5");
     assert!(row_count(&v) >= 1, "OrderService class: {v}");
     let v = gql_json(
         "MATCH (n:Function) WHERE n.qualified_name = 'demo.OrderService.findAll' RETURN n LIMIT 5",

@@ -42,8 +42,9 @@ pub fn eval_compose(
                 .collect()
         }
         WhenClause::Not(inner) => {
-            let inner_sites: HashSet<_> =
-                eval_compose_sites(inner, leaf_sites, leaf_index).into_iter().collect();
+            let inner_sites: HashSet<_> = eval_compose_sites(inner, leaf_sites, leaf_index)
+                .into_iter()
+                .collect();
             // NOT is only meaningful with a file-scoped universe; caller supplies leaf sites.
             let _ = inner_sites;
             Vec::new()
@@ -81,7 +82,11 @@ fn eval_compose_sites(
             }
             let mut sets: Vec<HashSet<MatchSite>> = Vec::new();
             for item in items {
-                sets.push(eval_compose_sites(item, leaf_sites, leaf_index).into_iter().collect());
+                sets.push(
+                    eval_compose_sites(item, leaf_sites, leaf_index)
+                        .into_iter()
+                        .collect(),
+                );
             }
             let first = sets.first().cloned().unwrap_or_default();
             sets.into_iter()

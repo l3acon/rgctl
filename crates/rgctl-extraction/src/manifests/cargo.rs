@@ -1,6 +1,6 @@
 //! Cargo.toml → DependencyDeclaration.
 
-use super::{loc, DependencyDeclaration};
+use super::{DependencyDeclaration, loc};
 use std::path::Path;
 use toml_edit::{DocumentMut, Item, Value};
 
@@ -48,10 +48,17 @@ pub fn extract(path: &Path, source: &[u8]) -> Vec<DependencyDeclaration> {
                     }
                     _ => (None, false),
                 };
-                let line = item.span().map(|s| {
-                    // Approximate line from byte offset.
-                    text[..s.start.min(text.len())].bytes().filter(|b| *b == b'\n').count() + 1
-                }).unwrap_or(1);
+                let line = item
+                    .span()
+                    .map(|s| {
+                        // Approximate line from byte offset.
+                        text[..s.start.min(text.len())]
+                            .bytes()
+                            .filter(|b| *b == b'\n')
+                            .count()
+                            + 1
+                    })
+                    .unwrap_or(1);
                 out.push(DependencyDeclaration {
                     name: name.to_string(),
                     version_requirement: version,

@@ -46,8 +46,8 @@ fn grow_parent(parent: &mut Vec<u32>, id: u32) {
     if parent.len() < need {
         let old = parent.len();
         parent.resize(need, 0);
-        for i in old..need {
-            parent[i] = i as u32;
+        for (i, slot) in parent.iter_mut().enumerate().skip(old) {
+            *slot = i as u32;
         }
     }
 }

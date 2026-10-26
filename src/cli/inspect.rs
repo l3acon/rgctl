@@ -172,13 +172,12 @@ fn print_dom_text_summary(dom: &DominatorTree, frontiers: bool) {
             .map(|p| format!("B{}", p.0))
             .unwrap_or_else(|| "-".into());
         println!("  B{} idom {parent}", id.0);
-        if frontiers {
-            if let Some(df) = dom.frontiers.get(id) {
-                if !df.is_empty() {
-                    let list: Vec<_> = df.iter().map(|b| format!("B{}", b.0)).collect();
-                    println!("       DF {{{}}}", list.join(", "));
-                }
-            }
+        if frontiers
+            && let Some(df) = dom.frontiers.get(id)
+            && !df.is_empty()
+        {
+            let list: Vec<_> = df.iter().map(|b| format!("B{}", b.0)).collect();
+            println!("       DF {{{}}}", list.join(", "));
         }
     }
     if ids.len() > 40 {
@@ -227,7 +226,11 @@ fn node_to_symbol_candidate(n: &Node) -> SymbolCandidate {
 }
 
 /// Fuzzy name suggestions for NotFound (substring / length distance; capped).
-pub(crate) fn suggest_function_names(backend: &MemoryBackend, needle: &str, limit: usize) -> Vec<String> {
+pub(crate) fn suggest_function_names(
+    backend: &MemoryBackend,
+    needle: &str,
+    limit: usize,
+) -> Vec<String> {
     let needle_l = needle.to_ascii_lowercase();
     let Ok(nodes) = backend.all_nodes() else {
         return Vec::new();
@@ -356,11 +359,7 @@ fn resolve_symbol_function(
 ) -> Result<(Node, String)> {
     use rgctl_analysis::{candidates_from_backend, parse_fqn_symbol, resolve_symbol_uuid};
 
-    let parsed = parse_fqn_symbol(
-        symbol,
-        class.map(str::to_string),
-        file.map(str::to_string),
-    );
+    let parsed = parse_fqn_symbol(symbol, class.map(str::to_string), file.map(str::to_string));
     let graph = ctx.load_graph()?;
     let backend = graph.backend();
 
@@ -371,10 +370,10 @@ fn resolve_symbol_function(
                 let node = backend
                     .get_node(id)?
                     .ok_or_else(|| anyhow::anyhow!("function symbol not found: {symbol}"))?;
-                if let Some(line) = line {
-                    if node.start_line != Some(line) {
-                        return emit_not_found(ctx, backend, symbol, &parsed.target_name);
-                    }
+                if let Some(line) = line
+                    && node.start_line != Some(line)
+                {
+                    return emit_not_found(ctx, backend, symbol, &parsed.target_name);
                 }
                 return load_source(node);
             }

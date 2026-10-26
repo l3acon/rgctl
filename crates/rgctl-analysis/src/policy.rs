@@ -147,32 +147,31 @@ pub fn check_policies(
     let source_domain = registry.node_domains.get(&source_id).cloned();
 
     for &node_id in impact_zone_ids {
-        if let Some(reached_domain) = registry.node_domains.get(&node_id) {
-            if let Some(ref source) = source_domain {
-                for (from, to) in &registry.forbidden_crossings {
-                    let crosses = (source == from && reached_domain == to)
-                        || (source == to && reached_domain == from);
-                    if crosses {
-                        return Err(PolicyViolation::DomainIsolation {
-                            source_domain: source.clone(),
-                            reached_domain: reached_domain.clone(),
-                            node: node_id,
-                        });
-                    }
+        if let Some(reached_domain) = registry.node_domains.get(&node_id)
+            && let Some(ref source) = source_domain
+        {
+            for (from, to) in &registry.forbidden_crossings {
+                let crosses = (source == from && reached_domain == to)
+                    || (source == to && reached_domain == from);
+                if crosses {
+                    return Err(PolicyViolation::DomainIsolation {
+                        source_domain: source.clone(),
+                        reached_domain: reached_domain.clone(),
+                        node: node_id,
+                    });
                 }
             }
         }
 
-        if let Some(scores) = centrality {
-            if let Some(entry) = scores.get(&node_id) {
-                if entry.betweenness > registry.centrality_alert_threshold {
-                    return Err(PolicyViolation::CascadeHazard {
-                        node: node_id,
-                        betweenness: entry.betweenness,
-                        threshold: registry.centrality_alert_threshold,
-                    });
-                }
-            }
+        if let Some(scores) = centrality
+            && let Some(entry) = scores.get(&node_id)
+            && entry.betweenness > registry.centrality_alert_threshold
+        {
+            return Err(PolicyViolation::CascadeHazard {
+                node: node_id,
+                betweenness: entry.betweenness,
+                threshold: registry.centrality_alert_threshold,
+            });
         }
 
         let _ = backend

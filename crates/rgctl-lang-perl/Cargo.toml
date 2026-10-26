@@ -1,0 +1,20 @@
+[package]
+name = "rgctl-lang-perl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "rgctl Tier-2 language plugin: perl (tags.scm queries)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rgctl-ast-coverage = { workspace = true }
+rgctl-lang-runtime = { workspace = true }
+rgctl-plugin-api = { workspace = true }
+rgctl-registry = { workspace = true }
+tree-sitter = { workspace = true }
+# tree-sitter-perl 1.1 pins tree-sitter ^0.26 (links conflict with workspace 0.25).
+# ts-parser-perl 2.0 is ABI-compatible with tree-sitter 0.25.
+ts-parser-perl = "2.0"
+
+[lints]
+workspace = true

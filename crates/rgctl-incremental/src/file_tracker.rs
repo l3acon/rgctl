@@ -286,10 +286,7 @@ impl ChangeSet {
 
     /// Total number of changed files (added + modified + deleted + renames).
     pub fn len(&self) -> usize {
-        self.added.len()
-            + self.changed.len()
-            + self.deleted.len()
-            + self.renamed.len()
+        self.added.len() + self.changed.len() + self.deleted.len() + self.renamed.len()
     }
 }
 

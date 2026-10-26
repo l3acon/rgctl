@@ -117,8 +117,6 @@ pub fn extract_sese_regions(
                 continue;
             }
 
-
-
             // 4. Collect candidate blocks W
             let mut w_set: HashSet<BlockId> = HashSet::new();
             for &w in &reachable_blocks {
@@ -228,8 +226,6 @@ pub fn extract_sese_regions(
     regions
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,7 +246,10 @@ fn nested(matrix: Vec<Vec<i32>>) -> i32 {
 "#;
         let cfg = build_cfg_for_function("rust", code, "nested").unwrap();
         let regions = extract_sese_regions(&cfg, 3, 15);
-        assert!(!regions.is_empty(), "expected SESE regions for nested loops");
+        assert!(
+            !regions.is_empty(),
+            "expected SESE regions for nested loops"
+        );
         // Verify at least one region captures the loop structure
         let loop_region = regions.iter().find(|r| r.statements.len() >= 3);
         assert!(loop_region.is_some());
@@ -273,7 +272,10 @@ fn process(val: Option<i32>) -> i32 {
 "#;
         let cfg = build_cfg_for_function("rust", code, "process").unwrap();
         let regions = extract_sese_regions(&cfg, 3, 15);
-        assert!(!regions.is_empty(), "expected SESE regions for guard clause");
+        assert!(
+            !regions.is_empty(),
+            "expected SESE regions for guard clause"
+        );
         for r in &regions {
             assert!(r.statements.len() >= 3 && r.statements.len() <= 15);
             assert!(r.start_line <= r.end_line);
@@ -297,6 +299,9 @@ fn handle(status: i32) -> &'static str {
         let regions = extract_sese_regions(&cfg, 3, 15);
         assert!(!regions.is_empty(), "expected SESE regions for if-else");
         let branch_region = regions.iter().find(|r| r.blocks.len() >= 2);
-        assert!(branch_region.is_some(), "expected multi-block SESE region for if-else");
+        assert!(
+            branch_region.is_some(),
+            "expected multi-block SESE region for if-else"
+        );
     }
 }

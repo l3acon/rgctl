@@ -2,7 +2,7 @@
 
 **Goal:** First-class **Type-1–4 clone detection** via `rgctl clones`: exact `code_hash` groups, bloom LSH candidates, and **shipped** fragment (SESE + 1-WL) structural clones — distinct from `semantic query`.
 
-**Issue:** [#37](https://github.com/sshaaf/rgctl/issues/37) · OpenSpec: `openspec/changes/add-clone-detection/`
+**Issue:** [#37](https://github.com/rgctl/rgctl/issues/37) · OpenSpec: `openspec/changes/add-clone-detection/`
 
 **Non-goals:** Default `CLONE_OF` topology edges in `graph.snapshot.bin`; replacing semantic search; O(n²) whole-repo PDG isomorphism on linux-scale corpora.
 

@@ -2,9 +2,7 @@
 
 use rgctl_error::{Error, Result};
 use rgctl_graph::schema::Node;
-pub use rgctl_graph::{
-    MIN_TOKEN_LEN, TOKEN_BLOOM_BITS, TOKEN_BLOOM_WORDS, tokenize_string_into,
-};
+pub use rgctl_graph::{MIN_TOKEN_LEN, TOKEN_BLOOM_BITS, TOKEN_BLOOM_WORDS, tokenize_string_into};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};

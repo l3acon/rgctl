@@ -369,10 +369,10 @@ impl ProcessingPipeline {
         if let Some(store) = builder.take_content_store() {
             store.save()?;
         }
-        if let Some(ref facts) = facts {
-            if let Err(err) = facts.save(root) {
-                tracing::warn!(error = %err, "failed to persist facts.bin cache");
-            }
+        if let Some(ref facts) = facts
+            && let Err(err) = facts.save(root)
+        {
+            tracing::warn!(error = %err, "failed to persist facts.bin cache");
         }
         let node_path_mapping = builder.take_tracker_mapping();
         let (nodes, edges): (Vec<Node>, Vec<Edge>) = builder.into_graph();
@@ -426,10 +426,8 @@ mod tests {
             show_progress: false,
             ..PipelineConfig::default()
         };
-        let pipeline = ProcessingPipeline::with_config(
-            Arc::new(rgctl_languages::default_registry()),
-            config,
-        );
+        let pipeline =
+            ProcessingPipeline::with_config(Arc::new(rgctl_languages::default_registry()), config);
         let (graph, stats) = pipeline.process_repository(temp.path()).unwrap();
 
         assert_eq!(stats.files_processed, 10);

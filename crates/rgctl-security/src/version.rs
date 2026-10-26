@@ -16,15 +16,16 @@ pub trait VersionEngine: Send + Sync {
         introduced: Option<&str>,
         fixed: Option<&str>,
     ) -> Result<bool, SecurityError> {
-        if let Some(intro) = introduced {
-            if intro != "0" && self.cmp_versions(version, intro)? == std::cmp::Ordering::Less {
-                return Ok(false);
-            }
+        if let Some(intro) = introduced
+            && intro != "0"
+            && self.cmp_versions(version, intro)? == std::cmp::Ordering::Less
+        {
+            return Ok(false);
         }
-        if let Some(fix) = fixed {
-            if self.cmp_versions(version, fix)? != std::cmp::Ordering::Less {
-                return Ok(false);
-            }
+        if let Some(fix) = fixed
+            && self.cmp_versions(version, fix)? != std::cmp::Ordering::Less
+        {
+            return Ok(false);
         }
         Ok(true)
     }
@@ -109,7 +110,7 @@ fn parse_maven(v: &str) -> MavenToken {
     };
     let mut nums = Vec::new();
     let mut qualifier = String::new();
-    for part in core.split(|c| c == '.' || c == '-') {
+    for part in core.split(['.', '-']) {
         if part.is_empty() {
             continue;
         }
@@ -164,10 +165,7 @@ fn cmp_semver_like(a: &str, b: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let parse = |s: &str| -> (Vec<u64>, String) {
         let (core, pre) = s.split_once('-').unwrap_or((s, ""));
-        let nums: Vec<u64> = core
-            .split('.')
-            .filter_map(|p| p.parse().ok())
-            .collect();
+        let nums: Vec<u64> = core.split('.').filter_map(|p| p.parse().ok()).collect();
         (nums, pre.to_string())
     };
     let (an, ap) = parse(a);
@@ -195,36 +193,42 @@ mod tests {
     #[test]
     fn maven_jackson_range() {
         let e = engine_for_ecosystem("Maven").unwrap();
-        assert!(e
-            .in_vulnerable_range("2.13.5", Some("2.0.0"), Some("2.14.0"))
-            .unwrap());
-        assert!(!e
-            .in_vulnerable_range("2.14.0", Some("2.0.0"), Some("2.14.0"))
-            .unwrap());
+        assert!(
+            e.in_vulnerable_range("2.13.5", Some("2.0.0"), Some("2.14.0"))
+                .unwrap()
+        );
+        assert!(
+            !e.in_vulnerable_range("2.14.0", Some("2.0.0"), Some("2.14.0"))
+                .unwrap()
+        );
     }
 
     #[test]
     fn maven_vendor_fixed_exact() {
         let e = engine_for_ecosystem("Maven").unwrap();
         let fixed = "2.7.2.Final-rhlw-00004";
-        assert!(!e
-            .in_vulnerable_range(fixed, Some("0"), Some(fixed))
-            .unwrap());
-        assert!(e
-            .in_vulnerable_range("2.7.2.Final", Some("0"), Some(fixed))
-            .unwrap());
+        assert!(
+            !e.in_vulnerable_range(fixed, Some("0"), Some(fixed))
+                .unwrap()
+        );
+        assert!(
+            e.in_vulnerable_range("2.7.2.Final", Some("0"), Some(fixed))
+                .unwrap()
+        );
     }
 
     #[test]
     fn cargo_and_npm() {
         let c = engine_for_ecosystem("crates.io").unwrap();
-        assert!(c
-            .in_vulnerable_range("1.2.3", Some("1.0.0"), Some("1.3.0"))
-            .unwrap());
+        assert!(
+            c.in_vulnerable_range("1.2.3", Some("1.0.0"), Some("1.3.0"))
+                .unwrap()
+        );
         let n = engine_for_ecosystem("npm").unwrap();
-        assert!(!n
-            .in_vulnerable_range("2.0.0", Some("1.0.0"), Some("2.0.0"))
-            .unwrap());
+        assert!(
+            !n.in_vulnerable_range("2.0.0", Some("1.0.0"), Some("2.0.0"))
+                .unwrap()
+        );
     }
 
     #[test]

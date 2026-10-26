@@ -1,6 +1,6 @@
 # rgctl Test Applications
 
-In-tree Tier‑1 fixtures and graph **correctness** suite for [rgctl](https://github.com/sshaaf/rgctl) (copied into this monorepo; not a git submodule).
+In-tree Tier‑1 fixtures and graph **correctness** suite for [rgctl](https://github.com/rgctl/rgctl) (copied into this monorepo; not a git submodule).
 
 Reference **e-commerce store** applications for indexing, blast-radius, and migration tests.
 
@@ -84,7 +84,7 @@ cargo test --test graph_correctness
 cargo test --test graph_correctness java   # filter by project id
 ```
 
-Required failures fail the test. Domain edges that extractors still miss (e.g. some checkout→clearCart paths) are `best_effort` warnings. See [rgctl#26](https://github.com/sshaaf/rgctl/issues/26).
+Required failures fail the test. Domain edges that extractors still miss (e.g. some checkout→clearCart paths) are `best_effort` warnings. See [rgctl#26](https://github.com/rgctl/rgctl/issues/26).
 
 Regenerate analysis reports:
 

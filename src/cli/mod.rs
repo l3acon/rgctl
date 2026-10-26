@@ -1,14 +1,10 @@
 //! rgctl CLI command definitions and dispatch.
 
+mod agent_pack;
 mod args;
 mod blast_radius;
 pub mod blast_radius_output;
 mod check;
-mod pr_check;
-mod pr_check_output;
-mod review;
-mod review_export;
-mod temporal_prep;
 pub mod check_output;
 mod clones;
 mod communities;
@@ -19,17 +15,18 @@ mod discover;
 mod discover_cfg;
 mod discover_impl;
 mod discover_limits;
-mod kantra_discover;
 pub mod discover_output;
 mod export;
+mod file_watch;
 mod gql;
 pub mod gql_output;
+mod help_ia;
 mod http_serve;
 mod inspect;
 pub mod inspect_output;
-mod agent_pack;
 mod install;
 pub mod install_output;
+mod kantra_discover;
 mod markup;
 mod merge;
 mod metrics;
@@ -37,18 +34,21 @@ pub mod metrics_output;
 mod pipeline_session;
 pub mod pipeline_status;
 mod policy_file;
+mod pr_check;
+mod pr_check_output;
+mod review;
+mod review_export;
+mod rules;
 mod semantic;
 mod semantic_api;
 pub mod semantic_output;
+mod session_status;
 mod slice;
 pub mod slice_output;
 mod stage_profile;
 mod structured_query;
-mod session_status;
+mod temporal_prep;
 pub mod update;
-mod file_watch;
-mod help_ia;
-mod rules;
 mod vuln_deps;
 
 pub use args::{OutputFormat, SymbolTargetArgs};
@@ -56,9 +56,7 @@ pub use help_ia::root_command;
 
 use crate::BUILD_INFO;
 use crate::analysis::{DEFAULT_CANDIDATE_POOL, DEFAULT_EMBEDDING_DIMENSIONS};
-use args::{
-    ExportFormat, InspectLayer, PdgEdgeLayer, SkillHost, SliceDirection, SliceView,
-};
+use args::{ExportFormat, InspectLayer, PdgEdgeLayer, SkillHost, SliceDirection, SliceView};
 use clap::{ArgAction, Parser, Subcommand};
 use context::CliContext;
 use std::time::{Duration, Instant};
@@ -118,12 +116,10 @@ pub enum Commands {
         path: Option<String>,
 
         /// Locate candidate project roots under PATH matching a glob (e.g. `*coolstore*`); no full index
-        #[arg(long = "find", value_name = "GLOB",
-            help_heading = "Paths & filters")]
+        #[arg(long = "find", value_name = "GLOB", help_heading = "Paths & filters")]
         find_roots: Option<String>,
 
-        #[arg(short = 'l', long = "languages",
-            help_heading = "Paths & filters")]
+        #[arg(short = 'l', long = "languages", help_heading = "Paths & filters")]
         languages: Option<String>,
 
         /// Path exclude glob (repeatable; comma-separated values also accepted)
@@ -131,79 +127,86 @@ pub enum Commands {
             help_heading = "Paths & filters")]
         exclude: Vec<String>,
 
-        #[arg(short = 'v', long = "verbose",
-            help_heading = "Session / limits")]
+        #[arg(short = 'v', long = "verbose", help_heading = "Session / limits")]
         verbose: bool,
 
         /// Secret scanning (SecretDetector). Off by default.
-        #[arg(long = "with-security", visible_alias = "security",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "with-security",
+            visible_alias = "security",
+            help_heading = "Pipeline features"
+        )]
         with_security: bool,
 
         /// Per-function CFG, dominators, and PDG → `.rgctl/analysis/` + cfg_pdg archive.
         /// Off by default. Does **not** include discover-time taint (see `--with-taint`).
         /// Large C++ corpora (e.g. llvm `clang/`) run CFG on parallel workers with a 16 MiB
         /// stack; pathological deep ASTs are skipped at depth 2048 (see `docs/internal/profile.md`).
-        #[arg(long = "with-cfg", visible_alias = "cfg",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "with-cfg",
+            visible_alias = "cfg",
+            help_heading = "Pipeline features"
+        )]
         with_cfg: bool,
 
         /// Discover-time taint analysis (requires CFG/PDG; implies CFG pass if needed).
         /// Off by default. On-demand: `slice ... --taint`.
-        #[arg(long = "with-taint",
-            help_heading = "Pipeline features")]
+        #[arg(long = "with-taint", help_heading = "Pipeline features")]
         with_taint: bool,
 
         /// Extra taint rule pack (YAML file or directory). Merged after built-ins and
         /// `.rgctl/taint-rules.d/` (see docs). Only used with `--with-taint`.
-        #[arg(long = "taint-rules", value_name = "PATH",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "taint-rules",
+            value_name = "PATH",
+            help_heading = "Pipeline features"
+        )]
         taint_rules: Option<String>,
 
         /// Optional SCIP protobuf index (`.scip`) to upgrade ambiguous call edges
         /// with compiler-exact symbol/occurrence resolution (`resolved_via=scip`).
         /// Hydrates the snapshot for a post-pass merge — not used on the default cold path.
-        #[arg(long = "scip", value_name = "PATH.scip",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "scip",
+            value_name = "PATH.scip",
+            help_heading = "Pipeline features"
+        )]
         scip: Option<String>,
 
         /// Stream git history for co-change edges (`CoChangesWith`) and churn hotspots.
         /// Off by default — never on the cold discover path.
-        #[arg(long = "with-git",
-            help_heading = "Pipeline features")]
+        #[arg(long = "with-git", help_heading = "Pipeline features")]
         with_git: bool,
 
         /// Git `--since` window for `--with-git` (default: 90.days).
-        #[arg(long = "git-since", default_value = "90.days",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "git-since",
+            default_value = "90.days",
+            help_heading = "Pipeline features"
+        )]
         git_since: String,
 
         /// Classify loop-carried data dependencies on the PDG (implies CFG).
-        #[arg(long = "with-dfg-loops",
-            help_heading = "Pipeline features")]
+        #[arg(long = "with-dfg-loops", help_heading = "Pipeline features")]
         with_dfg_loops: bool,
 
         /// Write coarse AST skeleton archive under `.rgctl/analysis/` (implies CFG).
-        #[arg(long = "with-ast-skeleton",
-            help_heading = "Pipeline features")]
+        #[arg(long = "with-ast-skeleton", help_heading = "Pipeline features")]
         with_ast_skeleton: bool,
 
         /// Write legacy JSON graph files (`graph.db` / `graph.json`); default is snapshot-only.
-        #[arg(long = "write-json-graph",
-            help_heading = "Session / limits")]
+        #[arg(long = "write-json-graph", help_heading = "Session / limits")]
         write_json_graph: bool,
 
         /// Export the universe dashboard bundle under `.rgctl/dashboard/`. Off by default.
         ///
         /// This is the v2 dashboard: L0 namespace volumes over L1 packages, the coupling web, and
         /// `manifest.mode: "universe"`.
-        #[arg(long = "with-universe",
-            help_heading = "Session / limits")]
+        #[arg(long = "with-universe", help_heading = "Session / limits")]
         with_universe: bool,
 
         /// Deprecated: use `--with-universe`. Routes to it and will be removed in the next release.
-        #[arg(long = "with-dashboard",
-            help_heading = "Session / limits")]
+        #[arg(long = "with-dashboard", help_heading = "Session / limits")]
         with_dashboard: bool,
 
         /// Write a migration roadmap JSON after analysis (default: `.rgctl/migration_plan.json`).
@@ -211,44 +214,50 @@ pub enum Commands {
         #[arg(
             long = "export-migration-hints",
             visible_alias = "export-migration-plan",
-            help_heading = "Migration")]
+            help_heading = "Migration"
+        )]
         export_migration_hints: bool,
 
         /// Compute harmonic centrality (exact or HyperBall). Off by default — needed for
         /// migration ranking; adds ~30s and multi‑GB peak RSS on kernel-scale graphs.
-        #[arg(long = "with-harmonic",
-            help_heading = "Migration")]
+        #[arg(long = "with-harmonic", help_heading = "Migration")]
         with_harmonic: bool,
 
         /// Evaluate Konveyor Kantra rules natively during discover (embedded catalog by default).
-        #[arg(long = "with-kantra",
-            help_heading = "Pipeline features")]
+        #[arg(long = "with-kantra", help_heading = "Pipeline features")]
         with_kantra: bool,
 
         /// Override embedded catalog with a Kantra rules directory (`ruleset.yaml` + `*.yaml`).
-        #[arg(long = "kantra-rules", value_name = "DIR",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "kantra-rules",
+            value_name = "DIR",
+            help_heading = "Pipeline features"
+        )]
         kantra_rules: Option<String>,
 
         /// Override embedded catalog with a ruleset tree (walks for `ruleset.yaml` dirs).
-        #[arg(long = "kantra-catalog", value_name = "ROOT",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "kantra-catalog",
+            value_name = "ROOT",
+            help_heading = "Pipeline features"
+        )]
         kantra_catalog: Option<String>,
 
         /// Evaluate only rules labeled `konveyor.io/target=<NAME>`.
-        #[arg(long = "kantra-target", value_name = "NAME",
-            help_heading = "Pipeline features")]
+        #[arg(
+            long = "kantra-target",
+            value_name = "NAME",
+            help_heading = "Pipeline features"
+        )]
         kantra_target: Option<String>,
 
         /// Index Kantra rules into the graph without running violation eval.
-        #[arg(long = "kantra-index-only",
-            help_heading = "Pipeline features")]
+        #[arg(long = "kantra-index-only", help_heading = "Pipeline features")]
         kantra_index_only: bool,
 
         /// Staged full pipeline: basic discover (queryable snapshot), then CFG + dashboard +
         /// harmonic, then semantic index. Prints a plan first; does not imply taint/security.
-        #[arg(long = "full",
-            help_heading = "Session / limits")]
+        #[arg(long = "full", help_heading = "Session / limits")]
         full: bool,
 
         /// Constrain resource use for containers / small machines.
@@ -280,13 +289,20 @@ pub enum Commands {
 
         /// Incremental update for repo-relative paths only (requires existing `.rgctl/` snapshot).
         /// Prefer `rgctl update --files` for the same behavior with clearer semantics.
-        #[arg(long = "files", value_name = "PATH", value_delimiter = ',',
-            help_heading = "Paths & filters")]
+        #[arg(
+            long = "files",
+            value_name = "PATH",
+            value_delimiter = ',',
+            help_heading = "Paths & filters"
+        )]
         files: Option<Vec<String>>,
 
         /// Reverse call-dependency hops when re-indexing `--files` (default 1; 0 = disabled).
-        #[arg(long = "cascade-depth", default_value = "1",
-            help_heading = "Paths & filters")]
+        #[arg(
+            long = "cascade-depth",
+            default_value = "1",
+            help_heading = "Paths & filters"
+        )]
         cascade_depth: usize,
 
         /// Flags after `--` (e.g. `discover . -- --full`)
@@ -1012,7 +1028,6 @@ pub enum Commands {
         #[command(subcommand)]
         action: SecurityCommands,
     },
-
 }
 
 #[derive(Subcommand)]
@@ -1053,7 +1068,6 @@ pub enum DepsCommands {
     },
 }
 
-
 #[derive(Subcommand)]
 pub enum SecurityCommands {
     /// OSV vulnerability triage / analyze (same as `rgctl vuln`)
@@ -1081,7 +1095,6 @@ pub enum SecurityCommands {
         depth: usize,
     },
 }
-
 
 #[derive(Subcommand)]
 pub enum RulesCommands {
@@ -1636,8 +1649,8 @@ impl Cli {
         let verbose = matches!(self.command, Commands::Discover { verbose: true, .. });
         let format = self.format.clone().unwrap_or_default();
         let quiet_json = format == OutputFormat::Json && !verbose;
-        let discover_json = matches!(self.command, Commands::Discover { .. })
-            && format == OutputFormat::Json;
+        let discover_json =
+            matches!(self.command, Commands::Discover { .. }) && format == OutputFormat::Json;
         init_logging(verbose, discover_json);
 
         if !long_running && !quiet_json {
@@ -1954,10 +1967,8 @@ impl Cli {
                 },
             ),
             Commands::Status => session_status::run_status(&ctx),
-            Commands::Watch { path: _ } => {
-                file_watch::run_watch_foreground(ctx.repo.clone())
-                    .map_err(|e| anyhow::anyhow!("{e:#}"))
-            }
+            Commands::Watch { path: _ } => file_watch::run_watch_foreground(ctx.repo.clone())
+                .map_err(|e| anyhow::anyhow!("{e:#}")),
             Commands::Update {
                 path,
                 files,
@@ -2083,9 +2094,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit,
-                    package: None,
-                    methods: None,
-                },
+                        package: None,
+                        methods: None,
+                    },
                 ),
                 QueryCommands::Relations {
                     symbol,
@@ -2118,9 +2129,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit,
-                    package: None,
-                    methods: None,
-                },
+                        package: None,
+                        methods: None,
+                    },
                 ),
                 QueryCommands::Inventory {
                     by,
@@ -2140,9 +2151,9 @@ impl Cli {
                         exclude_scope,
                         lang: None,
                         limit: None,
-                    package: None,
-                    methods: None,
-                },
+                        package: None,
+                        methods: None,
+                    },
                 ),
             },
             Commands::Inspect {
@@ -2606,14 +2617,10 @@ impl Cli {
                     depth,
                 } => vuln_deps::run_sink_taint(&ctx, sink, source, depth),
             },
-            Commands::Diff { base, head } => diff::run(
-                &ctx,
-                diff::DiffArgs { base, head },
-            ),
-            Commands::Merge { repos, output_dir } => merge::run(
-                &ctx,
-                merge::MergeArgs { repos, output_dir },
-            ),
+            Commands::Diff { base, head } => diff::run(&ctx, diff::DiffArgs { base, head }),
+            Commands::Merge { repos, output_dir } => {
+                merge::run(&ctx, merge::MergeArgs { repos, output_dir })
+            }
             Commands::Serve {
                 path,
                 no_pipeline,
@@ -2758,9 +2765,8 @@ fn init_logging(verbose: bool, discover_json: bool) {
     use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt::format::FmtSpan;
 
-    let use_ansi = !discover_json
-        && std::env::var_os("NO_COLOR").is_none()
-        && std::io::stdout().is_terminal();
+    let use_ansi =
+        !discover_json && std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal();
 
     if verbose {
         tracing_subscriber::fmt()

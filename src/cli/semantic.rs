@@ -255,11 +255,10 @@ pub fn run_distill(ctx: &CliContext, args: SemanticDistillArgs) -> Result<()> {
     }
     let embedder = resolve_embedder(&embedder_choice, args.dimensions)?;
     let blob = distill_vocab_matrix(embedder.as_ref(), &tokens, args.dimensions, args.batch_size)?;
-    if let Some(parent) = args.output.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("create {}", parent.display()))?;
-        }
+    if let Some(parent) = args.output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
     std::fs::write(&args.output, &blob)
         .with_context(|| format!("write {}", args.output.display()))?;
@@ -514,31 +513,31 @@ pub(crate) fn expand_gql_neighbors(
 }
 
 fn print_expansion_text(exp: &SemanticExpansion) {
-    if let Some(neighbors) = &exp.neighbors {
-        if !neighbors.is_empty() {
-            println!("\nNeighbors:");
-            for node in neighbors.iter().take(10) {
-                println!("  {} [{}]", node.name, node.relation);
-            }
+    if let Some(neighbors) = &exp.neighbors
+        && !neighbors.is_empty()
+    {
+        println!("\nNeighbors:");
+        for node in neighbors.iter().take(10) {
+            println!("  {} [{}]", node.name, node.relation);
         }
     }
-    if let Some(blast) = &exp.blast {
-        if !blast.is_empty() {
-            println!("\nBlast radius:");
-            for summary in blast {
-                println!(
-                    "  {}  callers={} impact={} score={:.1}",
-                    summary.anchor_name, summary.direct_callers, summary.impact_zone, summary.score
-                );
-            }
+    if let Some(blast) = &exp.blast
+        && !blast.is_empty()
+    {
+        println!("\nBlast radius:");
+        for summary in blast {
+            println!(
+                "  {}  callers={} impact={} score={:.1}",
+                summary.anchor_name, summary.direct_callers, summary.impact_zone, summary.score
+            );
         }
     }
-    if let Some(gql) = &exp.gql {
-        if !gql.is_empty() {
-            println!("\nGQL expansion:");
-            for node in gql.iter().take(10) {
-                println!("  {} [{}]", node.name, node.relation);
-            }
+    if let Some(gql) = &exp.gql
+        && !gql.is_empty()
+    {
+        println!("\nGQL expansion:");
+        for node in gql.iter().take(10) {
+            println!("  {} [{}]", node.name, node.relation);
         }
     }
 }

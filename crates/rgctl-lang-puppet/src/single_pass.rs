@@ -1,6 +1,6 @@
 //! Single-pass AST extraction for Puppet (`ScopeStack` + `KindDispatchTable`).
 
-use crate::plugin::{PuppetPlugin, PUPPET_BRANCH_KINDS};
+use crate::plugin::{PUPPET_BRANCH_KINDS, PuppetPlugin};
 use rgctl_plugin_api::*;
 use rgctl_plugin_api::{Error, Result};
 use std::path::Path;
@@ -52,18 +52,12 @@ fn puppet_grammar() -> tree_sitter::Language {
 
 /// Process-wide AST handler table (coverage sync + introspection).
 pub fn puppet_ast_handlers() -> &'static AstHandlerTable {
-    HANDLERS.get_or_init(|| {
-        
-        handler_table_from_kinds(&puppet_grammar(), HANDLED_KINDS)
-    })
+    HANDLERS.get_or_init(|| handler_table_from_kinds(&puppet_grammar(), HANDLED_KINDS))
 }
 
 fn puppet_dispatch() -> &'static KindDispatchTable {
-    DISPATCH.get_or_init(|| {
-        dispatch_table_from_manifest(&puppet_grammar(), MANIFEST_JSON)
-    })
+    DISPATCH.get_or_init(|| dispatch_table_from_manifest(&puppet_grammar(), MANIFEST_JSON))
 }
-
 
 enum Visit<'a> {
     Pre(Node<'a>, usize),
@@ -77,11 +71,12 @@ pub fn extract_all_single_pass(
     file_path: &Path,
     source: &[u8],
 ) -> Result<ExtractAllResult> {
-    let tree = parse_with_pool("puppet", puppet_grammar(), source).map_err(|e| Error::ParseError {
-        file: file_path.to_path_buf(),
-        line: 0,
-        message: e,
-    })?;
+    let tree =
+        parse_with_pool("puppet", puppet_grammar(), source).map_err(|e| Error::ParseError {
+            file: file_path.to_path_buf(),
+            line: 0,
+            message: e,
+        })?;
     let root = tree.root_node();
     let file_path_str = file_path.to_string_lossy();
     let dispatch = puppet_dispatch();
@@ -141,13 +136,10 @@ pub fn extract_all_single_pass(
                         .map(|(i, s)| (before + i, s))
                     {
                         let params = sym.parameters.len() as u32;
-                        let loc = ((node.end_position().row - node.start_position().row) + 1)
-                            .max(1) as u32;
+                        let loc = ((node.end_position().row - node.start_position().row) + 1).max(1)
+                            as u32;
                         let name = sym.name.clone();
-                        let qn = sym
-                            .qualified_name
-                            .clone()
-                            .unwrap_or_else(|| name.clone());
+                        let qn = sym.qualified_name.clone().unwrap_or_else(|| name.clone());
                         let depth_s = ctx.scopes.depth();
                         let mut frame = ScopeFrame::new(
                             ScopeKind::Function,
@@ -166,22 +158,17 @@ pub fn extract_all_single_pass(
                     }
                 }
 
-                plugin.collect_relation_at(
-                    node,
-                    source,
-                    &file_path_str,
-                    &mut relations,
-                );
+                plugin.collect_relation_at(node, source, &file_path_str, &mut relations);
 
                 if ctx.scopes.current_function().is_some() {
                     if PUPPET_BRANCH_KINDS.contains(&kind) {
                         let delta = 1 + ctx
-                                .scopes
-                                .current_function()
-                                .map(|f| f.complexity.cognitive_nesting)
-                                .unwrap_or(0);
-                            ctx.scopes.note_branch(delta);
-                            ctx.scopes.enter_branch();
+                            .scopes
+                            .current_function()
+                            .map(|f| f.complexity.cognitive_nesting)
+                            .unwrap_or(0);
+                        ctx.scopes.note_branch(delta);
+                        ctx.scopes.enter_branch();
                         let d = ctx.scopes.depth();
                         ctx.scopes.push(ScopeFrame::new(
                             ScopeKind::GuardBlock,

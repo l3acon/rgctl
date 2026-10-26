@@ -6,8 +6,8 @@ use super::context::CliContext;
 use super::policy_file::PolicyFile;
 use crate::analysis::{BlastRadiusEngine, CentralityAnalyzer, PetGraphView, PolicyViolation};
 use anyhow::Result;
-use serde_json::json;
 use rgctl_incremental::changed_function_symbols;
+use serde_json::json;
 use std::path::Path;
 
 pub struct CheckArgs {
@@ -98,17 +98,17 @@ pub fn run(ctx: &CliContext, args: CheckArgs) -> Result<()> {
         }
         if let Ok(result) = engine.analyze(id) {
             for node_id in &result.impact_zone_ids {
-                if let Some(score) = centrality.get(node_id) {
-                    if score.betweenness > centrality_threshold {
-                        violation_rows.push(json!({
-                            "symbol": symbol,
-                            "violation": format!("{}", PolicyViolation::CascadeHazard {
-                                node: *node_id,
-                                betweenness: score.betweenness,
-                                threshold: centrality_threshold,
-                            }),
-                        }));
-                    }
+                if let Some(score) = centrality.get(node_id)
+                    && score.betweenness > centrality_threshold
+                {
+                    violation_rows.push(json!({
+                        "symbol": symbol,
+                        "violation": format!("{}", PolicyViolation::CascadeHazard {
+                            node: *node_id,
+                            betweenness: score.betweenness,
+                            threshold: centrality_threshold,
+                        }),
+                    }));
                 }
             }
         }
@@ -135,4 +135,3 @@ pub fn run(ctx: &CliContext, args: CheckArgs) -> Result<()> {
     }
     Ok(())
 }
-

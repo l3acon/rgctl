@@ -84,26 +84,38 @@ fn rust_ecommerce_import_graph_nonzero() {
 fn rust_ecommerce_implements_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "IMPLEMENTS");
-    assert!(n > 0, "expected Implements edges on ecommerce-rust, got {n}");
+    assert!(
+        n > 0,
+        "expected Implements edges on ecommerce-rust, got {n}"
+    );
 }
 
 #[test]
 fn rust_ecommerce_annotated_with_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "ANNOTATEDWITH");
-    assert!(n > 0, "expected AnnotatedWith edges on ecommerce-rust, got {n}");
+    assert!(
+        n > 0,
+        "expected AnnotatedWith edges on ecommerce-rust, got {n}"
+    );
 }
 
 #[test]
 fn rust_ecommerce_instantiates_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "INSTANTIATES");
-    assert!(n > 0, "expected Instantiates edges on ecommerce-rust, got {n}");
+    assert!(
+        n > 0,
+        "expected Instantiates edges on ecommerce-rust, got {n}"
+    );
 }
 
 #[test]
 fn rust_ecommerce_calls_nonzero() {
     ensure_discovered();
     let n = edge_count(&repo(), "CALLS");
-    assert!(n > 50, "expected substantial CALLS on ecommerce-rust, got {n}");
+    assert!(
+        n > 50,
+        "expected substantial CALLS on ecommerce-rust, got {n}"
+    );
 }

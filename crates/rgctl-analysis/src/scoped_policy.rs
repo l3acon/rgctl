@@ -79,11 +79,11 @@ pub fn scope_entity_ids(
     scope_keys: &[rgctl_graph::stable_key::StableNodeKey],
 ) -> Result<Vec<Uuid>> {
     use rgctl_graph::schema::NodeType;
-    use rgctl_graph::stable_key::{stable_key_from_row, node_row_ref};
+    use rgctl_graph::stable_key::{node_row_ref, stable_key_from_row};
 
-    let col = store
-        .columnar()
-        .ok_or_else(|| rgctl_error::Error::GraphError("scoped policy requires columnar snapshot".into()))?;
+    let col = store.columnar().ok_or_else(|| {
+        rgctl_error::Error::GraphError("scoped policy requires columnar snapshot".into())
+    })?;
     let key_set: HashSet<_> = scope_keys.iter().copied().collect();
     let mut ids = Vec::new();
     for idx in 0..col.node_count() {
@@ -167,9 +167,9 @@ pub fn build_pr_check_centrality(
 mod tests {
     use super::*;
     use crate::BlastRadiusEngine;
+    use rgctl_graph::SnapshotNodeStore;
     use rgctl_graph::schema::{Edge, Node, NodeType};
     use rgctl_graph::write_columnar_from_nodes_edges;
-    use rgctl_graph::SnapshotNodeStore;
     use tempfile::TempDir;
 
     fn open_fixture(caller_count: usize) -> (TempDir, SnapshotNodeStore, Uuid) {

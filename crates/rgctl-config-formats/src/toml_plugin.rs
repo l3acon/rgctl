@@ -4,7 +4,7 @@ use crate::span_util::{line_col_at, loc};
 use rgctl_plugin_api::Result;
 use rgctl_plugin_api::*;
 use std::path::Path;
-use toml_edit::{Item, DocumentMut};
+use toml_edit::{DocumentMut, Item};
 
 /// TOML config format plugin
 pub struct TomlPlugin;

@@ -475,15 +475,15 @@ impl ProgramDependenceGraph {
             if post_dom.immediately_post_dominates(edge.to, edge.from) {
                 continue;
             }
-            if let Some(controller) = self.primary_node_for_block(edge.from) {
-                if let Some(ids) = self.block_nodes.get(&edge.to) {
-                    for &dependent in ids {
-                        if dependent != controller {
-                            self.control_deps.push(ControlDependency {
-                                controller,
-                                dependent,
-                            });
-                        }
+            if let Some(controller) = self.primary_node_for_block(edge.from)
+                && let Some(ids) = self.block_nodes.get(&edge.to)
+            {
+                for &dependent in ids {
+                    if dependent != controller {
+                        self.control_deps.push(ControlDependency {
+                            controller,
+                            dependent,
+                        });
                     }
                 }
             }
