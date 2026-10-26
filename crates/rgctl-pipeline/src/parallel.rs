@@ -140,6 +140,7 @@ mod tests {
             (0..4).into_par_iter().for_each(|_| {
                 let mut buf = [0u8; 4 * 1024 * 1024];
                 buf[0] = 1;
+                std::hint::black_box(&buf);
             });
         });
     }

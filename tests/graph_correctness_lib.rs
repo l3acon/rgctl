@@ -49,6 +49,7 @@ struct GraphSpec {
     forbidden_edges: Vec<ForbiddenEdge>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Deserialize)]
 struct ForbiddenEdge {
     from: String,
@@ -161,6 +162,7 @@ struct IdentitySpec {
     language: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct PeerSpec {
     name: String,

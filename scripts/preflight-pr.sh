@@ -149,9 +149,10 @@ pass "rgctl-graph & rgctl-core clippy passed"
 
 # 5. Test compilation & execution
 if [[ "$MODE" == "quick" ]]; then
-  step "CI Gate 6/6 (quick): Compile all unit & integration tests (--workspace --lib --bins --tests --no-run)"
+  step "CI Gate 6/6 (quick): Compile all unit & integration tests + run root lib unit tests"
   cargo test --features "${FEATURES}" --workspace --lib --bins --tests --no-run
-  pass "All workspace unit and integration test targets compiled cleanly"
+  cargo test --features "${FEATURES}" -p rgctl --lib
+  pass "All workspace test targets compiled cleanly and root lib unit tests passed"
 else
   step "CI Gate 6/6: cargo test --features \"${FEATURES}\" --workspace --lib --bins --tests"
   cargo test --features "${FEATURES}" --workspace --lib --bins --tests

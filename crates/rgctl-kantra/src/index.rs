@@ -146,7 +146,6 @@ mod tests {
     use super::*;
     use crate::schema::KantraRule;
     use rgctl_graph::backend::MemoryBackend;
-    use serde_yaml::Value;
 
     fn sample_rule(id: &str, labels: &[&str]) -> KantraRule {
         KantraRule {

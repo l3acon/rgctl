@@ -241,7 +241,7 @@ mod tests {
     }
 
     struct TemporalFixture {
-        tmp: TempDir,
+        _tmp: TempDir,
         base_store: SnapshotNodeStore,
         head_store: SnapshotNodeStore,
         base_backend: rgctl_graph::backend::MemoryBackend,
@@ -273,7 +273,7 @@ mod tests {
         let key = target_stable_key(&head_store);
 
         TemporalFixture {
-            tmp,
+            _tmp: tmp,
             base_store,
             head_store,
             base_backend,
@@ -356,6 +356,7 @@ mod tests {
         assert_eq!(deltas[0].classification, TemporalClass::Regression);
     }
 
+    #[test]
     fn temporal_stable_key_matches_across_snapshot_uuids() {
         let fixture = temporal_fixture(3, 3);
         let base_key = target_stable_key(&fixture.base_store);
