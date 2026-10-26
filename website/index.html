@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rgctl — moved to rgctl.io</title>
+    <link rel="canonical" href="https://rgctl.io/" />
+    <meta http-equiv="refresh" content="0;url=https://rgctl.io/" />
+    <script>
+      (function () {
+        var path = location.pathname.replace(/^\/rgctl\/?/, "/") || "/";
+        if (path === "//") path = "/";
+        location.replace(
+          "https://rgctl.io" + path + location.search + location.hash,
+        );
+      })();
+    </script>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 36rem;
+        margin: 4rem auto;
+        padding: 0 1.25rem;
+        line-height: 1.5;
+        color: #111;
+      }
+      a {
+        color: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <p>
+      The rgctl website has moved to
+      <a id="dest" href="https://rgctl.io/">https://rgctl.io/</a>.
+    </p>
+    <p>You should be redirected automatically.</p>
+    <script>
+      (function () {
+        var path = location.pathname.replace(/^\/rgctl\/?/, "/") || "/";
+        if (path === "//") path = "/";
+        var href = "https://rgctl.io" + path + location.search + location.hash;
+        var a = document.getElementById("dest");
+        if (a) {
+          a.href = href;
+          a.textContent = href;
+        }
+      })();
+    </script>
+  </body>
+</html>
