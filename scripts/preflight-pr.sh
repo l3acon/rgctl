@@ -149,13 +149,17 @@ pass "rgctl-graph & rgctl-core clippy passed"
 
 # 5. Test compilation & execution
 if [[ "$MODE" == "quick" ]]; then
-  step "CI Gate 6/6 (quick): Compile all unit & integration tests + run root lib unit tests"
+  step "CI Gate 6/6 (quick): Compile all unit & integration tests + run library unit tests"
   cargo test --features "${FEATURES}" --workspace --lib --bins --tests --no-run
-  cargo test --features "${FEATURES}" -p rgctl --lib
-  pass "All workspace test targets compiled cleanly and root lib unit tests passed"
+  cargo test --features "${FEATURES}" --workspace --lib --no-fail-fast
+  pass "All workspace test targets compiled cleanly and workspace library unit tests passed"
 else
-  step "CI Gate 6/6: cargo test --features \"${FEATURES}\" --workspace --lib --bins --tests"
-  cargo test --features "${FEATURES}" --workspace --lib --bins --tests
+  step "Scrubbing gitignored .rgctl caches in test fixtures to match clean CI checkout"
+  find rgctl-tests tests/fixtures -name ".rgctl" -type d -prune -exec rm -rf {} + 2>/dev/null || true
+  pass "Fixture .rgctl caches cleaned"
+
+  step "CI Gate 6/6: cargo test --features \"${FEATURES}\" --workspace --lib --bins --tests --no-fail-fast"
+  cargo test --features "${FEATURES}" --workspace --lib --bins --tests --no-fail-fast
 
   step "Running CI QE & correctness gates"
   cargo test --features "${FEATURES}" --test map_collision_qe
@@ -174,21 +178,18 @@ else
   cargo test --features "${FEATURES}" --test community_audit --test centrality_audit
   cargo test --features "${FEATURES}" --test incremental_performance_integration
   pass "Standard QE & correctness gates passed"
-fi
 
-# 6. Full release & benchmark gates (--full)
-if [[ "$MODE" == "full" ]]; then
-  step "Full CI Gate: Release CLI golden paths & scale/perf gates"
+  step "Release CLI golden paths & scale/perf gates (mirrors CI release steps)"
   cargo test --release --features "${FEATURES}" --test subprocess_golden_path
   cargo test --release --features "${FEATURES}" --test all_commands_sanity
   cargo test --release --features "${FEATURES}" --test blast_radius_perf
   cargo test --release --features "${FEATURES}" --test scale_perf_ci_gate -- --nocapture
   cargo test --release --features "${FEATURES}" --test community_audit --test centrality_audit --test centrality_approx_scale -- --nocapture
 
-  step "Full CI Gate: Benchmark compilation smoke check (cargo bench --no-run)"
+  step "Benchmark compilation smoke check (cargo bench --no-run)"
   cargo bench --no-run
 
-  step "Full CI Gate: AST Handler Runtime Coverage Gate (RGCTL_AST_COVERAGE_TRACK=1)"
+  step "AST Handler Runtime Coverage Gate (RGCTL_AST_COVERAGE_TRACK=1)"
   RGCTL_AST_COVERAGE_TRACK=1 cargo test --features "${FEATURES}" \
     -p rgctl-ast-coverage \
     -p rgctl-languages \
