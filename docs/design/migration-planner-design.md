@@ -108,7 +108,7 @@ For each `Function` node in the memory backend:
    - `member_count`
    - sums of PageRank, harmonic, betweenness → **averages**
    - **max** blast radius across members
-   - **Community votes** — count of each Fast-Leiden community id among members (serialized field still named `louvain_community_id`)
+   - **Community votes** — count of each Fast-Leiden community id among members (`community_id`)
 
 After ranking buckets by `member_count` (descending):
 
@@ -124,9 +124,11 @@ Scan `Calls` edges. For each call where caller and callee map to **different** p
 
 Intra-package calls are omitted from the macro graph (they do not create macro edges).
 
-### 3.5 Community id on macro nodes (`louvain_community_id`)
+### 3.5 Community id on macro nodes (`community_id`)
 
-Field: `louvain_community_id: Option<usize>` — **majority vote** of member functions’ Fast-Leiden community ids. The field name is **historical** (“Louvain”) for schema compatibility only; detection is Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
+Field: `community_id: Option<usize>` — **majority vote** of member functions’ Fast-Leiden community ids. Detection uses Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
+
+`migration_graph.json` **schema_version 3** serializes this as `community_id`. Schema v2 used the historical name `louvain_community_id`; readers still accept that alias so older sidecars keep cluster coloring.
 
 Used for:
 
@@ -231,7 +233,7 @@ Written to `.rgctl/dashboard/migration_graph.json` on `discover --with-dashboard
       "avg_harmonic": 0.0034,
       "avg_betweenness": 0.0,
       "max_blast": 47.0,
-      "louvain_community_id": 128
+      "community_id": 128
     }
   ],
   "edges": [
@@ -345,7 +347,7 @@ Top → bottom:
 
 - **Library:** Sigma.js + graphology; layout via `layoutForceAtlas2` in `dashboard/src/graphLayout.ts`
 - **Node size:** priority score (min–max mapped to 4–28px)
-- **Node color:** `louvain_community_id` (Fast-Leiden majority vote; fallback: macro id)
+- **Node color:** `community_id` (Fast-Leiden majority vote; fallback: macro id)
 - **Edge layout weights:**
   - Same Fast-Leiden cluster: `call_weight × 4.0`
   - Different cluster: `call_weight × 0.35`
@@ -355,7 +357,7 @@ Top → bottom:
 
 ![Package graph — hybrid default preset](../images/design/migration-planner/migration-package-graph.png)
 
-*Figure 6: Package graph — node color = Fast-Leiden cluster (`louvain_community_id` field), node size = priority score.*
+*Figure 6: Package graph — node color = Fast-Leiden cluster (`community_id` field), node size = priority score.*
 
 ![Package graph after switching to Risk Mitigation preset](../images/design/migration-planner/migration-graph-risk-preset.png)
 

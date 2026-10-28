@@ -1,6 +1,6 @@
-import type { MigrationCommunityNode } from "./types";
+import { migrationCommunityClusterId, type MigrationCommunityNode } from "./types";
 
-/** ForceAtlas2 attraction multiplier for edges within the same Louvain cluster. */
+/** ForceAtlas2 attraction multiplier for edges within the same Fast-Leiden cluster. */
 export const MIGRATION_INTRA_CLUSTER_LAYOUT_WEIGHT = 4.0;
 /** ForceAtlas2 attraction multiplier for cross-cluster call edges. */
 export const MIGRATION_INTER_CLUSTER_LAYOUT_WEIGHT = 0.35;
@@ -11,8 +11,10 @@ export function migrationEdgeLayoutWeight(
   callWeight: number,
 ): number {
   const sameCluster =
-    source?.louvain_community_id != null &&
-    source.louvain_community_id === target?.louvain_community_id;
+    source != null &&
+    target != null &&
+    (source.community_id != null || source.louvain_community_id != null) &&
+    migrationCommunityClusterId(source) === migrationCommunityClusterId(target);
   const base = Math.max(0.5, callWeight);
   return sameCluster
     ? base * MIGRATION_INTRA_CLUSTER_LAYOUT_WEIGHT
@@ -20,16 +22,17 @@ export function migrationEdgeLayoutWeight(
 }
 
 /** Hidden layout edges pull same-cluster packages together when they lack direct calls. */
-export function addLouvainLayoutEdges(
+export function addCommunityLayoutEdges(
   graph: import("graphology").default,
   communities: MigrationCommunityNode[],
 ): void {
   const byCluster = new Map<number, number[]>();
   for (const node of communities) {
-    if (node.louvain_community_id == null) continue;
-    const list = byCluster.get(node.louvain_community_id) ?? [];
+    if (node.community_id == null && node.louvain_community_id == null) continue;
+    const cid = migrationCommunityClusterId(node);
+    const list = byCluster.get(cid) ?? [];
     list.push(node.id);
-    byCluster.set(node.louvain_community_id, list);
+    byCluster.set(cid, list);
   }
 
   for (const ids of byCluster.values()) {

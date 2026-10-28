@@ -442,10 +442,11 @@ mod codegen_tests {
             let src = repo.join("skills").join(name);
             let dst = repo.join(".agents/skills").join(name);
             assert!(src.is_dir(), "missing skills/{name}");
-            assert!(
-                dst.is_dir(),
-                "missing .agents/skills/{name} — sync from skills/"
-            );
+            // `.agents/` is gitignored (.gitignore) and absent on clean CI checkouts;
+            // when present in a local dogfood checkout, enforce zero drift vs `skills/`.
+            if !dst.is_dir() {
+                continue;
+            }
             for entry in walkdir::WalkDir::new(&src)
                 .into_iter()
                 .filter_map(|e| e.ok())

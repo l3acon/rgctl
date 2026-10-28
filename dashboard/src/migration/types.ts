@@ -14,7 +14,17 @@ export interface MigrationCommunityNode {
   avg_harmonic: number;
   avg_betweenness: number;
   max_blast: number;
+  /** Fast-Leiden majority vote (schema v3+). */
+  community_id?: number | null;
+  /** Schema v2 name; still accepted when reading older migration_graph.json. */
   louvain_community_id?: number | null;
+}
+
+/** Resolve cluster id from a migration macro node (v3 `community_id` or v2 alias). */
+export function migrationCommunityClusterId(
+  node: Pick<MigrationCommunityNode, "id" | "community_id" | "louvain_community_id">,
+): number {
+  return node.community_id ?? node.louvain_community_id ?? node.id;
 }
 
 export interface MigrationCommunityEdge {

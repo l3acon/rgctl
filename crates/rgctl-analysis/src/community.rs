@@ -1289,19 +1289,11 @@ fn build_dashboard_community(
         use crate::community_label::{CommunityLabelHints, infer_community_label};
         let packages: Vec<String> = file_paths
             .iter()
-            .map(|p| {
-                let path = p.replace('\\', "/");
-                std::path::Path::new(&path)
-                    .parent()
-                    .map(|parent| parent.to_string_lossy().replace('/', "."))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "root".into())
-            })
+            .map(|p| crate::migration::package_label(p))
             .collect();
         infer_community_label(&CommunityLabelHints {
             id,
             names: &names,
-            file_paths: &file_paths,
             package_labels: &packages,
             top_pagerank_name: None,
             is_infrastructure: infrastructure_community_id == Some(id),

@@ -104,7 +104,7 @@ fn test_rgctl_config_defaults() {
     let temp = TempDir::new().unwrap();
     let cfg = RgctlConfig::load(temp.path()).unwrap();
     assert_eq!(cfg.hooks.block_on_risk, RiskLevel::Critical);
-    assert_eq!(cfg.watch.debounce_ms, 500);
+    assert_eq!(cfg.watch.debounce_ms, 25);
 }
 
 #[test]

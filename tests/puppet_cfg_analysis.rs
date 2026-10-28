@@ -1,6 +1,7 @@
 //! Puppet CFG discover integration on ecommerce-puppet.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn puppet_bin() -> PathBuf {
@@ -9,18 +10,45 @@ fn puppet_bin() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/rgctl"))
 }
 
-fn puppet_repo() -> PathBuf {
+fn puppet_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rgctl-tests/ecommerce-puppet")
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            if entry.file_name() == ".rgctl" || entry.file_name() == "target" {
+                continue;
+            }
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Isolated copy so parallel discovers do not race on shared `rgctl-tests/…/.rgctl`.
+fn materialize_puppet() -> Option<(tempfile::TempDir, PathBuf)> {
+    let src = puppet_fixture();
+    if !src.is_dir() {
+        return None;
+    }
+    let tmp = tempfile::tempdir().ok()?;
+    let repo = tmp.path().join("ecommerce-puppet");
+    copy_dir_all(&src, &repo).ok()?;
+    Some((tmp, repo))
 }
 
 #[test]
 fn discover_with_cfg_indexes_puppet() {
-    let repo = puppet_repo();
-    if !repo.is_dir() {
+    let Some((_tmp, repo)) = materialize_puppet() else {
         return;
-    }
+    };
     let bin = puppet_bin();
-    let _ = std::fs::remove_dir_all(repo.join(".rgctl"));
     let out = Command::new(&bin)
         .args(["discover", ".", "-l", "puppet", "--with-cfg"])
         .current_dir(&repo)
@@ -41,12 +69,10 @@ fn discover_with_cfg_indexes_puppet() {
 
 #[test]
 fn discover_with_ast_skeleton_on_puppet() {
-    let repo = puppet_repo();
-    if !repo.is_dir() {
+    let Some((_tmp, repo)) = materialize_puppet() else {
         return;
-    }
+    };
     let bin = puppet_bin();
-    let _ = std::fs::remove_dir_all(repo.join(".rgctl"));
     let out = Command::new(&bin)
         .args([
             "discover",

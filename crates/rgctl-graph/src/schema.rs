@@ -59,6 +59,11 @@ impl SharedStr {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Borrow the underlying shared `Arc<str>` handle.
+    pub fn as_arc(&self) -> &Arc<str> {
+        &self.0
+    }
 }
 
 impl Default for SharedStr {

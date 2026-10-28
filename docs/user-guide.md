@@ -600,7 +600,7 @@ rgctl -r "$REPO" -f json relations clearCart --edge calls --direction in | jq '.
 
 ### Named communities (analysis overlay)
 
-`discover` runs **Fast-Leiden** community detection (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` (ubiquitous utilities → `"Shared / Infrastructure"`). Assignments land in `.rgctl/analysis_results.bin` — **not** as topology edges. JSON field `louvain_community_id` is a historical schema name only.
+`discover` runs **Fast-Leiden** community detection (local moving + BFS connected-subgraph refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` (ubiquitous utilities → `"Shared / Infrastructure"`). Assignments land in `.rgctl/analysis_results.bin` — **not** as topology edges.
 
 Community detection uses behavioral edges (`Calls`, `Uses`, `References`) by default.  
 On mixed code + markdown repos, doc `REFERENCES` participate in the same community pass as code edges; this is expected behavior.

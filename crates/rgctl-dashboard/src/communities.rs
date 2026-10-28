@@ -1,4 +1,4 @@
-//! Louvain community summary exported beside the metagraph.
+//! Fast-Leiden community summary exported beside the metagraph.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -60,7 +60,7 @@ pub fn summarize_communities(
     }
 }
 
-/// Stable hex palette keyed by Louvain community id (Sigma-compatible).
+/// Stable hex palette keyed by Fast-Leiden community id (Sigma-compatible).
 pub fn community_color_hex(index: usize) -> String {
     let hue = (index * 47 + 210) % 360;
     hsl_to_hex(hue as f64, 0.58, 0.52)

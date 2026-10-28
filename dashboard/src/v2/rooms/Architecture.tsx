@@ -21,6 +21,7 @@ export function ArchitectureRoom() {
   const [state, setState] = useState<Loaded>({ kind: "loading" });
   const [layer, setLayer] = useState<UniverseLayer>("packages");
   const [edges, setEdges] = useState(true);
+  const [sharedOnly, setSharedOnly] = useState(false);
   const [hover, setHover] = useState<HoverEntry | null>(null);
   const [sceneFailed, setSceneFailed] = useState<string | null>(null);
 
@@ -75,7 +76,7 @@ export function ArchitectureRoom() {
       const scales = scalesFor(view);
       scene.setEdges(
         edgeListFor(view),
-        new Map([...view.packages, ...view.standalone].map((p) => [p.id, p])),
+        new Map(view.packages.map((p) => [p.id, p])),
       );
       scene.update({ view, layer, edges, height: scales.height, footprint: scales.footprint });
       sceneRef.current = scene;
@@ -99,7 +100,7 @@ export function ArchitectureRoom() {
     const scales = scalesFor(view);
     scene.setEdges(
       edgeListFor(view),
-      new Map([...view.packages, ...view.standalone].map((p) => [p.id, p])),
+      new Map(view.packages.map((p) => [p.id, p])),
     );
     scene.update({ view, layer, edges, height: scales.height, footprint: scales.footprint });
   }, [view, layer, edges]);
@@ -177,7 +178,11 @@ export function ArchitectureRoom() {
         <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           <Layers view={view!} />
           <Namespaces view={view!} />
-          <Communities view={view!} sharedOnly={false} />
+          <Communities
+            view={view!}
+            sharedOnly={sharedOnly}
+            onToggleShared={() => setSharedOnly((value) => !value)}
+          />
           <Buckets view={view!} />
         </div>
       </div>
@@ -307,16 +312,39 @@ function Namespaces({ view }: { view: ArchitectureView }) {
   );
 }
 
-function Communities({ view, sharedOnly }: { view: ArchitectureView; sharedOnly: boolean }) {
+function Communities({
+  view,
+  sharedOnly,
+  onToggleShared,
+}: {
+  view: ArchitectureView;
+  sharedOnly: boolean;
+  onToggleShared: () => void;
+}) {
   const list = sharedOnly ? view.communities.filter((c) => c.shared) : view.communities;
   const top = list.slice(0, 8);
+  const sharedCount = view.communities.filter((c) => c.shared).length;
   return (
     <Panel
       title="Communities"
       subtitle={
         view.modularity === null
           ? `${view.communities.length} · modularity not exported`
-          : `${view.communities.length} · Louvain, modularity ${view.modularity.toFixed(3)}`
+          : `${view.communities.length} · Fast-Leiden, modularity ${view.modularity.toFixed(3)}`
+      }
+      right={
+        <button
+          type="button"
+          onClick={onToggleShared}
+          aria-pressed={sharedOnly}
+          className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${
+            sharedOnly
+              ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-200"
+              : "border-white/10 text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          {sharedOnly ? `shared only (${sharedCount})` : `all (${view.communities.length})`}
+        </button>
       }
     >
       <ul className="flex flex-col gap-1 text-[11px]">
@@ -328,6 +356,9 @@ function Communities({ view, sharedOnly }: { view: ArchitectureView; sharedOnly:
             </span>
           </li>
         ))}
+        {list.length > top.length && (
+          <li className="text-[10.5px] text-zinc-600">and {list.length - top.length} more</li>
+        )}
       </ul>
       <p className="mt-2 text-[10.5px] leading-relaxed text-zinc-500">
         Labels are the clustering's own strings — sometimes a Java modifier, sometimes a path. They are shown

@@ -42,7 +42,7 @@ pub struct Metanode {
     /// Columnar row indices in `graph_payload.bin` for WASM LOD drill-down.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub member_indices: Vec<u32>,
-    /// Louvain community id (majority vote of member nodes).
+    /// Fast-Leiden community id (majority vote of member nodes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub community_id: Option<usize>,
 }
@@ -71,7 +71,10 @@ struct PackageBucket {
     complexity_sum: f64,
     complexity_count: u32,
     member_indices: Vec<u32>,
+    /// Votes from code/doc symbols (`Function`, `Class`, `Module`). Preferred for plurality.
     community_votes: HashMap<usize, u32>,
+    /// Votes from `File` nodes — used only when the bucket has no code/doc symbol votes.
+    file_community_votes: HashMap<usize, u32>,
 }
 
 fn bucket_member_count(bucket: &PackageBucket) -> u32 {
@@ -166,9 +169,16 @@ pub fn write_metagraph(
                 complexity_count: 0,
                 member_indices: Vec::new(),
                 community_votes: HashMap::new(),
+                file_community_votes: HashMap::new(),
             });
         if let Some(cid) = community_id_for_node(analysis, detected_communities.as_ref(), n.id) {
-            *bucket.community_votes.entry(cid).or_insert(0) += 1;
+            // File nodes lack behavioral Calls/Uses/References edges — do not dilute
+            // plurality when the bucket already has code/doc symbol votes.
+            if n.node_type == NodeType::File {
+                *bucket.file_community_votes.entry(cid).or_insert(0) += 1;
+            } else {
+                *bucket.community_votes.entry(cid).or_insert(0) += 1;
+            }
         }
         match n.node_type {
             NodeType::Function => bucket.functions += 1,
@@ -205,6 +215,7 @@ pub fn write_metagraph(
                 complexity_count: 0,
                 member_indices: Vec::new(),
                 community_votes: HashMap::new(),
+                file_community_votes: HashMap::new(),
             },
         );
     }
@@ -240,10 +251,14 @@ pub fn write_metagraph(
             complexity_count: 0,
             member_indices: Vec::new(),
             community_votes: HashMap::new(),
+            file_community_votes: HashMap::new(),
         };
         for b in &tail {
             for (cid, votes) in &b.community_votes {
                 *merged.community_votes.entry(*cid).or_insert(0) += votes;
+            }
+            for (cid, votes) in &b.file_community_votes {
+                *merged.file_community_votes.entry(*cid).or_insert(0) += votes;
             }
         }
         for b in tail {
@@ -421,11 +436,13 @@ fn bucket_to_metanode(id: u32, bucket: PackageBucket) -> Metanode {
     } else {
         0.0
     };
-    let community_id = bucket
-        .community_votes
-        .into_iter()
-        .max_by_key(|(_, votes)| *votes)
-        .map(|(cid, _)| cid);
+    // Prefer code/doc symbol votes; fall back to File votes for doc-only buckets.
+    let votes = if !bucket.community_votes.is_empty() {
+        bucket.community_votes
+    } else {
+        bucket.file_community_votes
+    };
+    let community_id = pick_plurality_community(votes);
     Metanode {
         id,
         label: bucket.label,
@@ -438,6 +455,17 @@ fn bucket_to_metanode(id: u32, bucket: PackageBucket) -> Metanode {
         member_indices: bucket.member_indices,
         community_id,
     }
+}
+
+/// Plurality vote with deterministic tie-break: highest vote wins; on ties, smallest
+/// community id wins (`votes_a.cmp(votes_b).then(cid_b.cmp(cid_a))` → min id).
+fn pick_plurality_community(votes: HashMap<usize, u32>) -> Option<usize> {
+    votes
+        .into_iter()
+        .max_by(|(cid_a, votes_a), (cid_b, votes_b)| {
+            votes_a.cmp(votes_b).then_with(|| cid_b.cmp(cid_a))
+        })
+        .map(|(cid, _)| cid)
 }
 
 fn layout_circle(nodes: &mut [Metanode]) {
@@ -595,5 +623,13 @@ mod tests {
         );
         assert_eq!(metagraph_edge_kind(EdgeType::Calls), Some("calls"));
         assert_eq!(metagraph_edge_kind(EdgeType::Contains), None);
+    }
+
+    #[test]
+    fn plurality_tie_breaks_to_smallest_community_id() {
+        let mut votes = HashMap::new();
+        votes.insert(7, 5);
+        votes.insert(3, 5);
+        assert_eq!(pick_plurality_community(votes), Some(3));
     }
 }

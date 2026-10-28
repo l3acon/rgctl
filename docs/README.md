@@ -67,7 +67,7 @@ Internals and contribution bars — not the default agent reading path.
 | Tier-1 deep-analysis languages | Custom plugins with `*-ast-coverage.json` + CFG/PDG (single-pass `ScopeStack` + `KindDispatchTable`); distinct from the ~60 language/config plugins in [`languages.toml`](../languages.toml) |
 | Default graph artifact | `.rgctl/graph.snapshot.bin` (`RGCL` v2 columnar mmap); `graph.db` / `graph.json` only with `--write-json-graph` |
 | `--with-cfg` | Whole-repo CFG/PDG archive (needed for `taint --sink`, `cpg mutations`); `slice` / `cpg flows` lazy-build one function without it |
-| Communities | **Fast-Leiden** (local moving + BFS refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy`; JSON field `louvain_community_id` is historical schema name only |
+| Communities | **Fast-Leiden** (local moving + BFS refinement + coarsening) with $\mu+4\sigma$ `HubStripPolicy` |
 | Canonical query / policy CLI | `find` / `callers` / `callees` / `relations` / `inventory`; `review check` (`query` / `pr-check` are compatibility aliases) |
 | Dashboard / migration JSON | Opt-in (`--with-dashboard` / `--export-migration-hints`) |
 | First-hour fixture | In-tree **ecommerce-java** |

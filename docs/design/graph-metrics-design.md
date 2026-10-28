@@ -95,12 +95,10 @@ Discover applies **adaptive centrality gating** and a **columnar write path** so
 2. **BFS connected-subgraph refinement** (`refine_partition`) — guarantees 0 disconnected communities
 3. **Super-node coarsening** — aggregate and repeat until modularity converges
 
-JSON / dashboard field names like `louvain_community_id` are **historical schema labels only**; they store Fast-Leiden community ids for backward compatibility.
-
 | Name in repo | What it actually is |
 |--------------|---------------------|
 | `CommunityDetector` | Fast-Leiden on `Calls` + `Uses` (+ `References` when present) |
-| “Louvain” / `louvain_community_id` | Historical field / layout color — majority vote of Fast-Leiden ids |
+| `community_id` | Majority vote of Fast-Leiden ids on package macro / metagraph nodes (migration_graph schema v3; older sidecars may still use `louvain_community_id`) |
 | Label propagation (Raghavan) | **Not** what ships (superseded by Fast-Leiden) |
 
 Implementation: [`crates/rgctl-analysis/src/community.rs`](../../crates/rgctl-analysis/src/community.rs). For migration batching, the dashboard uses **package/module macro nodes**; community ids mainly drive graph coloring and cluster-aware layout, not the primary schedule order.

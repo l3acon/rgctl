@@ -167,6 +167,7 @@ pub use dominance::{DominatorTree, verify_idom_acyclic};
 pub use field_write::{
     FIELD_WRITE_INDEX_FILE, FIELD_WRITE_INDEX_VERSION, FieldWrite, FieldWriteIndex, FieldWriteKind,
     MutationQuery, build_and_save_field_write_index, extract_writes_from_cfg,
+    type_env_for_field_writes,
 };
 pub use field_write_locals::{
     LocalsParseContext, build_file_local_types_from_tree, build_file_local_types_index,

@@ -412,7 +412,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_node_ids() {
+    fn write_columnar_dedupes_duplicate_node_ids() {
+        // Writer collapses duplicate ids before assemble (INV-1 is enforced on the
+        // on-disk rows). A hand-fed corrupt mmap would still fail INV-1.
         let tmp = NamedTempFile::new().unwrap();
         let mut a = Node::new(NodeType::Function, "a").with_file_path("a.rs");
         let mut b = Node::new(NodeType::Function, "b").with_file_path("b.rs");
@@ -421,8 +423,12 @@ mod tests {
         b.id = shared;
         write_columnar_from_nodes_edges(vec![a, b], vec![], tmp.path()).unwrap();
         let col = open_col(tmp.path());
-        let err = assert_graph_invariants(&col).unwrap_err().to_string();
-        assert!(err.contains("INV-1"), "{err}");
+        assert_eq!(
+            col.node_count(),
+            1,
+            "writer must collapse duplicate node ids"
+        );
+        assert_graph_invariants(&col).expect("deduped snapshot must pass INV-1");
     }
 
     #[test]

@@ -96,10 +96,14 @@ fn approx_centrality_10k_mock_under_30s() {
         report.scores.values().any(|s| s.harmonic > 0.0),
         "expected non-zero hyperball harmonic"
     );
-    assert!(
-        elapsed < Duration::from_secs(30),
-        "10k approx centrality regression: {elapsed:?} >= 30s"
-    );
+    // Wall budgets are for `--release` (CI gate). Debug workspace runs still
+    // exercise correctness above without failing on GH debug runners.
+    if !cfg!(debug_assertions) {
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "10k approx centrality regression: {elapsed:?} >= 30s"
+        );
+    }
     eprintln!(
         "10k mock: total={elapsed:?} bt={}ms harm={}ms",
         report.approx_stats.betweenness_ms, report.approx_stats.harmonic_ms
@@ -117,10 +121,12 @@ fn sampled_betweenness_50k_flat_under_60s() {
     let elapsed = start.elapsed();
     assert_eq!(scores.len(), 50_000);
     assert!(scores.iter().any(|&s| s > 0.0));
-    assert!(
-        elapsed < Duration::from_secs(60),
-        "50k sampled betweenness regression: {elapsed:?} >= 60s"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            elapsed < Duration::from_secs(60),
+            "50k sampled betweenness regression: {elapsed:?} >= 60s"
+        );
+    }
     eprintln!("50k sampled BC (k={DEFAULT_SAMPLE_PIVOTS}): {elapsed:?}");
 }
 
@@ -135,10 +141,12 @@ fn hyperball_harmonic_50k_flat_under_60s() {
     let elapsed = start.elapsed();
     assert_eq!(scores.len(), 50_000);
     assert!(scores.iter().any(|&s| s > 0.0));
-    assert!(
-        elapsed < Duration::from_secs(60),
-        "50k hyperball harmonic regression: {elapsed:?} >= 60s"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            elapsed < Duration::from_secs(60),
+            "50k hyperball harmonic regression: {elapsed:?} >= 60s"
+        );
+    }
     eprintln!("50k HyperBall harmonic: {elapsed:?}");
 }
 

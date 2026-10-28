@@ -26,6 +26,8 @@ pub struct UserGuideProject {
     pub blast_coolstore: &'static str,
     /// `inspect <fn> cfg`
     pub inspect_function: &'static str,
+    /// Optional `--file` to disambiguate when several symbols share `inspect_function`.
+    pub inspect_file: Option<&'static str>,
     /// `cpg mutations --type …`
     pub cpg_mutation_type: &'static str,
     /// `export --query …`
@@ -45,6 +47,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "clearCart",
         blast_coolstore: "ShoppingCartService::priceShoppingCart",
         inspect_function: "checkout",
+        inspect_file: Some("src/main/java/com/example/ecommerce/service/OrderService.java"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:clearCart",
         slice: Some(SliceSpec {
@@ -64,6 +67,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "checkout",
         blast_coolstore: "price_shopping_cart",
         inspect_function: "checkout",
+        inspect_file: Some("src/services/order.rs"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:checkout",
         slice: Some(SliceSpec {
@@ -83,6 +87,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "checkout",
         blast_coolstore: "price_shopping_cart",
         inspect_function: "checkout",
+        inspect_file: Some("app/services/order.py"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:checkout",
         slice: None,
@@ -97,6 +102,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "Checkout",
         blast_coolstore: "PriceShoppingCart",
         inspect_function: "Checkout",
+        inspect_file: Some("internal/service/order.go"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:Checkout",
         slice: None,
@@ -111,6 +117,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "GetUserCartAsync",
         blast_coolstore: "PriceShoppingCart",
         inspect_function: "CheckoutAsync",
+        inspect_file: None,
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:ClearCartAsync",
         slice: None,
@@ -125,6 +132,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "clearCart",
         blast_coolstore: "priceShoppingCart",
         inspect_function: "checkout",
+        inspect_file: Some("src/services/orderService.ts"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:clearCart",
         slice: None,
@@ -139,6 +147,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "clearCart",
         blast_coolstore: "priceShoppingCart",
         inspect_function: "checkout",
+        inspect_file: Some("src/services/orderService.js"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:clearCart",
         slice: None,
@@ -153,6 +162,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "price_shopping_cart",
         blast_coolstore: "src/coolstore/services/shopping_cart_service.c::price_shopping_cart",
         inspect_function: "price_shopping_cart",
+        inspect_file: Some("src/coolstore/services/shopping_cart_service.c"),
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:price_shopping_cart",
         slice: None,
@@ -167,6 +177,7 @@ pub const PROJECTS: &[UserGuideProject] = &[
         calls_callee: "priceShoppingCart",
         blast_coolstore: "src/coolstore/services/shopping_cart_service.cpp::priceShoppingCart",
         inspect_function: "priceShoppingCart",
+        inspect_file: None,
         cpg_mutation_type: "ShoppingCart",
         export_query: "name:priceShoppingCart",
         slice: None,
@@ -469,10 +480,16 @@ pub fn run_full_workflow(project: &UserGuideProject) {
     assert_eq!(top.len(), 3, "[{}] pagerank.top[:3] length", project.id);
 
     // 9. inspect cfg | jq
+    // `--file` must precede the `cfg` subcommand (clap options on `inspect`).
+    let mut inspect_args: Vec<&str> = vec!["inspect"];
+    if let Some(file) = project.inspect_file {
+        inspect_args.extend_from_slice(&["--file", file]);
+    }
+    inspect_args.extend_from_slice(&[project.inspect_function, "cfg"]);
     let inspect_jq = session.run_json_jq(
         project,
         "inspect cfg jq",
-        &["inspect", project.inspect_function, "cfg"],
+        &inspect_args,
         "{layer, blocks: (.nodes|length), edges: (.edges|length)}",
     );
     let inspect_obj = inspect_jq.as_object().expect("inspect jq");

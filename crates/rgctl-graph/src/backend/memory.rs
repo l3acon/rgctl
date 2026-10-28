@@ -81,31 +81,93 @@ impl MemoryBackend {
             return Ok(backend);
         }
 
-        let mut nodes = Vec::with_capacity(prepared.nodes.len());
-        for mut node in prepared.nodes.clone() {
-            backend.intern_node(&mut node);
-            nodes.push(node);
+        let mut store = write_lock(&backend.nodes)?;
+        let mut name_index = write_lock(&backend.node_name_index)?;
+        let mut type_index = write_lock(&backend.node_type_index)?;
+        let mut label_index = write_lock(&backend.node_label_index)?;
+        let mut property_index = write_lock(&backend.node_property_index)?;
+
+        store.reserve(prepared.nodes.len());
+        name_index.reserve(prepared.indexes.name_index.len());
+        type_index.reserve(prepared.indexes.type_index.len());
+
+        backend
+            .string_interner
+            .with_write_pool(prepared.indexes.name_index.len(), |pool| {
+                let intern_shared_in_pool =
+                    |pool: &mut HashSet<Arc<str>>, value: &mut crate::schema::SharedStr| {
+                        if let Some(existing) = pool.get(value.as_str()) {
+                            *value = crate::schema::SharedStr::from(Arc::clone(existing));
+                        } else {
+                            pool.insert(Arc::clone(value.as_arc()));
+                        }
+                    };
+                let intern_str_in_pool = |pool: &mut HashSet<Arc<str>>, value: &str| -> Arc<str> {
+                    if let Some(existing) = pool.get(value) {
+                        Arc::clone(existing)
+                    } else {
+                        let arc: Arc<str> = Arc::from(value);
+                        pool.insert(Arc::clone(&arc));
+                        arc
+                    }
+                };
+
+                for mut node in prepared.nodes.iter().cloned() {
+                    intern_shared_in_pool(pool, &mut node.name);
+                    if let Some(qn) = &mut node.qualified_name {
+                        intern_shared_in_pool(pool, qn);
+                    }
+                    if let Some(sig) = &mut node.signature {
+                        intern_shared_in_pool(pool, sig);
+                    }
+                    if let Some(rt) = &mut node.return_type {
+                        intern_shared_in_pool(pool, rt);
+                    }
+                    if let Some(hash) = &mut node.code_hash {
+                        intern_shared_in_pool(pool, hash);
+                    }
+                    if let Some(fp) = &mut node.file_path {
+                        intern_shared_in_pool(pool, fp);
+                    }
+                    if !node.labels.is_empty() {
+                        for label in &mut node.labels {
+                            let arc = intern_str_in_pool(pool, label);
+                            *label = arc.to_string();
+                            label_index.entry(arc).or_default().push(node.id);
+                        }
+                    }
+                    if !node.properties.is_empty() {
+                        let props: Vec<(String, String)> = node.properties.drain().collect();
+                        for (k, v) in props {
+                            let k_arc = intern_str_in_pool(pool, &k);
+                            let v_arc = intern_str_in_pool(pool, &v);
+                            node.properties.insert(k_arc.to_string(), v_arc.to_string());
+                            property_index
+                                .entry(k_arc)
+                                .or_default()
+                                .entry(v_arc)
+                                .or_default()
+                                .push(node.id);
+                        }
+                    }
+                    store.insert(node.id, node);
+                }
+
+                for (name, ids) in &prepared.indexes.name_index {
+                    let name_arc = intern_str_in_pool(pool, name);
+                    name_index.insert(name_arc, ids.clone());
+                }
+            })?;
+
+        for (node_type, ids) in &prepared.indexes.type_index {
+            type_index.insert(*node_type, ids.clone());
         }
 
-        {
-            let mut name_index = write_lock(&backend.node_name_index)?;
-            for (name, ids) in &prepared.indexes.name_index {
-                let name_arc = backend.string_interner.intern(name)?;
-                name_index.insert(name_arc, ids.clone());
-            }
-            let mut type_index = write_lock(&backend.node_type_index)?;
-            for (node_type, ids) in &prepared.indexes.type_index {
-                type_index.insert(*node_type, ids.clone());
-            }
-        }
-        backend.index_node_metadata(&nodes)?;
-
-        {
-            let mut store = write_lock(&backend.nodes)?;
-            for node in nodes {
-                store.insert(node.id, node);
-            }
-        }
+        drop(property_index);
+        drop(label_index);
+        drop(type_index);
+        drop(name_index);
+        drop(store);
 
         backend.insert_edges_batch(prepared.edges.clone())?;
         Ok(backend)
@@ -762,11 +824,13 @@ impl MemoryBackend {
         for label in &mut node.labels {
             let _ = self.string_interner.intern_string(label);
         }
-        let props: Vec<(String, String)> = node.properties.drain().collect();
-        for (mut k, mut v) in props {
-            let _ = self.string_interner.intern_string(&mut k);
-            let _ = self.string_interner.intern_string(&mut v);
-            node.properties.insert(k, v);
+        if !node.properties.is_empty() {
+            let props: Vec<(String, String)> = node.properties.drain().collect();
+            for (mut k, mut v) in props {
+                let _ = self.string_interner.intern_string(&mut k);
+                let _ = self.string_interner.intern_string(&mut v);
+                node.properties.insert(k, v);
+            }
         }
     }
 
@@ -813,29 +877,6 @@ impl MemoryBackend {
         }
         trace!(elapsed = ?index_start.elapsed(), "index_nodes: index population complete");
         trace!(elapsed = ?start.elapsed(), "index_nodes complete");
-        Ok(())
-    }
-
-    /// Index labels and properties only (name/type indexes supplied externally).
-    fn index_node_metadata(&self, nodes: &[Node]) -> Result<()> {
-        let mut label_index = write_lock(&self.node_label_index)?;
-        let mut property_index = write_lock(&self.node_property_index)?;
-        for node in nodes {
-            for label in &node.labels {
-                let label_arc = self.string_interner.intern(label)?;
-                label_index.entry(label_arc).or_default().push(node.id);
-            }
-            for (key, value) in &node.properties {
-                let key_arc = self.string_interner.intern(key)?;
-                let value_arc = self.string_interner.intern(value)?;
-                property_index
-                    .entry(key_arc)
-                    .or_default()
-                    .entry(value_arc)
-                    .or_default()
-                    .push(node.id);
-            }
-        }
         Ok(())
     }
 

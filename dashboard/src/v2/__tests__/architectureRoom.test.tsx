@@ -5,7 +5,7 @@
  * state a user on a machine without WebGL would see, while the coverage line, the three object names and the
  * lists all still render. A canvas that fails must not take the room with it.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArchitectureRoom } from "../rooms/Architecture";
 import metagraphJson from "./fixtures/architecture/metagraph.json";
@@ -84,11 +84,27 @@ describe("the Architecture room", () => {
     expect(screen.getAllByText(/could not be established/i).length).toBeGreaterThan(0);
   });
 
-  it("attributes the modularity to Louvain and keeps the producer's labels verbatim", async () => {
+  it("attributes the modularity to Fast-Leiden and keeps the producer's labels verbatim", async () => {
     stubBundle({ "metagraph.json": metagraphJson, "communities.json": summaryJson });
     render(<ArchitectureRoom />);
-    await waitFor(() => expect(screen.getByText(/Louvain/)).toBeTruthy());
-    // "Mutable" is a Java modifier used as a community label — shown as-is, never cleaned up
-    expect(screen.getByText("Mutable")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/Fast-Leiden/)).toBeTruthy());
+    // Room shows producer strings as-is. Stopword filtering (e.g. "Mutable") happens at
+    // discover/label time in rgctl-analysis — not in the Architecture room.
+    expect(screen.getByText("I_C_InvoiceLine")).toBeTruthy();
+  });
+
+  it("filters communities to shared-only and reports overflow with 'and N more'", async () => {
+    stubBundle({ "metagraph.json": metagraphJson, "communities.json": summaryJson });
+    render(<ArchitectureRoom />);
+    await waitFor(() => expect(screen.getByText(/Fast-Leiden/)).toBeTruthy());
+
+    // Overflow line ("and N more") renders when communities exceed the top-8 slice
+    expect(screen.getAllByText(/^and \d+ more$/).length).toBeGreaterThan(0);
+
+    // Toggle from "all (...)" to "shared only (...)"
+    const toggleBtn = screen.getByRole("button", { name: /^all \(\d+\)$/ });
+    expect(toggleBtn.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(toggleBtn);
+    expect(screen.getByRole("button", { name: /^shared only \(\d+\)$/ }).getAttribute("aria-pressed")).toBe("true");
   });
 });

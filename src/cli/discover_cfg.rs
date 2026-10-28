@@ -7,7 +7,7 @@ use crate::analysis::{
     DominatorTree, FieldWrite, FunctionAnalysis, FunctionIdSyncEntry, ParsedSourceFile,
     PdgBuildOptions, ProgramDependenceGraph, TaintAnalyzer, TaintRuleSet, build_cfg_for_function,
     build_file_local_types_from_tree, build_function_skeleton_from_tree, cfg_language_id_from_path,
-    extract_writes_from_cfg,
+    extract_writes_from_cfg, type_env_for_field_writes,
 };
 use rayon::prelude::*;
 use rgctl_graph::code_index::hash_code;
@@ -727,6 +727,7 @@ fn compute_function_cfg(
 
     let is_constructor =
         is_constructor_node(func_node) || function_name_looks_like_ctor(&func_node.name, func_node);
+    let type_env = type_env_for_field_writes(Some(func_node), &cfg_data);
     let mut field_writes = Vec::new();
     extract_writes_from_cfg(
         &cfg_data,
@@ -734,7 +735,7 @@ fn compute_function_cfg(
         &func_node.name,
         is_constructor,
         file_path,
-        &cfg_data.local_types,
+        &type_env,
         &mut field_writes,
     );
 

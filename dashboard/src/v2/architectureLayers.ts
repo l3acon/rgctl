@@ -64,6 +64,11 @@ export function toPackages(metagraph: Metagraph, summary: CommunitySummary): Pac
   for (const node of metagraph.nodes) {
     perCommunity.set(node.community_id, (perCommunity.get(node.community_id) ?? 0) + 1);
   }
+  // One Map lookup per package — avoid O(packages × communities) from communityLabel().
+  const labelsById = new Map<number, string>();
+  for (const entry of summary.communities) {
+    labelsById.set(entry.id, entry.label || String(entry.id));
+  }
   return metagraph.nodes.map((node) => {
     const { key, kind } = namespaceOf(node.label);
     return {
@@ -73,13 +78,12 @@ export function toPackages(metagraph: Metagraph, summary: CommunitySummary): Pac
       functions: node.functions,
       classes: node.classes,
       communityId: node.community_id,
+      communityLabel: labelsById.get(node.community_id) ?? String(node.community_id),
       namespace: kind === "package" ? key : kind === "remainder" ? REMAINDER_LABEL : key,
       kind,
       sharesCommunity: (perCommunity.get(node.community_id) ?? 0) > 1,
     };
   });
-  // `summary` is accepted so callers cannot forget the join; the count above is the bundle's own node data.
-  void summary;
 }
 
 /** Namespace volumes — only where a rule-consistent group actually holds ≥2 packages. */
@@ -236,9 +240,19 @@ export function clampFootprints<T extends { side: number; pos: [number, number, 
   return { bound, tightest };
 }
 
-/** Golden-angle hue: distinct by construction, and rank order separates the biggest structures most. */
+/**
+ * Golden-angle hue: distinct by construction, and rank order separates the biggest structures most.
+ *
+ * Community / package colouring also folds ids through {@link communityHueIndex} so the two
+ * Universe layers stay in lockstep (`id % 97` spreads sparse Fast-Leiden ids).
+ */
 export function hueFor(index: number): number {
   return (index * 137.508) % 360;
+}
+
+/** Stable index into {@link hueFor} for a Fast-Leiden / package community id. */
+export function communityHueIndex(communityId: number): number {
+  return communityId % 97;
 }
 
 export interface LayoutResult {

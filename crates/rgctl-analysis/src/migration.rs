@@ -13,7 +13,11 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use uuid::Uuid;
 
 /// JSON schema version for [`MigrationGraphPayload`].
-pub const MIGRATION_GRAPH_SCHEMA_VERSION: u32 = 2;
+///
+/// v3: package macro nodes serialize Fast-Leiden majority vote as `community_id`
+/// (was `louvain_community_id` in v2). Deserialization still accepts the old key via
+/// [`serde`] alias so existing `migration_graph.json` sidecars keep cluster colors.
+pub const MIGRATION_GRAPH_SCHEMA_VERSION: u32 = 3;
 /// JSON schema version for [`MigrationPlanPayload`].
 pub const MIGRATION_PLAN_SCHEMA_VERSION: u32 = 2;
 
@@ -125,9 +129,16 @@ pub struct MigrationCommunityNode {
     pub avg_betweenness: f64,
     /// Maximum blast radius among member functions.
     pub max_blast: f64,
-    /// Majority Louvain / label-propagation community of member functions (for layout clustering).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub louvain_community_id: Option<usize>,
+    /// Majority Fast-Leiden community of member functions (for layout clustering).
+    ///
+    /// Serialized as `community_id` (schema v3+). Older sidecars used
+    /// `louvain_community_id`; that key is still accepted on read.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "louvain_community_id"
+    )]
+    pub community_id: Option<usize>,
 }
 
 /// Directed inter-package call edge (caller macro node → callee macro node).
@@ -148,9 +159,9 @@ pub struct MigrationCommunityEdge {
 pub struct MigrationGraphPayload {
     /// Payload schema version.
     pub schema_version: u32,
-    /// `package_macro` — one node per package/module (not raw Louvain community).
+    /// `package_macro` — one node per package/module (not raw Fast-Leiden community).
     pub mode: String,
-    /// Modularity of the underlying label-propagation partition.
+    /// Modularity of the underlying Fast-Leiden partition.
     pub modularity: f64,
     /// Macro nodes (packages/modules).
     pub communities: Vec<MigrationCommunityNode>,
@@ -206,7 +217,7 @@ struct MacroAgg {
     harmonic_sum: f64,
     betweenness_sum: f64,
     max_blast: f64,
-    louvain_votes: HashMap<usize, u32>,
+    community_votes: HashMap<usize, u32>,
 }
 
 /// Derive a stable, host-independent package / module label from a source file path.
@@ -437,10 +448,10 @@ pub fn build_migration_graph(
                 entry.max_blast = entry.max_blast.max(b.scores[idx] as f64);
             }
         }
-        if let Some(table) = community_table
-            && let Some(cid) = table.get(compact_id)
-        {
-            *entry.louvain_votes.entry(cid).or_insert(0) += 1;
+        if let Some(table) = community_table {
+            if let Some(cid) = table.get(compact_id) {
+                *entry.community_votes.entry(cid).or_insert(0) += 1;
+            }
         }
     });
 
@@ -478,8 +489,8 @@ pub fn build_migration_graph(
             merged.harmonic_sum += b.harmonic_sum;
             merged.betweenness_sum += b.betweenness_sum;
             merged.max_blast = merged.max_blast.max(b.max_blast);
-            for (cid, votes) in b.louvain_votes {
-                *merged.louvain_votes.entry(cid).or_insert(0) += votes;
+            for (cid, votes) in b.community_votes {
+                *merged.community_votes.entry(cid).or_insert(0) += votes;
             }
         }
         label_to_id.insert(merged.label.clone(), id);
@@ -536,8 +547,8 @@ pub fn build_migration_graph(
 
 fn macro_to_node(id: usize, bucket: MacroAgg) -> MigrationCommunityNode {
     let count = bucket.member_count.max(1) as f64;
-    let louvain_community_id = bucket
-        .louvain_votes
+    let community_id = bucket
+        .community_votes
         .into_iter()
         .max_by_key(|(_, votes)| *votes)
         .map(|(cid, _)| cid);
@@ -549,7 +560,7 @@ fn macro_to_node(id: usize, bucket: MacroAgg) -> MigrationCommunityNode {
         avg_harmonic: bucket.harmonic_sum / count,
         avg_betweenness: bucket.betweenness_sum / count,
         max_blast: bucket.max_blast,
-        louvain_community_id,
+        community_id,
     }
 }
 
@@ -999,7 +1010,7 @@ mod tests {
                     avg_harmonic: 0.1,
                     avg_betweenness: 0.0,
                     max_blast: 10.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
                 MigrationCommunityNode {
                     id: 1,
@@ -1009,7 +1020,7 @@ mod tests {
                     avg_harmonic: 0.1,
                     avg_betweenness: 0.0,
                     max_blast: 10.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
             ],
             edges: vec![],
@@ -1039,7 +1050,7 @@ mod tests {
                     avg_harmonic: 0.5,
                     avg_betweenness: 0.0,
                     max_blast: 0.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
                 MigrationCommunityNode {
                     id: 2,
@@ -1049,7 +1060,7 @@ mod tests {
                     avg_harmonic: 0.5,
                     avg_betweenness: 0.0,
                     max_blast: 0.0,
-                    louvain_community_id: None,
+                    community_id: None,
                 },
             ],
             edges: vec![],
@@ -1062,5 +1073,25 @@ mod tests {
         );
         assert_eq!(plan.steps[0].community_id, 2);
         assert_eq!(plan.steps[1].community_id, 5);
+    }
+
+    #[test]
+    fn community_id_deserializes_louvain_alias() {
+        let json = r#"{
+            "id": 1,
+            "label": "com.example",
+            "member_count": 3,
+            "avg_pagerank": 0.1,
+            "avg_harmonic": 0.2,
+            "avg_betweenness": 0.0,
+            "max_blast": 1.0,
+            "louvain_community_id": 42
+        }"#;
+        let node: MigrationCommunityNode = serde_json::from_str(json).expect("alias");
+        assert_eq!(node.community_id, Some(42));
+        let out = serde_json::to_value(&node).expect("ser");
+        assert!(out.get("community_id").is_some());
+        assert!(out.get("louvain_community_id").is_none());
+        assert_eq!(MIGRATION_GRAPH_SCHEMA_VERSION, 3);
     }
 }

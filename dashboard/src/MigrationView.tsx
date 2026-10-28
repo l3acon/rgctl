@@ -9,7 +9,7 @@ import { GraphZoomControls } from "./GraphZoomControls";
 import { mountSigmaWhenReady } from "./sigmaMount";
 import { SIGMA_NODE_PROGRAM_CLASSES } from "./sigmaPrograms";
 import { computeMigrationPlan } from "./migration/engine";
-import { addLouvainLayoutEdges, migrationEdgeLayoutWeight } from "./migration/layoutWeights";
+import { addCommunityLayoutEdges, migrationEdgeLayoutWeight } from "./migration/layoutWeights";
 import { MIGRATION_PRESETS, matchPreset, presetById } from "./migration/presets";
 import type {
   MigrationGraphPayload,
@@ -19,6 +19,7 @@ import type {
   MigrationPresetId,
   MigrationWeights,
 } from "./migration/types";
+import { migrationCommunityClusterId } from "./migration/types";
 
 const MIN_NODE_SIZE = 4;
 const MAX_NODE_SIZE = 28;
@@ -472,7 +473,7 @@ function MigrationGraphPanel({
           x: Math.random(),
           y: Math.random(),
           size: scoreSize(score, scoreRange.min, scoreRange.max),
-          color: communityColorHex(node.louvain_community_id ?? node.id),
+          color: communityColorHex(migrationCommunityClusterId(node)),
         });
       }
 
@@ -490,7 +491,7 @@ function MigrationGraphPanel({
         }
       }
 
-      addLouvainLayoutEdges(g, graph.communities);
+      addCommunityLayoutEdges(g, graph.communities);
 
       await layoutForceAtlas2Async(
         g,
@@ -547,7 +548,7 @@ function MigrationGraphPanel({
     <section class="migration-section migration-graph-section mb-4">
       <h2 class="h6 fw-semibold mb-2">Package graph</h2>
       <p class="small text-muted mb-2">
-        Node color = community (label propagation) · size = priority score · strong layout pull within
+        Node color = community (Fast-Leiden) · size = priority score · strong layout pull within
         clusters, weak pull across clusters · sizes update live when weights change.
       </p>
       <div class="migration-graph-panel analysis-graph-canvas-wrap border rounded">
