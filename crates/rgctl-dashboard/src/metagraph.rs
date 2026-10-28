@@ -442,13 +442,7 @@ fn bucket_to_metanode(id: u32, bucket: PackageBucket) -> Metanode {
     } else {
         bucket.file_community_votes
     };
-    // Plurality with deterministic tie-break: smallest community_id wins.
-    let community_id = votes
-        .into_iter()
-        .max_by(|(cid_a, votes_a), (cid_b, votes_b)| {
-            votes_a.cmp(votes_b).then_with(|| cid_b.cmp(cid_a))
-        })
-        .map(|(cid, _)| cid);
+    let community_id = pick_plurality_community(votes);
     Metanode {
         id,
         label: bucket.label,
@@ -463,7 +457,8 @@ fn bucket_to_metanode(id: u32, bucket: PackageBucket) -> Metanode {
     }
 }
 
-#[cfg(test)]
+/// Plurality vote with deterministic tie-break: highest vote wins; on ties, smallest
+/// community id wins (`votes_a.cmp(votes_b).then(cid_b.cmp(cid_a))` → min id).
 fn pick_plurality_community(votes: HashMap<usize, u32>) -> Option<usize> {
     votes
         .into_iter()

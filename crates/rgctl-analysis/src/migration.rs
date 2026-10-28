@@ -13,7 +13,11 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use uuid::Uuid;
 
 /// JSON schema version for [`MigrationGraphPayload`].
-pub const MIGRATION_GRAPH_SCHEMA_VERSION: u32 = 2;
+///
+/// v3: package macro nodes serialize Fast-Leiden majority vote as `community_id`
+/// (was `louvain_community_id` in v2). Deserialization still accepts the old key via
+/// [`serde`] alias so existing `migration_graph.json` sidecars keep cluster colors.
+pub const MIGRATION_GRAPH_SCHEMA_VERSION: u32 = 3;
 /// JSON schema version for [`MigrationPlanPayload`].
 pub const MIGRATION_PLAN_SCHEMA_VERSION: u32 = 2;
 
@@ -126,7 +130,14 @@ pub struct MigrationCommunityNode {
     /// Maximum blast radius among member functions.
     pub max_blast: f64,
     /// Majority Fast-Leiden community of member functions (for layout clustering).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// Serialized as `community_id` (schema v3+). Older sidecars used
+    /// `louvain_community_id`; that key is still accepted on read.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "louvain_community_id"
+    )]
     pub community_id: Option<usize>,
 }
 
@@ -368,10 +379,9 @@ pub fn package_label(file_path: &str) -> String {
     if let Some(c_idx) = parent_segs
         .iter()
         .rposition(|s| WORKSPACE_CONTAINERS.contains(s))
+        && c_idx + 1 < parent_segs.len()
     {
-        if c_idx + 1 < parent_segs.len() {
-            return parent_segs[c_idx + 1..].join(".");
-        }
+        return parent_segs[c_idx + 1..].join(".");
     }
 
     if let Some(a_idx) = parent_segs.iter().rposition(|s| REPO_ANCHORS.contains(s)) {
@@ -1063,5 +1073,25 @@ mod tests {
         );
         assert_eq!(plan.steps[0].community_id, 2);
         assert_eq!(plan.steps[1].community_id, 5);
+    }
+
+    #[test]
+    fn community_id_deserializes_louvain_alias() {
+        let json = r#"{
+            "id": 1,
+            "label": "com.example",
+            "member_count": 3,
+            "avg_pagerank": 0.1,
+            "avg_harmonic": 0.2,
+            "avg_betweenness": 0.0,
+            "max_blast": 1.0,
+            "louvain_community_id": 42
+        }"#;
+        let node: MigrationCommunityNode = serde_json::from_str(json).expect("alias");
+        assert_eq!(node.community_id, Some(42));
+        let out = serde_json::to_value(&node).expect("ser");
+        assert!(out.get("community_id").is_some());
+        assert!(out.get("louvain_community_id").is_none());
+        assert_eq!(MIGRATION_GRAPH_SCHEMA_VERSION, 3);
     }
 }

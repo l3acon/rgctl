@@ -16,8 +16,6 @@ pub struct CommunityLabelHints<'a> {
     pub id: usize,
     /// Member symbol names.
     pub names: &'a [String],
-    /// Member file paths.
-    pub file_paths: &'a [String],
     /// Package / module labels (majority vote preferred).
     pub package_labels: &'a [String],
     /// Highest-PageRank member name within the community, if known.
@@ -167,7 +165,6 @@ where
     let mut labeled: Vec<(usize, String)> = Vec::with_capacity(members.len());
     for (cid, entries) in &members {
         let mut names = Vec::new();
-        let mut paths = Vec::new();
         let mut packages = Vec::new();
         let mut top_pr_name: Option<String> = None;
         let mut top_pr = f32::MIN;
@@ -185,7 +182,6 @@ where
             }
             if let Some(p) = &path {
                 packages.push(package_label_from_path(p));
-                paths.push(p.clone());
             }
             names.push(name);
         }
@@ -193,7 +189,6 @@ where
         let hints = CommunityLabelHints {
             id: *cid,
             names: &names,
-            file_paths: &paths,
             package_labels: &packages,
             top_pagerank_name: top_pr_name.as_deref(),
             is_infrastructure: infrastructure_id == Some(*cid),
@@ -307,54 +302,87 @@ fn find_common_package_prefix(packages: &[String]) -> Option<String> {
 }
 
 /// Split on `_` / `-` / `.` / `:` and camelCase / PascalCase boundaries.
-fn split_identifier_tokens(name: &str) -> Vec<String> {
+///
+/// Returns borrowed `&str` slices directly into `name` (zero per-token `String` or
+/// `Vec<char>` allocations).
+fn split_identifier_tokens(name: &str) -> Vec<&str> {
     let mut out = Vec::new();
     for part in name.split(['_', '-', '.', '/', ':']) {
         if part.is_empty() {
             continue;
         }
-        let mut current = String::new();
-        let chars: Vec<char> = part.chars().collect();
-        for (i, &ch) in chars.iter().enumerate() {
-            let boundary = if ch.is_uppercase() && !current.is_empty() {
-                let prev_lower = chars
-                    .get(i.wrapping_sub(1))
-                    .is_some_and(|c| c.is_lowercase());
-                let next_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
-                prev_lower || next_lower
-            } else {
-                false
-            };
-            if boundary {
-                out.push(std::mem::take(&mut current));
+        let mut iter = part.char_indices().peekable();
+        let mut token_start = 0usize;
+        let mut prev_lower = false;
+
+        while let Some((byte_idx, ch)) = iter.next() {
+            if byte_idx > token_start && ch.is_uppercase() {
+                let next_lower = iter
+                    .peek()
+                    .is_some_and(|&(_, next_ch)| next_ch.is_lowercase());
+                if prev_lower || next_lower {
+                    out.push(&part[token_start..byte_idx]);
+                    token_start = byte_idx;
+                }
             }
-            current.push(ch);
+            prev_lower = ch.is_lowercase();
         }
-        if !current.is_empty() {
-            out.push(current);
+        if token_start < part.len() {
+            out.push(&part[token_start..]);
         }
     }
     out
 }
 
-/// Last path segment of a symbol name that survives stopword filtering.
+fn token_is_meaningful(token: &str) -> bool {
+    let len = token.chars().count();
+    // Keep short domain tokens (db, ui, ip, id); drop empty / stopwords.
+    len >= 2 && !is_stopword(token)
+}
+
+/// Prefer the trailing meaningful camelCase run (e.g. `HttpRequestProcessorFactory`
+/// → `ProcessorFactory`), not a join of every token.
 fn meaningful_symbol_token(name: &str) -> Option<String> {
     let short = name.split(['/', '.', ':']).next_back().unwrap_or(name);
     let tokens = split_identifier_tokens(short);
     let meaningful: Vec<&str> = tokens
-        .iter()
-        .map(|t| t.as_str())
-        .filter(|t| t.len() > 2 && !is_stopword(t))
+        .into_iter()
+        .filter(|t| token_is_meaningful(t))
         .collect();
     if meaningful.is_empty() {
         return None;
     }
-    // Prefer the last meaningful token (e.g. MutableOrderLine → OrderLine's "Line"
-    // is weak; join trailing meaningful run when short).
     if meaningful.len() == 1 {
         return Some(meaningful[0].to_string());
     }
-    Some(meaningful.join(""))
+    let last = meaningful[meaningful.len() - 1];
+    let prev = meaningful[meaningful.len() - 2];
+    // Join trailing run when the last token is short (Factory/Impl) *or* the
+    // previous token is a short domain prefix (Db/Ui/Ip).
+    if last.chars().count() <= 4 || prev.chars().count() <= 2 {
+        return Some(format!("{prev}{last}"));
+    }
+    Some(last.to_string())
+}
+
+#[derive(Clone, Copy)]
+struct AsciiCaseInsensitive<'a>(&'a str);
+
+impl PartialEq for AsciiCaseInsensitive<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq_ignore_ascii_case(other.0)
+    }
+}
+
+impl Eq for AsciiCaseInsensitive<'_> {}
+
+impl std::hash::Hash for AsciiCaseInsensitive<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for b in self.0.bytes() {
+            state.write_u8(b.to_ascii_lowercase());
+        }
+        state.write_u8(0xff);
+    }
 }
 
 fn infer_label_from_names(names: &[String], idx: usize) -> String {
@@ -362,32 +390,21 @@ fn infer_label_from_names(names: &[String], idx: usize) -> String {
         return format!("Community {idx}");
     }
 
-    let mut owned_tokens: Vec<String> = Vec::new();
+    // Borrowed case-insensitive counting: first-seen slice in `AsciiCaseInsensitive`
+    // preserves original casing with zero per-token String allocations.
+    let mut counts: HashMap<AsciiCaseInsensitive<'_>, usize> = HashMap::new();
     for name in names {
         for token in split_identifier_tokens(name) {
-            if token.len() > 2 && !is_stopword(&token) {
-                owned_tokens.push(token.to_ascii_lowercase());
+            if token_is_meaningful(token) {
+                *counts.entry(AsciiCaseInsensitive(token)).or_insert(0) += 1;
             }
         }
     }
 
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for token in &owned_tokens {
-        *counts.entry(token.as_str()).or_insert(0) += 1;
-    }
-
-    if let Some((token, _)) = counts.iter().max_by_key(|(_, count)| *count) {
-        if counts[token] * 3 >= names.len() {
-            // Preserve a readable casing from the first original match.
-            for name in names {
-                for orig in split_identifier_tokens(name) {
-                    if orig.eq_ignore_ascii_case(token) {
-                        return orig;
-                    }
-                }
-            }
-            return (*token).to_string();
-        }
+    if let Some((AsciiCaseInsensitive(token), count)) = counts.into_iter().max_by_key(|(_, c)| *c)
+        && count * 3 >= names.len()
+    {
+        return token.to_string();
     }
 
     format!("Community {idx}")
@@ -408,7 +425,6 @@ mod tests {
         let label = infer_community_label(&CommunityLabelHints {
             id: 1,
             names: &names,
-            file_paths: &[],
             package_labels: &packages,
             top_pagerank_name: None,
             is_infrastructure: false,
@@ -421,7 +437,6 @@ mod tests {
         let label = infer_community_label(&CommunityLabelHints {
             id: 0,
             names: &["util".into()],
-            file_paths: &[],
             package_labels: &[],
             top_pagerank_name: None,
             is_infrastructure: true,
@@ -444,7 +459,6 @@ mod tests {
         let label = infer_community_label(&CommunityLabelHints {
             id: 9,
             names: &names,
-            file_paths: &[],
             package_labels: &[],
             top_pagerank_name: None,
             is_infrastructure: false,
@@ -462,7 +476,6 @@ mod tests {
         let label = infer_community_label(&CommunityLabelHints {
             id: 4,
             names: &names,
-            file_paths: &[],
             package_labels: &[],
             top_pagerank_name: Some("MutableOrder"),
             is_infrastructure: false,
@@ -473,21 +486,16 @@ mod tests {
 
     #[test]
     fn checkout_crates_prefix_is_not_a_label() {
-        // Absolute checkout paths used to yield "crates" via filesystem common-prefix.
+        // Labels come from package_labels produced by host-independent package_label();
+        // raw absolute checkout paths must never feed this heuristic.
         let packages = vec![
             "rgctl-analysis".into(),
             "rgctl-dashboard".into(),
             "rgctl-graph".into(),
         ];
-        let paths = vec![
-            "/Users/sami/git/rust/rbuilder/crates/rgctl-analysis/src/lib.rs".into(),
-            "/Users/sami/git/rust/rbuilder/crates/rgctl-dashboard/src/lib.rs".into(),
-            "/Users/sami/git/rust/rbuilder/crates/rgctl-graph/src/lib.rs".into(),
-        ];
         let label = infer_community_label(&CommunityLabelHints {
             id: 2,
             names: &["detect".into(), "export".into(), "node".into()],
-            file_paths: &paths,
             package_labels: &packages,
             top_pagerank_name: None,
             is_infrastructure: false,
@@ -495,6 +503,19 @@ mod tests {
         assert!(!label.eq_ignore_ascii_case("crates"));
         assert!(!label.to_ascii_lowercase().starts_with("users"));
         assert!(!label.starts_with('.'));
+        // Absolute paths through package_label must not become "crates" either.
+        let from_paths: Vec<String> = [
+            "/Users/sami/git/rust/rbuilder/crates/rgctl-analysis/src/lib.rs",
+            "/Users/sami/git/rust/rbuilder/crates/rgctl-dashboard/src/lib.rs",
+            "/Users/sami/git/rust/rbuilder/crates/rgctl-graph/src/lib.rs",
+        ]
+        .iter()
+        .map(|p| package_label_from_path(p))
+        .collect();
+        assert!(
+            from_paths.iter().all(|p| !p.eq_ignore_ascii_case("crates")),
+            "package_label leaked container segment: {from_paths:?}"
+        );
     }
 
     #[test]
@@ -507,7 +528,6 @@ mod tests {
         let label = infer_community_label(&CommunityLabelHints {
             id: 5,
             names: &names,
-            file_paths: &[],
             package_labels: &[],
             top_pagerank_name: None,
             is_infrastructure: false,
@@ -519,6 +539,24 @@ mod tests {
         assert!(
             lower.contains("order") || lower.contains("total") || lower.starts_with("community"),
             "expected order/total signal or Community fallback, got {label}"
+        );
+    }
+
+    #[test]
+    fn meaningful_token_prefers_trailing_run() {
+        let short = meaningful_symbol_token("HttpRequestProcessorFactory").unwrap();
+        assert!(
+            short == "ProcessorFactory" || short == "Factory",
+            "got {short}"
+        );
+    }
+
+    #[test]
+    fn short_domain_tokens_survive() {
+        assert_eq!(meaningful_symbol_token("DbPool").as_deref(), Some("DbPool"));
+        assert_eq!(
+            meaningful_symbol_token("UiTheme").as_deref(),
+            Some("UiTheme")
         );
     }
 }

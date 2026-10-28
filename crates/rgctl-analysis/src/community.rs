@@ -1294,7 +1294,6 @@ fn build_dashboard_community(
         infer_community_label(&CommunityLabelHints {
             id,
             names: &names,
-            file_paths: &file_paths,
             package_labels: &packages,
             top_pagerank_name: None,
             is_infrastructure: infrastructure_community_id == Some(id),

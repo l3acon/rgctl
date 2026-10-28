@@ -467,7 +467,7 @@ rgctl -f json semantic query "…" [--limit N] [--scope function|community] \
 
 **Command:** `rgctl -f json communities list` | `rgctl communities label [--write]`
 
-**Purpose:** Named community overlay (subsystems) from **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) with $\mu + 4\sigma$ `HubStripPolicy` isolating ubiquitous utilities into `"Shared / Infrastructure"` (`infrastructure_community_id`). `label` recomputes heuristic labels (e.g. after renames shift what a cluster "is about") and persists them into `analysis_results.bin` (`--write` defaults to `true`; response's `written` field confirms). Legacy JSON field `louvain_community_id` stores Fast-Leiden IDs for schema compatibility.
+**Purpose:** Named community overlay (subsystems) from **Fast-Leiden** (local moving + BFS connected-subgraph refinement + coarsening) with $\mu + 4\sigma$ `HubStripPolicy` isolating ubiquitous utilities into `"Shared / Infrastructure"` (`infrastructure_community_id`). `label` recomputes heuristic labels (e.g. after renames shift what a cluster "is about") and persists them into `analysis_results.bin` (`--write` defaults to `true`; response's `written` field confirms). Migration macro nodes use `community_id` (schema v3; older `louvain_community_id` still accepted on read).
 
 **Prerequisites:** `discover` (community detection during analysis).
 

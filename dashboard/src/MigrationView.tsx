@@ -19,6 +19,7 @@ import type {
   MigrationPresetId,
   MigrationWeights,
 } from "./migration/types";
+import { migrationCommunityClusterId } from "./migration/types";
 
 const MIN_NODE_SIZE = 4;
 const MAX_NODE_SIZE = 28;
@@ -472,7 +473,7 @@ function MigrationGraphPanel({
           x: Math.random(),
           y: Math.random(),
           size: scoreSize(score, scoreRange.min, scoreRange.max),
-          color: communityColorHex(node.community_id ?? node.id),
+          color: communityColorHex(migrationCommunityClusterId(node)),
         });
       }
 

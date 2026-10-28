@@ -126,7 +126,6 @@ where
     let mut labeled: Vec<(usize, String)> = Vec::new();
     for (cid, entries) in members {
         let mut names = Vec::new();
-        let mut paths = Vec::new();
         let mut packages = Vec::new();
         let mut top_pr_name: Option<String> = None;
         let mut top_pr = f32::MIN;
@@ -143,14 +142,12 @@ where
             }
             if let Some(p) = &path {
                 packages.push(crate::migration::package_label(p));
-                paths.push(p.clone());
             }
             names.push(name);
         }
         let hints = CommunityLabelHints {
             id: *cid,
             names: &names,
-            file_paths: &paths,
             package_labels: &packages,
             top_pagerank_name: top_pr_name.as_deref(),
             is_infrastructure: infrastructure_id == Some(*cid),

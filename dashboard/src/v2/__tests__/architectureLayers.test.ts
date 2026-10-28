@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateCommunities, clampFootprints, communityLabel, couplingOf, coverageOf,
-  footprintScale, groupNamespaces, heightScale, hueFor, layoutVolumes, namespaceOf, sunflower, toPackages,
+  communityHueIndex, footprintScale, groupNamespaces, heightScale, hueFor, layoutVolumes, namespaceOf, sunflower, toPackages,
 } from "../architectureLayers";
 import { buildView, channelReport, scalesFor } from "../architecture";
 import type { CommunitySummary, MetaEdge, MetaNode, Metagraph } from "../architectureTypes";
@@ -202,6 +202,11 @@ describe("scales", () => {
   it("gives every rank its own hue, and the biggest structures the most separated ones", () => {
     const hues = Array.from({ length: 24 }, (_, i) => hueFor(i));
     expect(new Set(hues.map((h) => Math.round(h))).size).toBe(24);
+  });
+
+  it("folds community ids through the same hue index the universe layers share", () => {
+    expect(communityHueIndex(97)).toBe(0);
+    expect(hueFor(communityHueIndex(3))).toBe(hueFor(3));
   });
 });
 

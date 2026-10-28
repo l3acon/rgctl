@@ -258,6 +258,9 @@ interface EdgeRow {
   direction: string;
   target: EntityRow;
   hops?: number;
+  /** Distinct `(source,target,edge)` rows after aggregation. Columnar snapshots
+   *  collapse identical edges on write (INV-2), so on-disk `occurrences` is `1`
+   *  per distinct triple; in-memory backends may still report multiplicity. */
   occurrences: number;
 }
 ```

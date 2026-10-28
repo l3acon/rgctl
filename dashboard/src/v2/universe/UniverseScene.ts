@@ -17,7 +17,14 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { footprintScale, heightScale, hueFor, layoutVolumes, sunflower } from "../architectureLayers";
+import {
+  communityHueIndex,
+  footprintScale,
+  heightScale,
+  hueFor,
+  layoutVolumes,
+  sunflower,
+} from "../architectureLayers";
 import type { ArchitectureView, CommunityGroup, PackageNode } from "../architectureTypes";
 
 export type UniverseLayer = "packages" | "communities";
@@ -208,7 +215,7 @@ export class UniverseScene {
       const side = footprint(group.functions);
       const geo = new THREE.BoxGeometry(side, height(group.members), side);
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(hueFor(group.id % 97) / 360, group.shared ? 0.72 : 0.08, group.shared ? 0.58 : 0.42),
+        color: new THREE.Color().setHSL(hueFor(communityHueIndex(group.id)) / 360, group.shared ? 0.72 : 0.08, group.shared ? 0.58 : 0.42),
         roughness: 0.55, metalness: 0.12,
       }));
       mesh.position.set(pos[0], height(group.members) / 2, pos[2]);
@@ -283,7 +290,7 @@ export class UniverseScene {
     const colour = isBucket
       ? new THREE.Color(0x6b5f7a)
       : pkg.sharesCommunity
-        ? new THREE.Color().setHSL(hueFor(pkg.communityId % 97) / 360, 0.72, 0.58)
+        ? new THREE.Color().setHSL(hueFor(communityHueIndex(pkg.communityId)) / 360, 0.72, 0.58)
         : new THREE.Color(SINGLE);
     const geo = new THREE.BoxGeometry(side, height, side);
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({

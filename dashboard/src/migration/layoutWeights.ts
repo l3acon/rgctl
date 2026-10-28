@@ -1,4 +1,4 @@
-import type { MigrationCommunityNode } from "./types";
+import { migrationCommunityClusterId, type MigrationCommunityNode } from "./types";
 
 /** ForceAtlas2 attraction multiplier for edges within the same Fast-Leiden cluster. */
 export const MIGRATION_INTRA_CLUSTER_LAYOUT_WEIGHT = 4.0;
@@ -11,8 +11,10 @@ export function migrationEdgeLayoutWeight(
   callWeight: number,
 ): number {
   const sameCluster =
-    source?.community_id != null &&
-    source.community_id === target?.community_id;
+    source != null &&
+    target != null &&
+    (source.community_id != null || source.louvain_community_id != null) &&
+    migrationCommunityClusterId(source) === migrationCommunityClusterId(target);
   const base = Math.max(0.5, callWeight);
   return sameCluster
     ? base * MIGRATION_INTRA_CLUSTER_LAYOUT_WEIGHT
@@ -26,10 +28,11 @@ export function addCommunityLayoutEdges(
 ): void {
   const byCluster = new Map<number, number[]>();
   for (const node of communities) {
-    if (node.community_id == null) continue;
-    const list = byCluster.get(node.community_id) ?? [];
+    if (node.community_id == null && node.louvain_community_id == null) continue;
+    const cid = migrationCommunityClusterId(node);
+    const list = byCluster.get(cid) ?? [];
     list.push(node.id);
-    byCluster.set(node.community_id, list);
+    byCluster.set(cid, list);
   }
 
   for (const ids of byCluster.values()) {

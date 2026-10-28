@@ -128,6 +128,8 @@ Intra-package calls are omitted from the macro graph (they do not create macro e
 
 Field: `community_id: Option<usize>` — **majority vote** of member functions’ Fast-Leiden community ids. Detection uses Fast-Leiden + $\mu+4\sigma$ `HubStripPolicy` — see [Graph metrics — community naming](graph-metrics-design.md#31-community-detection-naming).
 
+`migration_graph.json` **schema_version 3** serializes this as `community_id`. Schema v2 used the historical name `louvain_community_id`; readers still accept that alias so older sidecars keep cluster coloring.
+
 Used for:
 
 - **Graph node color** in the dashboard (cluster visually)
