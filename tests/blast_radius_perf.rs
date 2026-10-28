@@ -85,10 +85,12 @@ fn blast_analyze_warm_engine_under_1ms() {
     engine.analyze(target).unwrap();
     let latency = start.elapsed();
 
-    assert!(
-        latency < Duration::from_millis(1),
-        "br.query.analyze_ms regression: {latency:?} >= 1ms"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            latency < Duration::from_millis(1),
+            "br.query.analyze_ms regression: {latency:?} >= 1ms"
+        );
+    }
 }
 
 /// SQLite unique-symbol lookup on a tiny in-memory DB.
@@ -120,10 +122,12 @@ fn sqlite_unique_lookup_under_15ms() {
     let latency = start.elapsed();
 
     assert_eq!(row.symbol_name, "target_fn");
-    assert!(
-        latency < Duration::from_millis(15),
-        "br.query.sqlite_unique_ms regression: {latency:?} >= 15ms"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            latency < Duration::from_millis(15),
+            "br.query.sqlite_unique_ms regression: {latency:?} >= 15ms"
+        );
+    }
 }
 
 /// Candidate-table resolved lookup with a single unambiguous entry.
@@ -160,10 +164,12 @@ fn sqlite_fqn_resolved_lookup_under_50ms() {
     let latency = start.elapsed();
 
     assert_eq!(entry.id, id);
-    assert!(
-        latency < Duration::from_millis(50),
-        "br.query.sqlite_fqn_ms regression: {latency:?} >= 50ms"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            latency < Duration::from_millis(50),
+            "br.query.sqlite_fqn_ms regression: {latency:?} >= 50ms"
+        );
+    }
 }
 
 /// 150k mock: PetGraphView from prepared snapshot.
@@ -305,20 +311,25 @@ fn hydrate_prepared_faster_than_batch_reindex_5k() {
     let prepared = PreparedGraphSnapshot::from_backend(graph.backend()).unwrap();
 
     let hydrate = min_elapsed(3, || {
-        prepared.hydrate_backend().unwrap();
+        let hydrated = prepared.hydrate_backend().unwrap();
+        assert_eq!(hydrated.node_count(), 5_000);
     });
 
     let batch = min_elapsed(3, || {
         let mut slow = MemoryBackend::new();
         slow.insert_nodes_batch(prepared.nodes.clone()).unwrap();
         slow.insert_edges_batch(prepared.edges.clone()).unwrap();
+        assert_eq!(slow.node_count(), 5_000);
     });
 
-    // At 5k scale both paths are sub-50ms; allow micro-variance on shared CI runners.
-    assert!(
-        hydrate <= batch.saturating_add(Duration::from_millis(15)),
-        "br.load.backend_hydrate_ms regression: hydrate {hydrate:?} >> batch reindex {batch:?}"
-    );
+    // Wall budgets are enforced in `--release` (CI gate); debug workspace runs verify
+    // functional hydration without flaking under parallel test contention.
+    if !cfg!(debug_assertions) {
+        assert!(
+            hydrate <= batch.saturating_add(Duration::from_millis(15)),
+            "br.load.backend_hydrate_ms regression: hydrate {hydrate:?} >> batch reindex {batch:?}"
+        );
+    }
 }
 
 /// Columnar v2 open should beat legacy v1 bincode deserialize on mock scale.
@@ -342,11 +353,13 @@ fn columnar_snapshot_open_faster_than_v1_5k() {
         assert!(store.is_columnar());
     });
 
-    // At 5k scale both opens are sub-50ms; allow micro-variance on shared CI runners.
-    assert!(
-        v2_latency <= v1_latency.saturating_add(Duration::from_millis(15)),
-        "br.load.columnar_open_ms regression: v2={v2_latency:?} >> v1={v1_latency:?}"
-    );
+    if !cfg!(debug_assertions) {
+        // At 5k scale both opens are sub-50ms; allow micro-variance on shared CI runners.
+        assert!(
+            v2_latency <= v1_latency.saturating_add(Duration::from_millis(15)),
+            "br.load.columnar_open_ms regression: v2={v2_latency:?} >> v1={v1_latency:?}"
+        );
+    }
 }
 
 /// PetGraphView from columnar snapshot store (no full PreparedGraphSnapshot materialize).
@@ -366,10 +379,12 @@ fn petgraph_from_snapshot_store_5k_under_500ms() {
     let latency = start.elapsed();
 
     assert_eq!(view.node_count(), 5_000);
-    assert!(
-        latency < Duration::from_millis(500),
-        "br.load.petgraph_from_snapshot_store_ms regression: {latency:?} >= 500ms"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            latency < Duration::from_millis(500),
+            "br.load.petgraph_from_snapshot_store_ms regression: {latency:?} >= 500ms"
+        );
+    }
 }
 
 /// Parallel blast analyze over all functions on warm engine (discover hot loop).
@@ -390,10 +405,12 @@ fn parallel_blast_analyze_all_5k_under_2s() {
     let latency = start.elapsed();
 
     assert_eq!(count, functions.len());
-    assert!(
-        latency < Duration::from_secs(2),
-        "br.discover.analyze_all_ms regression: {latency:?} >= 2s"
-    );
+    if !cfg!(debug_assertions) {
+        assert!(
+            latency < Duration::from_secs(2),
+            "br.discover.analyze_all_ms regression: {latency:?} >= 2s"
+        );
+    }
 }
 
 /// RSS delta after engine snapshot load stays bounded on mock scale.

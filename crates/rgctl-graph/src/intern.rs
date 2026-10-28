@@ -48,9 +48,36 @@ impl StringInterner {
 
     /// Canonicalize a shared string handle.
     pub fn intern_shared(&self, value: &mut SharedStr) -> Result<()> {
-        let arc = self.intern(value)?;
-        *value = SharedStr::from(arc);
+        if let Ok(read) = self.pool.read()
+            && let Some(existing) = read.get(value.as_str())
+        {
+            *value = SharedStr::from(Arc::clone(existing));
+            return Ok(());
+        }
+
+        let mut write = self
+            .pool
+            .write()
+            .map_err(|e| Error::GraphError(format!("StringInterner lock poisoned: {e}")))?;
+        if let Some(existing) = write.get(value.as_str()) {
+            *value = SharedStr::from(Arc::clone(existing));
+            return Ok(());
+        }
+        write.insert(Arc::clone(value.as_arc()));
         Ok(())
+    }
+
+    /// Run a batch interning closure while holding the write lock once.
+    pub(crate) fn with_write_pool<F, R>(&self, capacity_hint: usize, f: F) -> Result<R>
+    where
+        F: FnOnce(&mut HashSet<Arc<str>>) -> R,
+    {
+        let mut write = self
+            .pool
+            .write()
+            .map_err(|e| Error::GraphError(format!("StringInterner lock poisoned: {e}")))?;
+        write.reserve(capacity_hint);
+        Ok(f(&mut write))
     }
 
     /// Number of unique interned strings.
