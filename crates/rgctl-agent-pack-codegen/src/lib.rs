@@ -334,6 +334,32 @@ fn ensure_rgctl_managed_frontmatter(
     Ok(())
 }
 
+fn render_policy(version: &str) -> String {
+    format!(
+        r#"---
+description: Prefer rgctl for structural codebase questions when .rgctl/ exists
+globs:
+alwaysApply: true
+rgctl-managed: true
+metadata:
+  generatedBy: "rgctl {version}"
+---
+
+# rgctl structural policy (best-effort)
+
+Agent hosts do **not** guarantee blocking grep or read tools. This rule biases behavior only.
+
+When the repository contains `.rgctl/` (after `discover`):
+
+- **MUST** use `rgctl -f json` first for **structural** questions: callers/callees, blast radius, communities, data flow, migration **roadmap** (`discover --export-migration-hints` → `migration_plan.json`), semantic/graph search, PR/branch review (`/rgctl:review`).
+- **MAY** use ripgrep/grep for **lexical** search (fixed strings, comments, logs) and to open files **after** rgctl cites paths.
+- **MUST NOT** use bulk grep-as-call-graph (e.g. searching for `foo(` to find callers) when rgctl can answer.
+
+Parse `schema_version` from stdout; never redirect stderr to `/dev/null`.
+"#
+    )
+}
+
 #[cfg(test)]
 mod codegen_tests {
     use super::*;
@@ -498,30 +524,4 @@ mod codegen_tests {
             "skills/ must not contain broken ../../docs/ links (breaks consumer installs): {offenders:?}"
         );
     }
-}
-
-fn render_policy(version: &str) -> String {
-    format!(
-        r#"---
-description: Prefer rgctl for structural codebase questions when .rgctl/ exists
-globs:
-alwaysApply: true
-rgctl-managed: true
-metadata:
-  generatedBy: "rgctl {version}"
----
-
-# rgctl structural policy (best-effort)
-
-Agent hosts do **not** guarantee blocking grep or read tools. This rule biases behavior only.
-
-When the repository contains `.rgctl/` (after `discover`):
-
-- **MUST** use `rgctl -f json` first for **structural** questions: callers/callees, blast radius, communities, data flow, migration **roadmap** (`discover --export-migration-hints` → `migration_plan.json`), semantic/graph search, PR/branch review (`/rgctl:review`).
-- **MAY** use ripgrep/grep for **lexical** search (fixed strings, comments, logs) and to open files **after** rgctl cites paths.
-- **MUST NOT** use bulk grep-as-call-graph (e.g. searching for `foo(` to find callers) when rgctl can answer.
-
-Parse `schema_version` from stdout; never redirect stderr to `/dev/null`.
-"#
-    )
 }

@@ -154,17 +154,19 @@ When changing `dashboard/` or `crates/rgctl-dashboard/`:
 
 ## 5. Standard test workflow
 
-Run `./scripts/preflight-pr.sh` before opening a PR (mirrors [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
+Run `./scripts/preflight-pr.sh` before opening a PR (mirrors [`.github/workflows/ci-lint.yml`](../.github/workflows/ci-lint.yml) and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
 
 ```bash
-# Fast gate (commit checks + fmt + all CI clippy gates + compile all unit/integration tests)
-./scripts/preflight-pr.sh --quick
+# Tier 1 only (commit checks + fmt + all CI clippy gates including --all-targets)
+./scripts/preflight-pr.sh --lint
 
-# Standard pre-PR suite (above + runs workspace unit/integration/QE tests)
+# Default pre-PR suite (Tier 1 + Tier 2: lint + workspace unit/bin tests + core integration tests)
 ./scripts/preflight-pr.sh
 
-# Full CI mirror (adds --release CLI golden paths, scale/perf gates, cargo bench --no-run, AST coverage gate)
-./scripts/preflight-pr.sh --full
+# Opt-in tiers (disabled on PR CI to save Actions minutes; run locally when relevant):
+./scripts/preflight-pr.sh --qe     # Tier 3 (ci-qe.yml): QE/E2E suites + RGCTL_AST_COVERAGE_TRACK=1
+./scripts/preflight-pr.sh --perf   # Tier 4 (ci-perf.yml): --release CLI goldens, scale/perf & bench smoke
+./scripts/preflight-pr.sh --full   # All 4 tiers
 ```
 
 Or run the individual CI steps manually (and add path-specific targets from [§2](#2-programming-languages), [§3](#3-config--markup), or [§4](#4-feature-updates)):

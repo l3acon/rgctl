@@ -57,31 +57,35 @@ cargo build -p rgctl-wasm --target wasm32-unknown-unknown --release
 
 ---
 
-## Pull request CI (maintainer-gated)
+## Pull request CI (maintainer-gated & split by tier)
 
-Full GitHub Actions CI does **not** run on every PR. That saves minutes and keeps untrusted fork code from auto-burning the suite.
+GitHub Actions CI does **not** run automatically on every PR, and heavy QE/perf suites are split into separate manual workflows (`ci-qe.yml` and `ci-perf.yml`) and disabled on PRs to conserve Actions minutes:
 
-| Who | How to run CI |
-|-----|----------------|
-| Maintainer | Add the **`ci`** label on the PR (or **Actions → CI → Run workflow**) |
-| Contributor | Run `./scripts/preflight-pr.sh` locally before opening/updating a PR |
+| Workflow | What it runs | How to trigger |
+|----------|--------------|----------------|
+| [`.github/workflows/ci-lint.yml`](.github/workflows/ci-lint.yml) | Commit policy, `cargo fmt`, `cargo check`, `cargo clippy (--all-targets)` | Label **`ci:lint`** or **`ci`** on PR (or Actions → Run workflow) |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Workspace `--lib --bins` unit tests + fast core integration tests | Label **`ci:test`** or **`ci`** on PR (or Actions → Run workflow) |
+| [`.github/workflows/ci-qe.yml`](.github/workflows/ci-qe.yml) | Heavy QE/E2E suites + `RGCTL_AST_COVERAGE_TRACK=1` *(disabled on PRs)* | Manual only (Actions → Run workflow) or `./scripts/preflight-pr.sh --qe` |
+| [`.github/workflows/ci-perf.yml`](.github/workflows/ci-perf.yml) | `--release` CLI golden paths, scale/perf gates & `cargo bench --no-run` *(disabled on PRs)* | Manual only (Actions → Run workflow) or `./scripts/preflight-pr.sh --perf` |
 
 ### Local pre-flight PR check (`./scripts/preflight-pr.sh`)
 
-Before opening or pushing to a PR, run the pre-flight check script (mirrors [`.github/workflows/ci.yml`](.github/workflows/ci.yml), including `RGCTL_AST_COVERAGE_STRICT=1`, AI commit trailer checks, DCO sign-off checks, `cargo fmt`, all CI `cargo clippy` gates, and test compilation/execution):
+Before opening or pushing to a PR, run the pre-flight check script (mirrors the split CI tiers, including `RGCTL_AST_COVERAGE_STRICT=1`, AI commit trailer checks, DCO sign-off checks, `cargo fmt`, all CI `cargo clippy` gates, and unit/core integration tests):
 
 ```bash
-# Fast gate (~15–30s incremental): commit checks + fmt + all CI clippy gates + compile all unit & integration tests
-./scripts/preflight-pr.sh --quick
+# Tier 1 only (~15–30s incremental): commit checks + fmt + all CI clippy gates (--all-targets)
+./scripts/preflight-pr.sh --lint
 
-# Standard pre-PR check: runs the above + executes workspace unit, integration, and QE test suites
+# Default pre-PR check (Tier 1 + Tier 2, matching active PR CI: lint + unit & core integration tests)
 ./scripts/preflight-pr.sh
 
-# Full CI mirror: adds --release CLI golden paths, scale/perf gates, benchmark compile smoke, and AST coverage tracking
-./scripts/preflight-pr.sh --full
+# Opt-in heavier tiers (disabled on PR CI; run locally when touching relevant areas):
+./scripts/preflight-pr.sh --qe     # Tier 3: QE/E2E suites + AST handler coverage tracking
+./scripts/preflight-pr.sh --perf   # Tier 4: --release CLI golden paths, scale/perf gates & bench smoke
+./scripts/preflight-pr.sh --full   # All 4 tiers (lint + test + qe + perf)
 ```
 
-Without `ci`, the Checks tab shows a single green **awaiting maintainer `ci` label** notice. Adding the label re-runs the workflow and starts cargo check / fmt / clippy / tests.
+Without `ci` (or `ci:lint` / `ci:test`), the Checks tab shows a single green **awaiting maintainer `ci` label** notice. Adding the label re-runs the workflow and starts the corresponding tier.
 
 **Code review “Approve”** (Files changed → Review changes → Approve) is separate from CI. You need write access on `rgctl/rgctl`; it is unrelated to the Actions “Approve and run workflows” button (that only appears for pending *fork* workflow approvals).
 

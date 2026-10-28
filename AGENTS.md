@@ -130,7 +130,7 @@ File counts are approximate (goal **O(10⁴)** sources). Exclude `vendor/`, `nod
 
 | Kind | Command | Practice |
 |------|---------|----------|
-| Pre-flight PR gate | `./scripts/preflight-pr.sh --quick` (or `--full`) | **Mandatory** before PR / task completion; checks fmt, all CI clippy targets, `RGCTL_AST_COVERAGE_STRICT=1`, and compiles/runs `--workspace --lib --bins --tests` |
+| Pre-flight PR gate | `./scripts/preflight-pr.sh` (or `--lint`, `--qe`, `--perf`, `--full`) | **Mandatory** before PR / task completion; default runs Tier 1 (`ci-lint.yml`: fmt, clippy `--all-targets`, `RGCTL_AST_COVERAGE_STRICT=1`) + Tier 2 (`ci.yml`: unit & core integration tests) |
 | Workspace | `cargo test` | Default before merge for touched crates |
 | Release CLI goldens | `cargo test --release --test subprocess_golden_path` (and related) | CLI surface changes |
 | Cold profile gates | `cargo test --release --test cold_profile_gates -- --ignored --nocapture --test-threads=1` | Perf / extraction / ingest; **Gate A** for scale-sensitive work |
